@@ -1,0 +1,22 @@
+# Arabic Post-OCR Correction - Phase 1 Requirements
+# ==================================================
+
+# Core ML/LLM Libraries
+torch>=2.0.0
+transformers>=4.35.0
+accelerate>=0.25.0
+
+# Quantization support (optional, for 4-bit/8-bit models)
+bitsandbytes>=0.41.0
+
+# Text processing
+python-Levenshtein>=0.21.0
+
+# Progress bars
+tqdm>=4.65.0
+
+# Configuration
+PyYAML>=6.0
+
+# Utilities
+typing-extensions>=4.5.0

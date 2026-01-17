@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project-specific
+# ================
+
+# Results directory (generated output)
+results/
+
+# Data directory (user-specific data)
+data/
+
+# Model cache
+models/
+.cache/
+
+# HuggingFace cache
+~/.cache/huggingface/

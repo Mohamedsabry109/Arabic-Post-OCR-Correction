@@ -1,0 +1,70 @@
+# Arabic Post-OCR Correction - Phase 1 Configuration
+# =====================================================
+
+# Data Configuration
+data:
+  # Base directory containing ground truth text files
+  # Structure: ground_truth_base/<dataset_name>/*.txt
+  ground_truth_base: "data/Original"
+
+  # Base directory containing OCR prediction files
+  # Structure: predictions_base/<dataset_name>/*.txt
+  predictions_base: "data/Predictions"
+
+  # Datasets to process
+  # Each dataset should have corresponding folders in both directories
+  datasets:
+    - "PATS-A01"
+    - "KHATT"
+
+# Model Configuration
+model:
+  # Model name (HuggingFace model ID or local path)
+  # Recommended options:
+  #   - "Qwen/Qwen2.5-3B-Instruct" (smaller, faster)
+  #   - "Qwen/Qwen3-4B-Instruct-2507" (newer, better quality)
+  name: "Qwen/Qwen2.5-3B-Instruct"
+
+  # Sampling temperature (lower = more deterministic)
+  # Recommended: 0.1 for consistent OCR correction
+  temperature: 0.1
+
+  # Maximum new tokens to generate
+  max_new_tokens: 1024
+
+  # Top-p sampling parameter
+  top_p: 0.9
+
+  # Quantization options (for limited GPU memory)
+  # Only one should be true at a time
+  load_in_4bit: false
+  load_in_8bit: false
+
+  # Custom system prompt (optional)
+  # Leave empty to use default Arabic prompt
+  # system_prompt: ""
+
+# Output Configuration
+output:
+  # Directory to save results
+  results_dir: "results/phase1"
+
+  # Number of sample corrections to include in sample_corrections.txt
+  num_samples_to_show: 20
+
+# Processing Configuration
+processing:
+  # Maximum samples per dataset (null for all samples)
+  # Useful for testing: set to 10-50 for quick runs
+  limit_per_dataset: null
+
+  # Batch size for processing (currently only 1 is supported)
+  batch_size: 1
+
+# Logging Configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
+
+  # Log file path
+  file: "phase1.log"
