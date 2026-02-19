@@ -1,0 +1,6 @@
+1. Follow KISS.
+2. Software should be maintainable and exetnsible.
+3. The project is research project, metrics should be calculated to be reported in research paper.
+4. Follow SWE best practices.
+5. Always update claudemd and changelog files.
+6. data is stored in ../data

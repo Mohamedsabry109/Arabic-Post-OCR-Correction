@@ -1,0 +1,38 @@
+# Knowledge Base Construction Configuration
+# ==========================================
+
+# Data source paths
+ground_truth_path: "data/Original"
+predictions_path: "data/Predictions"
+openiti_path: "data/openiti"
+qalb_path: "data/qalb"
+grammar_books_path: "data/grammar_books"
+
+# Output directory
+output_dir: "data"
+
+# Datasets for confusion matrix analysis
+datasets:
+  - "PATS-A01"
+  - "KHATT"
+
+# Vocabulary settings
+vocab_top_n: 100000        # Number of top words to include
+vocab_min_count: 2         # Minimum word frequency
+
+# N-gram settings
+ngrams_top_bigrams: 50000  # Number of top bigrams
+ngrams_top_trigrams: 50000 # Number of top trigrams
+ngrams_min_count: 2        # Minimum n-gram frequency
+
+# QALB settings
+qalb_few_shot_n: 20        # Number of few-shot examples to select
+qalb_context_window: 2     # Words of context on each side
+
+# Rules settings
+rules_model: "Qwen/Qwen2.5-3B-Instruct"  # Model for rule extraction
+rules_default_only: true   # Set to true to skip LLM extraction
+
+# Processing options
+skip_existing: true        # Skip if output files already exist
+force_rebuild: false       # Force rebuild even if files exist

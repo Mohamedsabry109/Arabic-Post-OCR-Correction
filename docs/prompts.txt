@@ -1,0 +1,480 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+def visualize_results():
+    """Generate publication-ready visualizations"""
+    
+    # 1. Progressive improvement chart
+    phases = ['Baseline\n(Qaari)', 'Phase 1\n(LLM)', 'Phase 2\n(+Candidates)', 'Phase 3\n(+Knowledge)']
+    patsa_cer = [0.0850, 0.0620, 0.0480, 0.0360]
+    patsa_wer = [0.1920, 0.1450, 0.1120, 0.0890]
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    
+    ax1.plot(phases, patsa_cer, marker='o', linewidth=2, markersize=8)
+    ax1.set_ylabel('CER')
+    ax1.set_title('PATSA: Character Error Rate Progression')
+    ax1.grid(True, alpha=0.3)
+    
+    ax2.plot(phases, patsa_wer, marker='s', linewidth=2, markersize=8, color='orange')
+    ax2.set_ylabel('WER')
+    ax2.set_title('PATSA: Word Error Rate Progression')
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.savefig('results/figures/progressive_improvement.png', dpi=300)
+    
+    # 2. Component contribution bar chart
+    components = ['LLM\nBaseline', 'Candidates', 'Morphology', 'Rules', 'N-grams']
+    contributions = [27.1, 22.6, 12.5, 8.0, 4.5]  # Example percentages
+    
+    plt.figure(figsize=(10, 6))
+    plt.bar(components, contributions, color='steelblue')
+    plt.ylabel('Improvement Contribution (%)')
+    plt.title('Component Contribution to Overall Improvement')
+    plt.grid(True, alpha=0.3, axis='y')
+    plt.savefig('results/figures/component_contributions.png', dpi=300)
+    
+    # 3. Confusion matrix heatmap (before vs after)
+    # ... implementation
+```
+
+---
+
+# Complete Project Structure
+```
+arabic-ocr-correction/
+│
+├── data/
+│   ├── patsa/
+│   │   ├── qaari_predictions.txt
+│   │   └── ground_truth.txt
+│   ├── khatt/
+│   │   ├── qaari_predictions.txt
+│   │   └── ground_truth.txt
+│   ├── confusion_matrix.json
+│   ├── vocab_100k.json
+│   ├── ngrams.json
+│   ├── qalb_corrections.json
+│   ├── qalb_few_shot.json
+│   └── rules/
+│       ├── morphology_rules.json
+│       ├── syntax_rules.json
+│       └── orthography_rules.json
+│
+├── src/
+│   ├── data_loader.py
+│   ├── metrics.py
+│   ├── llm_corrector.py
+│   ├── candidate_generator.py
+│   ├── morphology_validator.py
+│   ├── knowledge_injector.py
+│   ├── prompt_builder.py
+│   └── utils.py
+│
+├── scripts/
+│   ├── build_knowledge_bases.py
+│   ├── extract_rules.py
+│   ├── analyze_qaari_errors.py
+│   └── extract_qalb.py
+│
+├── run_phase1.py
+├── run_phase2.py
+├── run_phase3.py
+├── run_ablation.py
+├── visualize_results.py
+│
+├── results/
+│   ├── phase1/
+│   ├── phase2/
+│   ├── phase3/
+│   ├── ablation/
+│   └── figures/
+│
+├── config.yaml
+├── requirements.txt
+└── README.md
+```
+
+---
+
+# Implementation Prompts for Claude Opus
+
+## Prompt 1: Phase 1 Implementation
+```
+You are an expert Python developer specializing in Arabic NLP and OCR correction systems.
+
+TASK: Implement Phase 1 - LLM Baseline for Arabic Post-OCR Correction
+
+REQUIREMENTS:
+
+1. Data Loader (src/data_loader.py):
+   - Load OCR predictions and ground truth (UTF-8 text files, one paragraph per line)
+   - Validate alignment between files
+   - Return list of (ocr_text, ground_truth) tuples
+   - Handle Arabic text properly (RTL, diacritics)
+
+2. Metrics Calculator (src/metrics.py):
+   - Implement calculate_cer(reference, hypothesis) using Levenshtein distance
+   - Implement calculate_wer(reference, hypothesis) using word-level Levenshtein
+   - Implement calculate_metrics(predictions, ground_truths) for aggregate metrics
+   - Return dictionary with CER and WER
+
+3. LLM Corrector (src/llm_corrector.py):
+   - Class-based design: LLMCorrector
+   - Support Ollama API (primary) and HuggingFace transformers (fallback)
+   - Zero-shot prompting with Arabic system prompt
+   - Method: correct(ocr_text) -> corrected_text
+   - Handle API errors gracefully with retries
+   - Low temperature (0.1) for deterministic output
+
+4. Phase 1 Pipeline (run_phase1.py):
+   - Load PATSA and KHATT datasets
+   - Calculate baseline metrics (Qaari vs Ground Truth)
+   - Run zero-shot LLM correction with progress bars
+   - Calculate Phase 1 metrics (Corrected vs Ground Truth)
+   - Save results: corrected texts, metrics JSON, sample corrections
+   - Generate markdown report comparing baseline vs Phase 1
+
+TECHNICAL SPECS:
+- Python 3.8+
+- Libraries: ollama-python (or transformers), python-Levenshtein, tqdm, pyyaml
+- Configuration via config.yaml (dataset paths, model name)
+- Proper Arabic text handling (no encoding issues)
+- Progress indication for long-running processes
+- Clean error messages
+
+OUTPUT FILES:
+- results/phase1/metrics.json
+- results/phase1/patsa_corrected.txt
+- results/phase1/khatt_corrected.txt
+- results/phase1/sample_corrections.txt (first 20 examples with before/after)
+- results/phase1/report.md
+
+DELIVERABLES:
+1. src/data_loader.py
+2. src/metrics.py
+3. src/llm_corrector.py
+4. src/utils.py (shared utilities for Arabic text processing)
+5. run_phase1.py
+6. config.yaml
+7. requirements.txt
+8. README_phase1.md with setup instructions and usage examples
+
+Code should be:
+- Well-documented with docstrings (Google style)
+- Type-annotated
+- Follow KISS principle
+- Include example usage in docstrings
+- Handle edge cases (empty text, API failures)
+
+Provide complete, production-ready code with proper error handling.
+```
+
+## Prompt 2: Knowledge Base Construction
+```
+You are an expert Python developer specializing in Arabic NLP and corpus processing.
+
+TASK: Implement knowledge base construction scripts for Phase 2 and Phase 3
+
+REQUIREMENTS:
+
+1. Qaari Error Analyzer (scripts/analyze_qaari_errors.py):
+   - analyze_qaari_errors(dataset_name) function
+   - Character-level alignment between OCR and ground truth
+   - Build confusion matrix: {true_char: {ocr_char: {count, probability}}}
+   - Track positional errors (start/middle/end of word)
+   - Word-level error categorization
+   - Output: confusion_matrix.json, error_statistics.json
+
+2. Vocabulary Builder (scripts/build_vocabulary.py):
+   - build_vocabulary_from_openti(corpus_path, top_n=100000)
+   - Process OpenITI corpus text files recursively
+   - Extract Arabic words using regex: [\u0600-\u06FF]+
+   - Count word frequencies
+   - Save top N words with frequencies
+   - Output: vocab_100k.json
+
+3. N-gram Statistics (scripts/build_ngrams.py):
+   - build_ngram_statistics(corpus_path)
+   - Extract bigrams and trigrams from OpenITI
+   - Store top 50K of each with frequencies
+   - Output: ngrams.json with {bigrams: {...}, trigrams: {...}}
+
+4. QALB Processor (scripts/extract_qalb.py):
+   - extract_qalb_corrections(qalb_path)
+   - Parse QALB parallel files (source.txt, target.txt)
+   - Align and extract error-correction pairs
+   - Include context (±2 words)
+   - Classify error types
+   - select_few_shot_examples(corrections, n=20) for diverse examples
+   - Output: qalb_corrections.json, qalb_few_shot.json
+
+5. Rule Extractor (scripts/extract_rules.py):
+   - extract_rules_from_books(book_paths) using LLM
+   - LLM prompt template for structured extraction
+   - Parse JSON responses
+   - Deduplicate rules
+   - Categorize: morphology, syntax, orthography
+   - Output: rules/morphology_rules.json, rules/syntax_rules.json, rules/orthography_rules.json
+
+6. Master Builder (scripts/build_knowledge_bases.py):
+   - Orchestrate all knowledge base construction
+   - Check for existing files (skip if present)
+   - Progress tracking
+   - Validation of outputs
+   - Summary report
+
+TECHNICAL SPECS:
+- Efficient processing (use generators for large corpora)
+- Progress bars (tqdm)
+- Proper Arabic text handling
+- Error handling for missing files
+- Caching to avoid re-processing
+- Config-driven paths
+
+OUTPUT STRUCTURE:
+data/
+├── confusion_matrix.json
+├── vocab_100k.json
+├── ngrams.json
+├── qalb_corrections.json
+├── qalb_few_shot.json
+└── rules/
+    ├── morphology_rules.json
+    ├── syntax_rules.json
+    └── orthography_rules.json
+
+DELIVERABLES:
+1. scripts/analyze_qaari_errors.py
+2. scripts/build_vocabulary.py
+3. scripts/build_ngrams.py
+4. scripts/extract_qalb.py
+5. scripts/extract_rules.py
+6. scripts/build_knowledge_bases.py
+7. Updated requirements.txt
+8. README_knowledge_bases.md
+
+Include example outputs and runtime estimates for each script.
+```
+
+## Prompt 3: Phase 2 Implementation
+```
+You are an expert Python developer specializing in Arabic NLP and intelligent candidate generation.
+
+TASK: Implement Phase 2 - LLM + Smart Candidates
+
+BUILD ON PHASE 1:
+- Reuse: data_loader.py, metrics.py, utils.py
+- Extend: llm_corrector.py with prompt customization
+
+NEW COMPONENTS:
+
+1. Candidate Generator (src/candidate_generator.py):
+   - Class: CandidateGenerator(vocab, confusion_matrix)
+   - Method: generate(word, max_candidates=10) -> List[Candidate]
+   - Strategy 1: Confusion-based substitution (character-by-character)
+   - Strategy 2: Edit distance (Levenshtein, max_dist=2)
+   - Ranking: probability * frequency
+   - Return top N candidates with metadata
+
+2. Enhanced LLM Corrector (extend src/llm_corrector.py):
+   - Add method: correct_with_prompt(system_prompt, user_prompt)
+   - Support custom prompt templates
+   - Maintain backward compatibility with Phase 1
+
+3. Prompt Builder (src/prompt_builder.py):
+   - build_phase2_prompt(ocr_text, candidates_per_word, confusion_matrix)
+   - Format candidates clearly for LLM
+   - Include confusion matrix in system prompt
+   - Return (system_prompt, user_prompt) tuple
+
+4. Phase 2 Pipeline (run_phase2.py):
+   - Load knowledge bases (confusion_matrix, vocab)
+   - Initialize CandidateGenerator
+   - For each paragraph:
+     a. Identify out-of-vocabulary words
+     b. Generate candidates for each
+     c. Build enhanced prompt
+     d. Correct with LLM
+   - Calculate metrics
+   - Compare with Phase 1 results (statistical significance)
+
+TECHNICAL SPECS:
+- Efficient candidate generation (set-based lookups)
+- Cache frequent lookups
+- Parallel processing where beneficial
+- Clear candidate formatting in prompts
+
+OUTPUT FILES:
+- results/phase2/metrics.json
+- results/phase2/comparison_with_phase1.json
+- results/phase2/candidate_examples.json (sample)
+- results/phase2/patsa_corrected.txt
+- results/phase2/khatt_corrected.txt
+- results/phase2/report.md
+
+DELIVERABLES:
+1. src/candidate_generator.py
+2. src/prompt_builder.py
+3. run_phase2.py
+4. Updated config.yaml
+5. README_phase2.md
+
+Include comparison visualization (CER/WER bar charts for Phase 1 vs Phase 2).
+```
+
+## Prompt 4: Phase 3 Implementation
+```
+You are an expert Python developer specializing in Arabic NLP, morphological analysis, and knowledge integration systems.
+
+TASK: Implement Phase 3 - Complete Linguistic Knowledge Integration
+
+BUILD ON PHASE 2:
+- Reuse: All previous components
+
+NEW COMPONENTS:
+
+1. Morphological Validator (src/morphology_validator.py):
+   - Class: MorphologicalValidator using CAMeL Tools
+   - Method: is_valid(word) -> bool
+   - Method: get_analysis(word) -> Dict (lemma, root, pattern, POS)
+   - Method: validate_candidates(candidates) -> enhanced candidates with morph flags
+   - Handle CAMeL initialization errors gracefully
+
+2. Knowledge Injector (src/knowledge_injector.py):
+   - Class: KnowledgeInjector(knowledge_bases)
+   - Method: get_static_knowledge() -> Dict (always-included knowledge)
+   - Method: get_dynamic_knowledge(word, context) -> Dict (per-word knowledge)
+   - Implement _find_relevant_rules(word) with pattern matching
+   - Implement _find_similar_qalb(word) with similarity scoring
+   - Implement _get_ngram_evidence(word, context, candidates)
+   - Hybrid injection strategy
+
+3. Enhanced Prompt Builder (extend src/prompt_builder.py):
+   - build_phase3_prompt(ocr_text, static_knowledge, dynamic_knowledge)
+   - Format morphological information clearly
+   - Include relevant rules (not all rules)
+   - Include n-gram evidence
+   - Include few-shot examples from QALB
+   - Clean, structured prompt format
+
+4. Phase 3 Pipeline (run_phase3.py):
+   - Load ALL knowledge bases
+   - Initialize KnowledgeInjector with MorphologicalValidator
+   - For each paragraph:
+     a. Get static knowledge (once)
+     b. Identify errors
+     c. Get dynamic knowledge per error
+     d. Build comprehensive prompt
+     e. Correct with LLM
+   - Calculate metrics
+   - Generate full comparison (all phases)
+
+5. Comparison Generator (src/comparison.py):
+   - generate_full_comparison(phase_names)
+   - Statistical significance testing (scipy.stats)
+   - Component contribution analysis
+   - Visualization generation
+
+TECHNICAL SPECS:
+- CAMeL Tools integration (camel-tools library)
+- Efficient knowledge retrieval (caching)
+- Token budget management (don't exceed context limits)
+- Clear separation: static vs dynamic knowledge
+
+OUTPUT FILES:
+- results/phase3/metrics.json
+- results/phase3/full_comparison.json
+- results/phase3/morphology_analysis.json
+- results/phase3/rule_application_stats.json
+- results/phase3/patsa_corrected.txt
+- results/phase3/khatt_corrected.txt
+- results/phase3/report.md
+
+DELIVERABLES:
+1. src/morphology_validator.py
+2. src/knowledge_injector.py
+3. src/comparison.py
+4. run_phase3.py
+5. README_phase3.md
+
+Include comprehensive comparison table and visualizations.
+```
+
+## Prompt 5: Ablation Studies & Analysis
+```
+You are an expert Python developer specializing in ML evaluation and statistical analysis.
+
+TASK: Implement ablation studies, error analysis, and visualization
+
+REQUIREMENTS:
+
+1. Ablation Runner (run_ablation.py):
+   - Define experiment configurations (toggle components on/off)
+   - Experiments:
+     a. Full system (all components)
+     b. No morphology validation
+     c. No rules
+     d. No n-grams
+     e. Candidates only
+   - Run each experiment
+   - Calculate component contributions
+   - Statistical significance testing
+   - Output: ablation_results.json
+
+2. Error Analyzer (src/error_analyzer.py):
+   - analyze_remaining_errors(predictions, ground_truths)
+   - Categorize errors:
+     a. Still-confused characters
+     b. Morphological errors
+     c. Context-dependent errors
+     d. Rare words
+   - Identify patterns in uncorrected errors
+   - Output: error_analysis.json
+
+3. Visualizer (visualize_results.py):
+   - Progressive improvement charts (CER/WER across phases)
+   - Component contribution bar charts
+   - Confusion matrix heatmaps (before/after)
+   - Error type distribution pie charts
+   - Publication-ready figures (300 DPI, clean styling)
+   - Output: results/figures/*.png
+
+4. Statistical Tester (src/stats_tester.py):
+   - Paired t-test for phase comparisons
+   - Effect size calculation (Cohen's d)
+   - Confidence intervals
+   - Significance reporting
+   - Output: statistical_tests.json
+
+5. Report Generator (generate_report.py):
+   - Comprehensive markdown report
+   - Include all metrics, tables, figures
+   - Thesis-ready format
+   - LaTeX table generation (optional)
+   - Output: FINAL_REPORT.md
+
+TECHNICAL SPECS:
+- scipy for statistical tests
+- matplotlib/seaborn for visualization
+- pandas for data manipulation
+- Clean, publication-quality output
+
+OUTPUT FILES:
+- results/ablation/ablation_results.json
+- results/ablation/component_contributions.json
+- results/analysis/error_analysis.json
+- results/analysis/statistical_tests.json
+- results/figures/*.png
+- FINAL_REPORT.md
+
+DELIVERABLES:
+1. run_ablation.py
+2. src/error_analyzer.py
+3. src/stats_tester.py
+4. visualize_results.py
+5. generate_report.py
+6. README_final.md
+
+Ensure all visualizations are colorblind-friendly and properly labeled.

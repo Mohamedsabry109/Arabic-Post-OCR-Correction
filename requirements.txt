@@ -1,5 +1,5 @@
-# Arabic Post-OCR Correction - Phase 1 Requirements
-# ==================================================
+# Arabic Post-OCR Correction - Requirements
+# ==========================================
 
 # Core ML/LLM Libraries
 torch>=2.0.0
@@ -11,6 +11,7 @@ bitsandbytes>=0.41.0
 
 # Text processing
 python-Levenshtein>=0.21.0
+regex>=2023.0.0
 
 # Progress bars
 tqdm>=4.65.0
@@ -20,3 +21,17 @@ PyYAML>=6.0
 
 # Utilities
 typing-extensions>=4.5.0
+
+# Data processing (for knowledge base scripts)
+# No additional dependencies needed - uses standard library
+
+# Optional: For faster JSON processing with large files
+# orjson>=3.9.0
+
+# Optional: For Arabic text normalization
+# pyarabic>=0.6.15
+
+# Development (optional)
+# pytest>=7.0.0
+# black>=23.0.0
+# ruff>=0.1.0
