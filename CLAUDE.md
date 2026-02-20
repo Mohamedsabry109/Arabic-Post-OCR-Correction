@@ -1,111 +1,125 @@
 # Arabic Post-OCR Correction
 
-## Project Overview
+## Research Question
 
-Research project for Arabic post-OCR text correction using Large Language Models (LLMs). The system improves OCR output quality through a phased approach combining zero-shot LLM correction with linguistic knowledge integration.
+**Can LLMs effectively fix OCR outputs and bridge the performance gap between open-source and closed-source VLMs?**
 
-## Architecture
+## Quick Context
 
-```
-Phase 1: Zero-shot LLM Baseline
-    └── Qwen2.5-3B-Instruct → CER/WER metrics
+- **Project Type**: Master's thesis + research paper
+- **Problem**: Qaari (open-source Arabic OCR) produces errors; can LLMs correct them?
+- **Datasets**: PATS-A01 (typewritten/synthetic), KHATT (handwritten/real)
+- **Metrics**: CER (Character Error Rate), WER (Word Error Rate)
+- **Model**: Qwen2.5-3B-Instruct (primary)
 
-Phase 2: LLM + Smart Candidates
-    └── + Confusion matrix + Vocabulary → Improved metrics
+## Experimental Structure (8 Phases)
 
-Phase 3: Full Knowledge Integration
-    └── + Morphology + Rules + N-grams + QALB → Best metrics
-```
+| Phase | Name | Research Question | Comparison |
+|-------|------|-------------------|------------|
+| **1** | Baseline & Error Taxonomy | How bad is Qaari? What errors? | N/A (no LLM) |
+| **2** | Zero-Shot LLM | Can vanilla LLM fix OCR? | vs Phase 1 |
+| **3** | OCR-Aware Prompting | Does OCR-specific knowledge help? | vs Phase 2 (**isolated**) |
+| **4A** | Rule-Augmented | Do spelling rules help? | vs Phase 2 (**isolated**) |
+| **4B** | Few-Shot Learning | Do correction examples help? | vs Phase 2 (**isolated**) |
+| **4C** | CAMeL Validation | Does morphological post-processing help? | vs Phase 2 (**isolated**) |
+| **5** | RAG | Does corpus grounding help? | vs Phase 2 (**isolated**) |
+| **6** | Combinations + Ablation | What's optimal? What contributes? | Pairs + Full + Ablation |
+
+**Key Design**: Phases 3-5 (including 4C) are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests meaningful combinations before ablation.
+
+## Knowledge Sources
+
+| Source | Location | Used In |
+|--------|----------|---------|
+| Confusion Matrix | Generated in Phase 1 | Phase 3, 6 |
+| Arabic Rules | `../data/rules/` | Phase 4A, 6 |
+| QALB Corpus | `../data/QALB-*/` | Phase 4B, 6 |
+| CAMeL Tools | `pip install camel-tools` | Phase 1, 4C, 6 |
+| OpenITI | `../data/OpenITI/` | Phase 5, 6 |
+
+### CAMeL Tools (Morphological Analysis)
+
+[CAMeL Tools](https://github.com/CAMeL-Lab/camel_tools) provides Arabic NLP utilities:
+- **Morphological Analyzer**: Validate word existence, extract root/pattern
+- **Disambiguator**: Context-aware analysis
+- **Use Cases**: Error categorization (Phase 1), **Isolated validation test (Phase 4C)**, Combined system (Phase 6)
 
 ## Project Structure
 
 ```
 Arabic-Post-OCR-Correction/
-├── src/                      # Core source code
-│   ├── __init__.py
-│   ├── utils.py              # Arabic text processing utilities
-│   ├── data_loader.py        # Dataset loading and validation
-│   ├── metrics.py            # CER/WER calculation
-│   └── llm_corrector.py      # LLM-based correction
-├── scripts/                  # Knowledge base construction
-│   ├── analyze_qaari_errors.py
-│   ├── build_vocabulary.py
-│   ├── build_ngrams.py
-│   ├── extract_qalb.py
-│   ├── extract_rules.py
-│   └── build_knowledge_bases.py
-├── configs/                  # Configuration files
-│   ├── config.yaml           # Phase 1 config
-│   └── kb_config.yaml        # Knowledge base config
-├── docs/                     # Documentation
-├── results/                  # Output directory
-├── run_phase1.py             # Phase 1 pipeline
-└── requirements.txt
+├── src/
+│   ├── data/           # DataLoader, KnowledgeBase, TextUtils
+│   ├── linguistic/     # CAMeL Tools wrappers (MorphAnalyzer, WordValidator)
+│   ├── core/           # LLMCorrector, PromptBuilder, RAGRetriever
+│   └── analysis/       # Metrics, ErrorAnalyzer, StatsTester, Visualizer
+├── pipelines/          # run_phase1.py ... run_phase6.py
+├── configs/            # config.yaml
+├── results/            # Phase outputs (gitignored)
+├── docs/               # Architecture.md, Guidelines.md
+├── scripts/            # Utility scripts
+└── tests/
 ```
 
 ## Data Location
 
-Data is stored in `../data` relative to project root:
 ```
-../data/
-├── Original/           # Ground truth text files
-│   ├── PATS-A01/
+./ocr-results/results/              # Qaari OCR predictions
+├── pats-a01-data/A01-Akhbar/
+└── khatt-data/{train,validation}/
+
+../data/                            # External data
+├── train/                          # Ground truth
+│   ├── PATS_A01_Dataset/
 │   └── KHATT/
-└── Predictions/        # OCR predictions (Qaari output)
-    ├── PATS-A01/
-    └── KHATT/
+├── OpenITI/                        # Arabic corpus (RAG)
+├── QALB-*/                         # Error-correction pairs
+└── rules/                          # Arabic spelling rules
 ```
 
 ## Key Commands
 
 ```bash
-# Run Phase 1 pipeline
-python run_phase1.py
+# Run specific phase
+python pipelines/run_phase1.py
+python pipelines/run_phase2.py
 
-# Run with specific datasets
-python run_phase1.py --datasets PATS-A01
+# Run all phases
+python pipelines/run_all.py
 
-# Limit samples for testing
-python run_phase1.py --limit 50
-
-# Build knowledge bases
-python scripts/build_knowledge_bases.py --all
+# Run with sample limit (for testing)
+python pipelines/run_phase1.py --limit 50
 ```
-
-## Metrics
-
-- **CER (Character Error Rate)**: `(Substitutions + Deletions + Insertions) / Reference Length`
-- **WER (Word Error Rate)**: Word-level edit distance normalized by reference word count
 
 ## Development Guidelines
 
-1. **KISS Principle**: Keep implementations simple and focused
-2. **Maintainability**: Code should be extensible for future phases
-3. **Research Focus**: All metrics should be calculated for research paper reporting
-4. **SWE Best Practices**: Type hints, docstrings, error handling
-5. **Documentation**: Update CLAUDE.md and CHANGELOG.md when making changes
+1. **KISS**: Simple code that works
+2. **Research-first**: Everything should produce paper-ready numbers
+3. **Type hints**: All functions must have type annotations
+4. **UTF-8**: Always specify encoding for Arabic text
+5. **Documentation**: Update CHANGELOG.md on changes
 
-## Configuration
+See `docs/Guidelines.md` for full standards.
 
-Main configuration in `configs/config.yaml`:
-- Model: `Qwen/Qwen2.5-3B-Instruct` (or `Qwen3-4B-Instruct`)
-- Temperature: 0.1 (deterministic output)
-- Datasets: PATS-A01, KHATT
+## Key Files
 
-## Knowledge Bases (Phase 2/3)
+| File | Purpose |
+|------|---------|
+| `docs/Architecture.md` | Full system design and phase details |
+| `docs/Guidelines.md` | Coding standards and conventions |
+| `configs/config.yaml` | Runtime configuration |
+| `CHANGELOG.md` | Version history |
 
-- `confusion_matrix.json` - Qaari OCR error patterns
-- `vocab_100k.json` - Arabic word frequencies from OpenITI
-- `ngrams.json` - Bigram/trigram statistics
-- `qalb_corrections.json` - Error-correction pairs
-- `rules/` - Arabic grammar/spelling rules
+## Current Status
 
-## Dependencies
-
-Core: `torch`, `transformers`, `accelerate`, `python-Levenshtein`, `tqdm`, `PyYAML`
-
-Optional: `bitsandbytes` (quantization), `pyarabic` (text normalization)
-
-## Changelog
-
-See CHANGELOG.md for version history.
+- [x] Architecture document created (8 phases)
+- [x] Guidelines established
+- [x] CAMeL Tools integration designed
+- [ ] Phase 1: Baseline & Error Taxonomy
+- [ ] Phase 2: Zero-Shot LLM
+- [ ] Phase 3: OCR-Aware Prompting
+- [ ] Phase 4A: Rule-Augmented
+- [ ] Phase 4B: Few-Shot (QALB)
+- [ ] Phase 4C: CAMeL Validation (isolated)
+- [ ] Phase 5: RAG (OpenITI)
+- [ ] Phase 6: Combinations + Ablation
