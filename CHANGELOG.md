@@ -6,6 +6,39 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-02-20 — Phase 1 Implementation
+
+### Added
+- `docs/Phase1_Design.md` — detailed implementation plan for Phase 1 (data flow, schemas, module specs)
+- `configs/config.yaml` — full runtime configuration for all phases
+- `src/data/text_utils.py` — Arabic text normalisation, repetition stripping, tokenisation
+- `src/data/data_loader.py` — `DataLoader`, `OCRSample`, `DataError`; KHATT filename pairing; PATS GT handling
+- `src/analysis/metrics.py` — `calculate_cer()`, `calculate_wer()`, `calculate_metrics()`, `calculate_metrics_split()`, `MetricResult`
+- `src/analysis/error_analyzer.py` — `ErrorAnalyzer`, `ErrorType`, `ErrorPosition`, character alignment, confusion matrix, error taxonomy
+- `src/linguistic/morphology.py` — `MorphAnalyzer` CAMeL Tools wrapper with LRU cache and graceful fallback
+- `src/linguistic/validator.py` — `WordValidator`, `ValidationResult`
+- `pipelines/run_phase1.py` — end-to-end Phase 1 pipeline with CLI, logging, progress bars, JSON outputs, Markdown report
+- `tests/test_text_utils.py` — 28 tests for text utilities
+- `tests/test_metrics.py` — 15 tests for CER/WER/MetricResult
+- `tests/test_error_analyzer.py` — 25 tests for alignment, classification, confusion matrix, taxonomy
+- `tests/test_data_loader.py` — 17 tests for loading, pairing, empty-file handling
+- `requirements.txt` updated with `editdistance>=0.6.0`, `jiwer>=3.0.0`, `pytest>=7.0.0`
+
+### Phase 1 Results (All Datasets — Qaari OCR Baseline)
+| Dataset | CER (all) | CER (normal) | WER (normal) | Runaway% | N |
+|---------|-----------|--------------|--------------|----------|---|
+| PATS-A01-Akhbar | 32.62% | 2.05% | 5.11% | 1.3% | 2766 |
+| PATS-A01-Andalus | 107.90% | 13.71% | 36.20% | 4.1% | 2764 |
+| KHATT-train | 553.56% | 65.92% | 93.29% | 19.0% | 1393 |
+| KHATT-validation | 434.85% | 60.03% | 90.13% | 14.8% | 230 |
+
+- **CER (normal)**: excludes samples where Qaari output is >5× GT length (runaway repetition bug)
+- **PATS-A01-Akhbar**: very clean — CER(normal)=2.05%; top confusions: ي↔ب (dot), ط↔ظ (dot)
+- **PATS-A01-Andalus**: moderate errors — CER(normal)=13.71%; top confusions: م↔ه (shape), ى↔ي (alef-maksura)
+- **KHATT**: handwritten — much harder; top confusions: Arabic chars confused with diacritics (ت→fatha, ي→kasra)
+- **PATS GT**: cp1256-encoded line files at `../data/train/PATS_A01_Dataset/A01-{Font}Text.txt`; pairing: GT line N ↔ `{Font}_N.txt`
+- **85/85 tests passing**
+
 ### Added
 - `docs/Architecture.md` - Comprehensive 8-phase experimental architecture
 - `docs/Guidelines.md` - Extended development guidelines and coding standards

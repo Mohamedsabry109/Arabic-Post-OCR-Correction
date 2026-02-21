@@ -1,0 +1,96 @@
+# Arabic Post-OCR Correction — Runtime Configuration
+# =====================================================
+# All paths are relative to the project root (directory containing this file's parent).
+# Use forward slashes. Do not hardcode absolute paths.
+
+# ---------------------------------------------------------------------------
+# Data paths
+# ---------------------------------------------------------------------------
+data:
+  ocr_results: "./ocr-results/results"
+  ground_truth: "../data/train"
+
+  # PATS-A01 GT is auto-derived: {ground_truth}/PATS_A01_Dataset/A01-{font}Text.txt
+  # Encoded in cp1256. No explicit config needed.
+
+  # Knowledge sources (used from Phase 3 onward)
+  openiti: "../data/OpenITI"
+  qalb: "../data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
+  rules: "../data/rules"
+
+# ---------------------------------------------------------------------------
+# Datasets to process
+# ---------------------------------------------------------------------------
+datasets:
+  - name: "PATS-A01-Akhbar"
+    font: "Akhbar"
+    type: "PATS-A01"
+  - name: "PATS-A01-Andalus"
+    font: "Andalus"
+    type: "PATS-A01"
+  - name: "KHATT-train"
+    split: "train"
+    type: "KHATT"
+  - name: "KHATT-validation"
+    split: "validation"
+    type: "KHATT"
+
+# ---------------------------------------------------------------------------
+# Model settings (Phase 2+)
+# ---------------------------------------------------------------------------
+model:
+  name: "Qwen/Qwen2.5-3B-Instruct"
+  temperature: 0.1
+  max_tokens: 1024
+  device: "auto"
+
+# ---------------------------------------------------------------------------
+# RAG settings (Phase 5)
+# ---------------------------------------------------------------------------
+rag:
+  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  top_k: 3
+  chunk_size: 200
+
+# ---------------------------------------------------------------------------
+# Few-shot settings (Phase 4B)
+# ---------------------------------------------------------------------------
+few_shot:
+  num_examples: 5
+  selection: "diverse"   # "diverse" | "random"
+
+# ---------------------------------------------------------------------------
+# CAMeL Tools settings
+# ---------------------------------------------------------------------------
+camel:
+  enabled: true
+  morphology:
+    db: "calima-msa-r13"
+    cache_size: 10000
+  validation:
+    enabled: true
+    re_correct: false
+    min_confidence: 0.5
+
+# ---------------------------------------------------------------------------
+# Phase 1 specific
+# ---------------------------------------------------------------------------
+phase1:
+  min_confusion_count: 2      # minimum count to include in confusion matrix
+  top_confusions_n: 20        # number of top confusions exported in summary
+  error_examples_per_type: 5  # max examples per error type in taxonomy
+
+# ---------------------------------------------------------------------------
+# Output settings
+# ---------------------------------------------------------------------------
+output:
+  results_dir: "results"
+  save_corrected: true
+  save_comparisons: true
+
+# ---------------------------------------------------------------------------
+# Processing limits
+# ---------------------------------------------------------------------------
+processing:
+  limit_per_dataset: null   # set to an integer (e.g. 50) for quick testing
+  batch_size: 1

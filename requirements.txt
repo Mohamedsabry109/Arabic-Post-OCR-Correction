@@ -1,6 +1,13 @@
 # Arabic Post-OCR Correction - Requirements
 # ==========================================
 
+# Metrics
+editdistance>=0.6.0
+jiwer>=3.0.0
+
+# Testing
+pytest>=7.0.0
+
 # Core ML/LLM Libraries
 torch>=2.0.0
 transformers>=4.35.0

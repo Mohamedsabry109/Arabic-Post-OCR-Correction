@@ -1,0 +1,1279 @@
+# Phase 1: Baseline & Error Taxonomy — Design Document
+
+## 1. Overview
+
+### 1.1 Purpose
+
+Phase 1 establishes the **problem baseline** — quantifying how bad Qaari's OCR is and deeply
+characterising its error patterns. This phase produces no LLM calls. It is pure data analysis.
+
+### 1.2 Research Questions Answered
+
+| Question | Output Artefact |
+|----------|----------------|
+| How high is Qaari's CER/WER on each dataset? | `baseline_metrics.json` |
+| Which characters does Qaari confuse most? | `confusion_matrix.json` |
+| What categories of errors dominate? | `error_taxonomy.json` |
+| Where in words do errors cluster? | `error_taxonomy.json` (position analysis) |
+| What fraction of OCR words are morphologically invalid? | `morphological_analysis.json` |
+
+### 1.3 Downstream Use
+
+Every subsequent phase depends on Phase 1 outputs:
+
+- **Phase 2** uses `baseline_metrics.json` as the lower-bound reference
+- **Phase 3** uses `confusion_matrix.json` to inject OCR-specific error knowledge into prompts
+- **Phase 6** uses `error_taxonomy.json` for per-category ablation analysis
+- **All phases** use the normalisation utilities built here
+
+---
+
+## 2. Data
+
+### 2.1 Dataset Summary
+
+| Dataset | Type | OCR Source | GT Source | Split Used | Approx. Pairs |
+|---------|------|-----------|-----------|------------|---------------|
+| PATS-A01 (Akhbar) | Synthetic/Typewritten | `ocr-results/results/pats-a01-data/A01-Akhbar/` | See §2.2 | All | ~2,766 |
+| PATS-A01 (Andalus) | Synthetic/Typewritten | `ocr-results/results/pats-a01-data/A01-Andalus/` | See §2.2 | All | ~2,599 |
+| KHATT (train) | Handwritten/Real | `ocr-results/results/khatt-data/train/Training/` | `../data/train/KHATT/data/train/Training/` | Train | ~1,400 |
+| KHATT (validation) | Handwritten/Real | `ocr-results/results/khatt-data/validation/Validation/` | `../data/train/KHATT/data/validation/Validation/` | Validation | ~233 |
+
+### 2.2 PATS-A01 Ground-Truth Pairing
+
+**Situation**: The PATS-A01 directories at `../data/train/PATS_A01_Dataset/A01-Akhbar/` contain
+only `.tif` image files and a `ReadMe.txt`. No plain-text GT files are co-located with the images.
+
+**Strategy**: PATS-A01 is a synthetic dataset — all fonts render the **same fixed text** per
+line index. GT text must be sourced via one of:
+
+1. **(Preferred)** If a master GT text file exists (e.g., a line-by-line text file bundled with
+   the dataset but not yet located), map by line index.
+2. **(Fallback)** Use a **cross-font majority-vote** approach: for a given line index `N`, run
+   character-level agreement across all available OCR outputs for `Akhbar_N`, `Andalus_N`, etc.
+   The most common character at each position approximates the GT.
+3. **(Manual)** If neither option above is feasible, raise a `DataError` and document the gap.
+
+**Action item for implementer**: Before writing `PATSLoader`, search for any master text file
+inside `../data/train/PATS_A01_Dataset/` or in the HuggingFace dataset card for
+`Mohamed109/ocr-results`. If found, document its path in `configs/config.yaml` under
+`data.pats_gt_file`.
+
+**Filename convention** (what we do know):
+```
+OCR:  ocr-results/results/pats-a01-data/A01-Akhbar/Akhbar_{N}.txt
+GT:   ../data/train/PATS_A01_Dataset/A01-Akhbar/Akhbar_{N}.tif  ← image only
+```
+Line index `N` is the join key across fonts and between OCR and GT.
+
+### 2.3 KHATT Ground-Truth Pairing
+
+KHATT is straightforward — the file name is the exact join key:
+
+```
+OCR: ocr-results/results/khatt-data/train/Training/AHTD3A0001_Para2_3.txt
+GT:  ../data/train/KHATT/data/train/Training/AHTD3A0001_Para2_3.txt
+```
+
+GT text files contain clean Unicode Arabic. OCR text files contain Qaari's predictions.
+
+### 2.4 Observed Data-Quality Issues
+
+These **must** be handled in the loader:
+
+| Issue | Example | Handling |
+|-------|---------|----------|
+| Runaway digit repetition in OCR | `... ١٠٠٠٠٠٠٠٠٠٠٠...` (thousands of `٠`) | Truncate repeated runs of >5 identical chars to 5 |
+| Repeated sentence fragments (OCR hallucination) | Same 10-word span repeated 30× | Detect and collapse in pre-processing |
+| Latin characters in Arabic OCR output | `oze كأب جنة...` | Keep as-is (valid OCR error to measure) |
+| Empty OCR file | 0-byte `.txt` | Skip pair, log warning, count in stats |
+| Mismatched file count | GT has `N` images, OCR has `N-1` text files | Load intersection, log missing |
+
+---
+
+## 3. Module Design
+
+All source files go under `src/`. Each module is a standalone `.py` file. No cross-layer imports
+(data layer does not import from core or analysis).
+
+```
+src/
+├── data/
+│   ├── data_loader.py      ← DataLoader, OCRSample dataclass
+│   ├── text_utils.py       ← normalise_arabic(), strip_repetitions()
+│   └── knowledge_base.py   ← (empty stub for Phase 1; populated in Phase 3+)
+├── linguistic/
+│   ├── morphology.py       ← MorphAnalyzer (CAMeL wrapper)
+│   └── validator.py        ← WordValidator
+└── analysis/
+    ├── metrics.py          ← calculate_cer(), calculate_wer()
+    ├── error_analyzer.py   ← ErrorAnalyzer, ConfusionMatrix
+    └── visualizer.py       ← (stub for Phase 1; populated in Phase 6)
+```
+
+Pipeline entry point:
+```
+pipelines/run_phase1.py
+```
+
+---
+
+## 4. `src/data/text_utils.py`
+
+Utility functions for Arabic text. **No state, all pure functions.**
+
+### 4.1 Public API
+
+```python
+import re
+from typing import Optional
+
+ARABIC_RANGE = re.compile(r'[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+')
+DIACRITICS = re.compile(r'[\u064B-\u065F\u0670]')
+MAX_RUN = 5  # max allowed consecutive identical characters
+
+
+def normalise_arabic(text: str, remove_diacritics: bool = False) -> str:
+    """Normalise Arabic text for consistent metric calculation.
+
+    Normalisation steps (applied in order):
+    1. Strip leading/trailing whitespace.
+    2. Collapse multiple internal whitespace to single space.
+    3. Normalise Alef variants (أ إ آ ٱ) → ا.
+    4. Normalise Taa Marbuta (ة) → ه  [only when remove_diacritics=True].
+    5. Optionally strip diacritics (harakat + shadda + sukun).
+    6. Strip repetitions (see strip_repetitions).
+
+    Args:
+        text: Raw Arabic string.
+        remove_diacritics: If True, also remove all harakat and shadda marks.
+
+    Returns:
+        Normalised string.
+    """
+
+
+def strip_repetitions(text: str, max_run: int = MAX_RUN) -> str:
+    """Collapse runs of >max_run identical consecutive characters.
+
+    Handles the KHATT OCR hallucination pattern where Qaari produces
+    thousands of repeated characters (e.g., ١٠٠٠٠٠٠...).
+
+    Args:
+        text: Input string.
+        max_run: Maximum allowed identical consecutive characters.
+
+    Returns:
+        String with runs collapsed to max_run characters.
+
+    Example:
+        >>> strip_repetitions("كلمة١٠٠٠٠٠٠٠٠", max_run=5)
+        'كلمة١٠٠٠٠'
+    """
+
+
+def tokenise_arabic(text: str) -> list[str]:
+    """Split text into word tokens on whitespace and punctuation.
+
+    Preserves Arabic words. Discards empty tokens.
+
+    Args:
+        text: Normalised Arabic string.
+
+    Returns:
+        List of word strings (no empty strings).
+    """
+
+
+def is_arabic_word(word: str) -> bool:
+    """Return True if word contains at least one Arabic character.
+
+    Args:
+        word: A single token string.
+
+    Returns:
+        True if the word has Arabic codepoints.
+    """
+```
+
+### 4.2 Normalisation Policy
+
+The default `normalise_arabic()` call (without `remove_diacritics=True`) is used for **all
+metric calculations** throughout the project. This keeps diacritics but strips erroneous
+repetitions and normalises whitespace. The `remove_diacritics=True` variant is available for
+the morphological analysis step.
+
+---
+
+## 5. `src/data/data_loader.py`
+
+### 5.1 Data Structures
+
+```python
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+
+@dataclass
+class OCRSample:
+    """A single aligned OCR prediction / ground-truth pair."""
+    sample_id: str          # e.g. "Akhbar_1" or "AHTD3A0001_Para2_3"
+    dataset: str            # "PATS-A01" or "KHATT"
+    font: Optional[str]     # "Akhbar" | "Andalus" | None (for KHATT)
+    split: Optional[str]    # "train" | "validation" | None (for PATS)
+    ocr_text: str           # Raw OCR prediction (after strip_repetitions)
+    gt_text: str            # Ground truth text
+    ocr_path: Path          # Source file path for OCR
+    gt_path: Optional[Path] # Source file path for GT (None if GT unavailable)
+```
+
+### 5.2 `DataLoader` Class
+
+```python
+from pathlib import Path
+from typing import Iterator
+
+from src.data.text_utils import strip_repetitions, normalise_arabic
+
+
+class DataLoader:
+    """Load and align OCR predictions with ground-truth for all datasets.
+
+    Usage:
+        loader = DataLoader(config)
+        for sample in loader.iter_samples(dataset="KHATT"):
+            ...
+
+        all_samples = loader.load_all(limit=100)
+    """
+
+    def __init__(self, config: dict) -> None:
+        """Initialise paths from config.
+
+        Args:
+            config: Parsed config.yaml as a dict. Expected keys:
+                config['data']['ocr_results']   → str path
+                config['data']['ground_truth']  → str path
+                config['processing']['limit_per_dataset'] → int | None
+        """
+
+    def load_pats(
+        self,
+        font: str = "Akhbar",
+        limit: Optional[int] = None,
+    ) -> list[OCRSample]:
+        """Load PATS-A01 samples for a specific font.
+
+        GT sourcing strategy (in priority order):
+          1. Read from config['data']['pats_gt_file'] if set.
+          2. Raise DataError with clear message if not available.
+
+        Args:
+            font: Font subdirectory name (e.g., "Akhbar", "Andalus").
+            limit: If set, return at most this many samples.
+
+        Returns:
+            List of OCRSample objects, sorted by sample_id.
+
+        Raises:
+            DataError: If OCR directory does not exist.
+            DataError: If no GT strategy is available (see §2.2).
+        """
+
+    def load_khatt(
+        self,
+        split: str = "train",
+        limit: Optional[int] = None,
+    ) -> list[OCRSample]:
+        """Load KHATT samples for a given split.
+
+        Pairs files by filename stem. Loads intersection of OCR and GT files.
+        Logs any unmatched files as warnings.
+
+        Args:
+            split: "train" or "validation".
+            limit: If set, return at most this many samples (alphabetical order).
+
+        Returns:
+            List of OCRSample objects, sorted by sample_id.
+
+        Raises:
+            DataError: If split directory does not exist.
+        """
+
+    def load_all(
+        self,
+        limit: Optional[int] = None,
+    ) -> dict[str, list[OCRSample]]:
+        """Load all available datasets.
+
+        Returns:
+            Dict mapping dataset_key → list[OCRSample].
+            Keys: "PATS-A01-Akhbar", "PATS-A01-Andalus", "KHATT-train",
+                  "KHATT-validation".
+            Datasets where GT is unavailable are omitted with a warning.
+        """
+
+    def iter_samples(
+        self,
+        dataset: str,
+        limit: Optional[int] = None,
+    ) -> Iterator[OCRSample]:
+        """Iterate samples for a named dataset without loading all into memory.
+
+        Args:
+            dataset: One of the keys returned by load_all().
+            limit: Stop after this many samples.
+
+        Yields:
+            OCRSample objects one at a time.
+        """
+```
+
+### 5.3 `DataError` Exception
+
+```python
+class DataError(Exception):
+    """Raised when dataset loading fails due to a data issue (not a bug)."""
+```
+
+### 5.4 Internal Helpers
+
+```python
+def _read_ocr_file(path: Path) -> str:
+    """Read an OCR text file, apply strip_repetitions, return cleaned string.
+
+    Returns empty string for 0-byte files (logged as warning).
+    Encoding: UTF-8 with errors='replace'.
+    """
+
+def _read_gt_file(path: Path) -> str:
+    """Read a GT text file. Encoding: UTF-8 with errors='replace'."""
+
+def _extract_font_from_path(ocr_path: Path) -> str:
+    """Derive font name from directory name (e.g., 'A01-Akhbar' → 'Akhbar')."""
+
+def _pair_by_stem(
+    ocr_dir: Path,
+    gt_dir: Path,
+) -> list[tuple[Path, Path]]:
+    """Find matching (ocr_path, gt_path) pairs by filename stem.
+
+    Returns sorted list. Logs any unmatched stems.
+    """
+```
+
+---
+
+## 6. `src/analysis/metrics.py`
+
+### 6.1 Public API
+
+```python
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class MetricResult:
+    """Metric scores for a single dataset."""
+    dataset: str
+    num_samples: int
+    num_chars_ref: int       # total GT characters
+    num_words_ref: int       # total GT words
+    cer: float               # mean CER across samples
+    wer: float               # mean WER across samples
+    cer_std: float           # std dev of per-sample CER
+    wer_std: float           # std dev of per-sample WER
+    cer_median: float
+    wer_median: float
+    cer_p95: float           # 95th percentile (worst samples)
+    wer_p95: float
+
+
+def calculate_cer(reference: str, hypothesis: str) -> float:
+    """Calculate Character Error Rate using edit distance.
+
+    Formula: CER = (S + D + I) / N
+      where S=substitutions, D=deletions, I=insertions, N=len(reference)
+
+    Both strings are normalised before comparison (normalise_arabic with
+    default settings — diacritics preserved).
+
+    Args:
+        reference: Ground truth text.
+        hypothesis: OCR prediction text.
+
+    Returns:
+        CER value ≥ 0.0. Can exceed 1.0 if hypothesis is much longer.
+        Returns 0.0 if reference is empty.
+
+    Example:
+        >>> calculate_cer("مرحبا", "مرحيا")
+        0.2
+    """
+
+
+def calculate_wer(reference: str, hypothesis: str) -> float:
+    """Calculate Word Error Rate using word-level edit distance.
+
+    Tokenises both strings with tokenise_arabic() before comparison.
+
+    Args:
+        reference: Ground truth text.
+        hypothesis: OCR prediction text.
+
+    Returns:
+        WER value ≥ 0.0. Returns 0.0 if reference has no words.
+    """
+
+
+def calculate_metrics(
+    samples: list,          # list[OCRSample]
+    dataset_name: str,
+    normalise: bool = True,
+) -> MetricResult:
+    """Calculate CER and WER over a list of OCRSample objects.
+
+    Args:
+        samples: List of OCRSample with ocr_text and gt_text populated.
+        dataset_name: Label for the result (e.g., "KHATT-train").
+        normalise: If True, apply normalise_arabic() before scoring.
+
+    Returns:
+        Aggregated MetricResult.
+    """
+
+
+def compare_metrics(
+    baseline: MetricResult,
+    improved: MetricResult,
+) -> dict:
+    """Compute delta statistics between two MetricResult objects.
+
+    Returns:
+        Dict with keys: cer_delta, wer_delta, cer_relative_improvement,
+        wer_relative_improvement (all as floats; positive = better).
+    """
+```
+
+### 6.2 Implementation Notes
+
+- Use `jiwer` library for WER if available, otherwise implement with `editdistance`
+- Use `editdistance` library for character-level edit distance (faster than pure Python)
+- Per-sample CER/WER values are computed individually, then aggregated (mean/std/median/p95)
+- **Never** compute corpus-level CER by pooling all characters — use per-sample mean
+
+---
+
+## 7. `src/analysis/error_analyzer.py`
+
+### 7.1 Alignment Strategy
+
+Character-level alignment uses the **Needleman-Wunsch** or **Levenshtein backtracking** to
+produce an operation sequence: `(substitution, deletion, insertion)` per position. This is
+required to build a character confusion matrix and error-position analysis.
+
+### 7.2 Data Structures
+
+```python
+from dataclasses import dataclass, field
+from collections import defaultdict
+from enum import Enum
+from typing import Optional
+
+
+class ErrorType(str, Enum):
+    DOT_CONFUSION   = "dot_confusion"      # ب↔ت↔ث↔ن, ج↔ح↔خ, etc.
+    HAMZA           = "hamza"              # أ↔ا↔إ↔آ↔ء
+    TAA_MARBUTA     = "taa_marbuta"        # ة↔ه
+    ALEF_MAKSURA    = "alef_maksura"       # ى↔ي
+    SIMILAR_SHAPE   = "similar_shape"      # ر↔ز, د↔ذ, و↔ر, etc.
+    MERGED_WORDS    = "merged_words"       # two words → one token
+    SPLIT_WORD      = "split_word"         # one word → two tokens
+    DELETION        = "deletion"           # character dropped
+    INSERTION       = "insertion"          # extra character added
+    OTHER_SUB       = "other_substitution" # substitution not in above groups
+    UNKNOWN         = "unknown"
+
+
+class ErrorPosition(str, Enum):
+    WORD_START  = "word_start"    # first character of word
+    WORD_MIDDLE = "word_middle"   # not first or last
+    WORD_END    = "word_end"      # last character of word
+    SINGLE_CHAR = "single_char"   # word is one character
+
+
+@dataclass
+class CharError:
+    """A single character-level error between GT and OCR."""
+    gt_char: str                    # ground truth character (empty for insertion)
+    ocr_char: str                   # OCR character (empty for deletion)
+    error_type: ErrorType
+    position: ErrorPosition
+    gt_context: str                 # 3-char window around error in GT
+
+
+@dataclass
+class WordError:
+    """A word-level error."""
+    gt_word: str
+    ocr_word: str
+    is_merged: bool       # OCR merged two GT words
+    is_split: bool        # OCR split one GT word into two
+    char_errors: list[CharError]
+
+
+@dataclass
+class SampleError:
+    """All errors found in one OCRSample."""
+    sample_id: str
+    dataset: str
+    cer: float
+    wer: float
+    char_errors: list[CharError]
+    word_errors: list[WordError]
+```
+
+### 7.3 `ErrorAnalyzer` Class
+
+```python
+class ErrorAnalyzer:
+    """Perform character- and word-level alignment and error categorisation.
+
+    Usage:
+        analyzer = ErrorAnalyzer()
+        sample_errors = analyzer.analyse_sample(sample)
+        matrix = analyzer.build_confusion_matrix(all_sample_errors)
+        taxonomy = analyzer.build_taxonomy(all_sample_errors)
+    """
+
+    # Character groups for error type classification
+    DOT_GROUPS: list[frozenset[str]] = [
+        frozenset("بتثن"),
+        frozenset("جحخ"),
+        frozenset("دذ"),
+        frozenset("رز"),
+        frozenset("سش"),
+        frozenset("صض"),
+        frozenset("طظ"),
+        frozenset("فق"),
+    ]
+    HAMZA_GROUP: frozenset[str] = frozenset("أاإآء")
+    TAA_GROUP: frozenset[str] = frozenset("ةه")
+    ALEF_MAKSURA_GROUP: frozenset[str] = frozenset("ىي")
+
+    def analyse_sample(self, sample: "OCRSample") -> SampleError:
+        """Align GT and OCR text for one sample, extract all errors.
+
+        Steps:
+        1. Normalise both strings (normalise_arabic, default settings).
+        2. Compute character-level edit operations via backtracking.
+        3. Classify each operation into ErrorType.
+        4. Classify position (start/middle/end of word).
+        5. Detect word merges and splits via word-level alignment.
+
+        Args:
+            sample: An OCRSample with gt_text and ocr_text.
+
+        Returns:
+            SampleError with complete error breakdown.
+        """
+
+    def build_confusion_matrix(
+        self,
+        errors: list[SampleError],
+        dataset: str,
+        min_count: int = 2,
+    ) -> dict:
+        """Build character-level confusion matrix from all sample errors.
+
+        Only includes substitutions (not insertions or deletions).
+        Only counts Arabic character confusions (ignores Latin, digits).
+
+        Args:
+            errors: List of SampleError objects from analyse_sample().
+            dataset: Dataset label for metadata.
+            min_count: Minimum occurrence count to include a confusion pair.
+
+        Returns:
+            Dict matching Appendix A.1 schema from Architecture.md:
+            {
+              "metadata": {
+                "dataset": str,
+                "total_chars": int,
+                "total_errors": int,
+                "total_substitutions": int,
+                "unique_confusions": int,
+                "generated_at": str (ISO timestamp)
+              },
+              "confusions": {
+                "<gt_char>": {
+                  "<ocr_char>": {
+                    "count": int,
+                    "probability": float  # count / total errors for this gt_char
+                  }
+                }
+              }
+            }
+        """
+
+    def build_taxonomy(
+        self,
+        errors: list[SampleError],
+        dataset: str,
+    ) -> dict:
+        """Aggregate error counts by ErrorType and ErrorPosition.
+
+        Args:
+            errors: List of SampleError objects.
+            dataset: Dataset label for metadata.
+
+        Returns:
+            Dict with structure:
+            {
+              "metadata": { "dataset": str, "total_samples": int,
+                            "total_char_errors": int, "total_word_errors": int,
+                            "generated_at": str },
+              "by_type": {
+                "<ErrorType.value>": {
+                  "count": int,
+                  "percentage": float,
+                  "examples": [ {"gt": str, "ocr": str, "context": str}, ... ]
+                                # up to 5 examples
+                }
+              },
+              "by_position": {
+                "<ErrorPosition.value>": { "count": int, "percentage": float }
+              },
+              "word_level": {
+                "merged": int,
+                "split": int,
+                "total_word_substitutions": int,
+                "total_word_deletions": int,
+                "total_word_insertions": int
+              }
+            }
+        """
+
+    def get_top_confusions(
+        self,
+        confusion_matrix: dict,
+        n: int = 20,
+    ) -> list[tuple[str, str, int, float]]:
+        """Return top-N confusion pairs sorted by count descending.
+
+        Returns:
+            List of (gt_char, ocr_char, count, probability) tuples.
+        """
+
+    # --- Private helpers ---
+
+    def _align_chars(
+        self,
+        ref: str,
+        hyp: str,
+    ) -> list[tuple[str, str]]:
+        """Return aligned (ref_char, hyp_char) pairs using edit distance backtracking.
+
+        Uses '' (empty string) for insertions/deletions:
+          - ('ب', 'ت') → substitution
+          - ('ب', '')  → deletion (char in GT missing from OCR)
+          - ('',  'x') → insertion (extra char in OCR)
+        """
+
+    def _classify_error_type(
+        self,
+        gt_char: str,
+        ocr_char: str,
+    ) -> ErrorType:
+        """Map a (gt_char, ocr_char) pair to an ErrorType.
+
+        Priority order:
+          1. Deletion or Insertion (one side is empty)
+          2. Hamza group
+          3. Taa Marbuta group
+          4. Alef Maksura group
+          5. Dot confusion group
+          6. Similar shape (residual known pairs: و↔ر, ع↔غ, م↔ن, etc.)
+          7. Other substitution
+        """
+
+    def _classify_position(
+        self,
+        char_idx: int,
+        word: str,
+    ) -> ErrorPosition:
+        """Return position of char_idx within word."""
+
+    def _align_words(
+        self,
+        ref_words: list[str],
+        hyp_words: list[str],
+    ) -> list[tuple[Optional[str], Optional[str]]]:
+        """Word-level alignment. Returns (ref_word, hyp_word) pairs.
+
+        None indicates an insertion or deletion at the word level.
+        """
+```
+
+---
+
+## 8. `src/linguistic/morphology.py`
+
+### 8.1 Purpose
+
+Wraps CAMeL Tools morphological analyser to determine whether a word is a valid Arabic word.
+Used in Phase 1 to quantify "non-word" vs "valid-but-wrong" OCR errors.
+
+### 8.2 `MorphAnalyzer` Class
+
+```python
+from typing import Optional
+
+
+class MorphAnalyzer:
+    """Thin wrapper around camel_tools.morphology.analyzer.Analyzer.
+
+    Adds in-memory caching and graceful fallback when CAMeL is unavailable.
+
+    Usage:
+        analyzer = MorphAnalyzer(db="calima-msa-r13", cache_size=10000)
+        result = analyzer.analyse("كتب")
+        valid = analyzer.is_analysable("كتب")  # True
+    """
+
+    def __init__(
+        self,
+        db: str = "calima-msa-r13",
+        cache_size: int = 10_000,
+        enabled: bool = True,
+    ) -> None:
+        """Initialise the morphological analyser.
+
+        Args:
+            db: CAMeL morphological database name.
+            cache_size: LRU cache size for analysed words.
+            enabled: If False, all methods return None/False (safe no-op).
+                     Set to False when CAMeL is not installed.
+
+        Raises:
+            ImportError: If enabled=True and camel_tools is not installed.
+        """
+
+    def analyse(self, word: str) -> list[dict]:
+        """Return all morphological analyses for a word.
+
+        Args:
+            word: A single Arabic word (no spaces).
+
+        Returns:
+            List of analysis dicts from CAMeL Tools.
+            Empty list if word is unanalysable (not in lexicon).
+            None if analyser is disabled.
+        """
+
+    def is_analysable(self, word: str) -> bool:
+        """Return True if the word has at least one valid morphological analysis.
+
+        This is the primary check for "is this a valid Arabic word?"
+
+        Args:
+            word: A single Arabic word token.
+
+        Returns:
+            True if analysable. False if not in lexicon. False if disabled.
+        """
+
+    def analyse_batch(self, words: list[str]) -> dict[str, list[dict]]:
+        """Analyse a list of words, using cache for repeated words.
+
+        Args:
+            words: List of Arabic word strings.
+
+        Returns:
+            Dict mapping word → analysis list.
+        """
+```
+
+### 8.3 Fallback Behaviour
+
+If `camel_tools` is not installed:
+- Log a single `WARNING` at `MorphAnalyzer.__init__`
+- Set `self.enabled = False`
+- `is_analysable()` returns `False` for all words
+- Morphological analysis section in Phase 1 report shows `"camel_available": false`
+
+---
+
+## 9. `src/linguistic/validator.py`
+
+```python
+from dataclasses import dataclass
+from src.linguistic.morphology import MorphAnalyzer
+
+
+@dataclass
+class ValidationResult:
+    """Result of morphological validation for one word."""
+    word: str
+    is_valid: bool         # has ≥1 morphological analysis
+    analyses_count: int    # how many analyses (0 = invalid)
+
+
+class WordValidator:
+    """Validate Arabic words using morphological analysis.
+
+    Usage:
+        validator = WordValidator(MorphAnalyzer())
+        results = validator.validate_text("الكتاب على المكتبة")
+    """
+
+    def __init__(self, analyzer: MorphAnalyzer) -> None: ...
+
+    def validate_word(self, word: str) -> ValidationResult:
+        """Validate a single word token."""
+
+    def validate_text(self, text: str) -> list[ValidationResult]:
+        """Tokenise text and validate each Arabic word token.
+
+        Non-Arabic tokens (digits, Latin, punctuation) are skipped.
+
+        Args:
+            text: Arabic text string.
+
+        Returns:
+            List of ValidationResult, one per Arabic token.
+        """
+
+    def validity_rate(self, text: str) -> float:
+        """Return fraction of Arabic tokens that are morphologically valid.
+
+        Args:
+            text: Arabic text string.
+
+        Returns:
+            Float in [0.0, 1.0]. 1.0 if no Arabic tokens found.
+        """
+```
+
+---
+
+## 10. Morphological Analysis (Phase 1 Sub-Step)
+
+This sub-step runs after CER/WER computation and adds morphological validity statistics to
+Phase 1's output. It answers: "Of all OCR error words — how many produce non-words vs
+plausible-but-wrong words?"
+
+### 10.1 Function in `pipelines/run_phase1.py`
+
+```python
+def run_morphological_analysis(
+    samples: list[OCRSample],
+    validator: WordValidator,
+    dataset_name: str,
+) -> dict:
+    """Compute morphological validity statistics for OCR outputs.
+
+    For each sample:
+      - Tokenise gt_text → validate each GT word
+      - Tokenise ocr_text → validate each OCR word
+      - For word pairs where GT word is valid but OCR word is invalid:
+          classify as "non_word_error"
+      - For word pairs where both valid but different:
+          classify as "valid_but_wrong"
+
+    Args:
+        samples: List of OCRSample objects.
+        validator: Initialised WordValidator.
+        dataset_name: Label for output metadata.
+
+    Returns:
+        Dict matching the schema in §12.4 below.
+    """
+```
+
+---
+
+## 11. `pipelines/run_phase1.py`
+
+### 11.1 Entry Point
+
+```python
+#!/usr/bin/env python3
+"""Phase 1: Baseline & Error Taxonomy.
+
+Usage:
+    python pipelines/run_phase1.py
+    python pipelines/run_phase1.py --limit 50
+    python pipelines/run_phase1.py --dataset KHATT
+    python pipelines/run_phase1.py --no-camel
+"""
+import argparse
+import json
+import logging
+from pathlib import Path
+
+def parse_args() -> argparse.Namespace: ...
+
+def setup_logging(results_dir: Path) -> None:
+    """Configure logging to console and file (results/phase1/phase1.log)."""
+
+def load_config(config_path: Path = Path("configs/config.yaml")) -> dict:
+    """Load and validate YAML config."""
+
+def main() -> None: ...
+```
+
+### 11.2 Execution Flow
+
+```
+main()
+│
+├─ 1. parse_args() + setup_logging() + load_config()
+│
+├─ 2. Initialise DataLoader
+│
+├─ 3. For each dataset in [PATS-A01-Akhbar, PATS-A01-Andalus, KHATT-train, KHATT-validation]:
+│     │
+│     ├─ 3a. loader.load_*() → list[OCRSample]
+│     │       (respects --limit flag)
+│     │
+│     ├─ 3b. metrics.calculate_metrics(samples) → MetricResult
+│     │       save intermediate: results/phase1/{dataset}/metrics.json
+│     │
+│     ├─ 3c. analyzer.analyse_sample(s) for s in samples → list[SampleError]
+│     │
+│     ├─ 3d. analyzer.build_confusion_matrix(errors) → confusion dict
+│     │       save: results/phase1/{dataset}/confusion_matrix.json
+│     │
+│     ├─ 3e. analyzer.build_taxonomy(errors) → taxonomy dict
+│     │       save: results/phase1/{dataset}/error_taxonomy.json
+│     │
+│     └─ 3f. [if camel enabled] run_morphological_analysis(samples, validator)
+│             save: results/phase1/{dataset}/morphological_analysis.json
+│
+├─ 4. Aggregate across datasets → results/phase1/baseline_metrics.json
+│       (combined KHATT = train+validation; PATS combined = Akhbar+Andalus)
+│
+├─ 5. Generate results/phase1/report.md (human-readable summary)
+│
+└─ 6. Log completion with key numbers
+```
+
+### 11.3 CLI Arguments
+
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `--limit` | int | None | Max samples per dataset (for testing) |
+| `--dataset` | str | None | Run only one dataset ("KHATT", "PATS-A01") |
+| `--no-camel` | flag | False | Skip morphological analysis |
+| `--config` | path | `configs/config.yaml` | Config file path |
+| `--results-dir` | path | `results/phase1` | Output directory |
+
+---
+
+## 12. Output Schemas
+
+All JSON outputs include a `"meta"` block:
+
+```json
+{
+  "meta": {
+    "phase": "phase1",
+    "dataset": "<name>",
+    "generated_at": "<ISO-8601 timestamp>",
+    "config": { "<key>": "<value>" },
+    "git_commit": "<sha or null>",
+    "num_samples": 1400,
+    "limit_applied": null
+  }
+}
+```
+
+### 12.1 `baseline_metrics.json`
+
+```json
+{
+  "meta": { "..." },
+  "results": {
+    "PATS-A01-Akhbar": {
+      "cer": 0.142,
+      "wer": 0.387,
+      "cer_std": 0.089,
+      "wer_std": 0.201,
+      "cer_median": 0.118,
+      "wer_median": 0.350,
+      "cer_p95": 0.312,
+      "wer_p95": 0.780,
+      "num_samples": 2766,
+      "num_chars_ref": 158432,
+      "num_words_ref": 28901
+    },
+    "PATS-A01-Andalus": { "..." },
+    "KHATT-train": { "..." },
+    "KHATT-validation": { "..." },
+    "KHATT-combined": { "..." }
+  }
+}
+```
+
+### 12.2 `confusion_matrix.json`
+
+```json
+{
+  "meta": { "dataset": "KHATT-train", "total_substitutions": 4832,
+            "unique_confusions": 47, "..." },
+  "confusions": {
+    "ب": {
+      "ت": { "count": 245, "probability": 0.32 },
+      "ث": { "count": 89,  "probability": 0.12 }
+    },
+    "ة": {
+      "ه": { "count": 312, "probability": 0.85 }
+    }
+  },
+  "top_20": [
+    { "gt": "ة", "ocr": "ه", "count": 312, "probability": 0.85 }
+  ]
+}
+```
+
+### 12.3 `error_taxonomy.json`
+
+```json
+{
+  "meta": { "..." },
+  "by_type": {
+    "taa_marbuta":      { "count": 312, "percentage": 18.4,
+                          "examples": [{"gt": "مدرسة", "ocr": "مدرسه", "context": "في مدرسة"}] },
+    "hamza":            { "count": 278, "percentage": 16.4, "examples": [] },
+    "dot_confusion":    { "count": 245, "percentage": 14.5, "examples": [] },
+    "deletion":         { "count": 198, "percentage": 11.7, "examples": [] },
+    "insertion":        { "count": 134, "percentage":  7.9, "examples": [] },
+    "alef_maksura":     { "count": 112, "percentage":  6.6, "examples": [] },
+    "similar_shape":    { "count":  89, "percentage":  5.3, "examples": [] },
+    "merged_words":     { "count":  67, "percentage":  4.0, "examples": [] },
+    "split_word":       { "count":  43, "percentage":  2.5, "examples": [] },
+    "other_substitution": { "count": 217, "percentage": 12.8, "examples": [] }
+  },
+  "by_position": {
+    "word_start":  { "count": 412, "percentage": 24.3 },
+    "word_middle": { "count": 876, "percentage": 51.7 },
+    "word_end":    { "count": 376, "percentage": 22.2 },
+    "single_char": { "count":  32, "percentage":  1.9 }
+  },
+  "word_level": {
+    "merged": 67,
+    "split": 43,
+    "total_word_substitutions": 2134,
+    "total_word_deletions": 312,
+    "total_word_insertions": 198
+  }
+}
+```
+
+### 12.4 `morphological_analysis.json`
+
+```json
+{
+  "meta": { "camel_available": true, "camel_db": "calima-msa-r13", "..." },
+  "gt_validity": {
+    "total_words": 28901,
+    "valid_words": 26345,
+    "valid_rate": 0.912
+  },
+  "ocr_validity": {
+    "total_words": 27654,
+    "valid_words": 19234,
+    "valid_rate": 0.696
+  },
+  "error_breakdown": {
+    "non_word_errors": {
+      "count": 4823,
+      "percentage_of_total_errors": 68.2,
+      "description": "GT word valid → OCR word invalid (obvious error)"
+    },
+    "valid_but_wrong": {
+      "count": 1243,
+      "percentage_of_total_errors": 17.6,
+      "description": "GT word valid → OCR word valid but different (subtle error)"
+    },
+    "both_invalid": {
+      "count": 389,
+      "percentage_of_total_errors": 5.5,
+      "description": "Both GT and OCR word invalid (noisy GT)"
+    }
+  }
+}
+```
+
+### 12.5 `report.md`
+
+Human-readable Markdown report generated by string formatting (no templating library needed).
+Structure:
+
+```markdown
+# Phase 1 Report: Baseline & Error Taxonomy
+
+Generated: <timestamp>
+
+## Summary
+
+| Dataset         | CER    | WER    | Samples |
+|-----------------|--------|--------|---------|
+| PATS-A01-Akhbar | X.XX%  | X.XX%  | N       |
+| ...             |        |        |         |
+
+## Top 10 Character Confusions (KHATT-train)
+
+| GT Char | OCR Char | Count | Probability |
+|---------|----------|-------|-------------|
+| ة       | ه        | 312   | 85%         |
+| ...     |          |       |             |
+
+## Error Type Distribution
+
+[Table from error_taxonomy.json]
+
+## Morphological Analysis
+
+[Table from morphological_analysis.json if CAMeL available]
+
+## Key Findings
+
+- [Bullet: highest-error dataset]
+- [Bullet: dominant error type]
+- [Bullet: non-word rate]
+```
+
+---
+
+## 13. Configuration (`configs/config.yaml` additions for Phase 1)
+
+Add these keys to the existing config:
+
+```yaml
+# Phase 1 specific
+phase1:
+  min_confusion_count: 2       # Minimum count to include in confusion matrix
+  top_confusions_n: 20         # Number of top confusions to export in summary
+  error_examples_per_type: 5   # Max examples per error type in taxonomy
+  datasets:                    # Which datasets to process
+    - "PATS-A01-Akhbar"
+    - "PATS-A01-Andalus"
+    - "KHATT-train"
+    - "KHATT-validation"
+
+# PATS GT file (set if a master text file is found)
+data:
+  pats_gt_file: null           # e.g., "../data/train/PATS_A01_Dataset/gt_lines.txt"
+```
+
+---
+
+## 14. Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `pyyaml` | ≥6.0 | Config loading |
+| `editdistance` | ≥0.6 | Fast Levenshtein for CER |
+| `jiwer` | ≥3.0 | WER calculation |
+| `camel-tools` | ≥1.5 | Morphological analysis (optional) |
+| `tqdm` | ≥4.60 | Progress bars |
+
+All are pure Python-compatible. No GPU needed for Phase 1.
+
+Install command:
+```bash
+pip install pyyaml editdistance jiwer camel-tools tqdm
+```
+
+CAMeL morphological database download (run once):
+```bash
+camel_data -i morphology-db-msa-r13
+```
+
+---
+
+## 15. Testing
+
+### 15.1 Test File Locations
+
+```
+tests/
+├── test_text_utils.py
+├── test_metrics.py
+├── test_error_analyzer.py
+├── test_data_loader.py
+└── fixtures/
+    ├── sample_ocr_khatt.txt       # 5 KHATT OCR samples
+    ├── sample_gt_khatt.txt        # 5 KHATT GT samples
+    └── expected_confusion.json    # Expected confusion matrix for fixtures
+```
+
+### 15.2 Required Test Cases
+
+**`test_text_utils.py`**:
+- `test_strip_repetitions_collapses_long_run`
+- `test_strip_repetitions_preserves_short_run`
+- `test_normalise_alef_variants`
+- `test_normalise_whitespace`
+- `test_tokenise_arabic_ignores_punctuation`
+- `test_is_arabic_word_rejects_latin`
+
+**`test_metrics.py`**:
+- `test_cer_identical_strings_is_zero`
+- `test_cer_completely_different_strings`
+- `test_cer_empty_reference_returns_zero`
+- `test_wer_single_word_substitution`
+- `test_wer_word_insertion`
+
+**`test_error_analyzer.py`**:
+- `test_align_chars_substitution`
+- `test_align_chars_deletion`
+- `test_align_chars_insertion`
+- `test_classify_taa_marbuta`
+- `test_classify_hamza`
+- `test_classify_dot_confusion`
+- `test_build_confusion_matrix_format`
+- `test_build_taxonomy_sums_to_total`
+
+**`test_data_loader.py`**:
+- `test_khatt_pair_by_stem_matches_correctly`
+- `test_load_khatt_returns_ocr_sample`
+- `test_empty_ocr_file_skipped_with_warning`
+
+---
+
+## 16. Implementation Order
+
+Build in this exact order to minimise blocked work:
+
+| Step | File | Depends On |
+|------|------|-----------|
+| 1 | `src/data/text_utils.py` | Nothing |
+| 2 | `src/analysis/metrics.py` | `text_utils` |
+| 3 | `src/data/data_loader.py` | `text_utils` |
+| 4 | `src/analysis/error_analyzer.py` | `text_utils`, `metrics` |
+| 5 | `src/linguistic/morphology.py` | Nothing (CAMeL) |
+| 6 | `src/linguistic/validator.py` | `morphology` |
+| 7 | `pipelines/run_phase1.py` | All above |
+| 8 | Tests | Corresponding module |
+
+Recommendation: implement and test each step before moving to the next. Phase 1 has no LLM
+dependency — everything can be validated with the actual data files.
+
+---
+
+## 17. Known Risks & Mitigations
+
+| Risk | Mitigation |
+|------|-----------|
+| PATS GT not found | Document clearly in DataError; Phase 1 can still run on KHATT alone |
+| CAMeL install fails on Windows | Wrap in try/except; set `enabled=False`; log warning |
+| Large KHATT files with runaway repetition crash memory | `strip_repetitions()` caps runs before any analysis |
+| Edit distance too slow on long strings (post-repetition) | Apply `strip_repetitions` + cap string length at 2000 chars |
+| Confusion matrix has wrong Arabic char (due to Unicode variants) | Apply `normalise_arabic()` before building matrix |
+| Phase 1 confusion matrix used by Phase 3 is dataset-specific | Separate matrices per dataset; config selects which to use in Phase 3 |
