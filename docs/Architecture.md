@@ -817,7 +817,7 @@ Phase 3       Phase 4A       Phase 4B       Phase 4C        Phase 5           �
 (+Confusion)  (+Rules)       (+Few-shot)    (+CAMeL)        (+RAG)            ║
     │              │              │              │              │              ║
     │ uses P1      │ uses         │ uses         │ uses         │ uses         ║
-    │ confusion    │ ../data/     │ ../data/     │ CAMeL        │ ../data/     ║
+    │ confusion    │ ./data/      │ ./data/      │ CAMeL        │ ./data/      ║
     │ matrix       │ rules/       │ QALB/        │ Tools        │ OpenITI/     ║
     │              │              │              │              │              ║
     └──────────────┴──────────────┴──────────────┴──────────────┘              ║

@@ -36,7 +36,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **PATS-A01-Akhbar**: very clean — CER(normal)=2.05%; top confusions: ي↔ب (dot), ط↔ظ (dot)
 - **PATS-A01-Andalus**: moderate errors — CER(normal)=13.71%; top confusions: م↔ه (shape), ى↔ي (alef-maksura)
 - **KHATT**: handwritten — much harder; top confusions: Arabic chars confused with diacritics (ت→fatha, ي→kasra)
-- **PATS GT**: cp1256-encoded line files at `../data/train/PATS_A01_Dataset/A01-{Font}Text.txt`; pairing: GT line N ↔ `{Font}_N.txt`
+- **PATS GT**: cp1256-encoded line files at `./data/ocr-raw-data/PATS_A01_Dataset/A01-{Font}Text.txt`; pairing: GT line N ↔ `{Font}_N.txt`
 - **85/85 tests passing**
 
 ### Added

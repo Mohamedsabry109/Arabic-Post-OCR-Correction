@@ -52,12 +52,13 @@ stages locally with an `APICorrector` backend.
 
 ### 2.1 Datasets (Same as Phase 1)
 
-Phase 2 processes the same four datasets as Phase 1. No changes to data loading logic.
+Phase 2 processes all 18 datasets. No changes to data loading logic.
 
 | Dataset Key | Type | Approx. Samples |
 |-------------|------|-----------------|
-| PATS-A01-Akhbar | Typewritten/Synthetic | ~2,766 |
-| PATS-A01-Andalus | Typewritten/Synthetic | ~2,599 |
+| PATS-A01-Akhbar-train | Typewritten/Synthetic | ~2,213 |
+| PATS-A01-Akhbar-val | Typewritten/Synthetic | ~553 |
+| *(6 more fonts × train/val)* | Typewritten/Synthetic | ~2,213/553 each |
 | KHATT-train | Handwritten/Real | ~1,400 |
 | KHATT-validation | Handwritten/Real | ~233 |
 
@@ -629,7 +630,7 @@ Usage:
 
     # Useful flags:
     python pipelines/run_phase2.py --mode export --limit 50
-    python pipelines/run_phase2.py --mode analyze --dataset KHATT-train
+    python pipelines/run_phase2.py --mode analyze --datasets KHATT-train
     python pipelines/run_phase2.py --mode analyze --no-error-analysis
 """
 ```
@@ -640,7 +641,7 @@ Usage:
 |----------|------|---------|-------------|
 | `--mode` | str | **required** | `export` \| `analyze` \| `full` |
 | `--limit` | int | None | Max samples per dataset (testing) |
-| `--dataset` | str | None | Run only one dataset |
+| `--datasets` | str+ | None | One or more dataset keys to process |
 | `--force` | flag | False | Re-export / re-analyze even if files exist |
 | `--no-error-analysis` | flag | False | Skip error_changes.json (faster) |
 | `--config` | path | `configs/config.yaml` | Config file path |
@@ -797,13 +798,14 @@ def generate_report(
 results/phase2/
 ├── inference_input.jsonl            # ← UPLOAD THIS to Kaggle/Colab (export stage)
 │
-├── PATS-A01-Akhbar/
+├── PATS-A01-Akhbar-train/
 │   ├── corrections.jsonl            # ← DOWNLOAD THIS from Kaggle/Colab (inference output)
 │   ├── metrics.json                 # Post-correction CER/WER (analyze stage)
 │   ├── comparison_vs_phase1.json    # Delta vs Phase 1 OCR baseline
 │   └── error_changes.json           # Fixed vs introduced errors by type
-├── PATS-A01-Andalus/
+├── PATS-A01-Akhbar-val/
 │   └── [same structure]
+├── *(14 more dataset folders)*
 ├── KHATT-train/
 │   └── [same structure]
 ├── KHATT-validation/
@@ -1180,7 +1182,7 @@ class MockTransformersCorrector(BaseLLMCorrector):
 python pipelines/run_phase2.py --mode export --limit 5
 
 # Step 11: analyze (after downloading corrections from Kaggle)
-python pipelines/run_phase2.py --mode analyze --dataset KHATT-train --no-error-analysis
+python pipelines/run_phase2.py --mode analyze --datasets KHATT-train --no-error-analysis
 ```
 
 ---
@@ -1280,8 +1282,10 @@ MODEL_NAME   = "Qwen/Qwen2.5-3B-Instruct"
 Download `corrections.jsonl` from Kaggle output and place at:
 
 ```
-results/phase2/PATS-A01-Akhbar/corrections.jsonl
-results/phase2/PATS-A01-Andalus/corrections.jsonl
+results/phase2/PATS-A01-Akhbar-train/corrections.jsonl
+results/phase2/PATS-A01-Akhbar-val/corrections.jsonl
+results/phase2/PATS-A01-Andalus-train/corrections.jsonl
+...
 results/phase2/KHATT-train/corrections.jsonl
 results/phase2/KHATT-validation/corrections.jsonl
 ```

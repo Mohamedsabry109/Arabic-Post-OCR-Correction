@@ -25,7 +25,7 @@ python pipelines/run_phase2.py --mode export
 python pipelines/run_phase2.py --mode export --limit 50
 
 # One dataset only
-python pipelines/run_phase2.py --mode export --dataset KHATT-train
+python pipelines/run_phase2.py --mode export --datasets KHATT-train
 ```
 
 **Output**: `results/phase2/inference_input.jsonl`
@@ -109,7 +109,7 @@ at a time if your session might time out:
 
 ```bash
 # Export one dataset
-python pipelines/run_phase2.py --mode export --dataset KHATT-train
+python pipelines/run_phase2.py --mode export --datasets KHATT-train
 
 # Run inference for that dataset on Kaggle
 python run_inference.py --input inference_input.jsonl --output KHATT-train_corrections.jsonl
@@ -239,8 +239,10 @@ Free Colab sessions run for up to 12 hours and may disconnect. Resume support is
 After downloading `corrections.jsonl` from Kaggle/Colab, place it at:
 
 ```
-results/phase2/PATS-A01-Akhbar/corrections.jsonl
-results/phase2/PATS-A01-Andalus/corrections.jsonl
+results/phase2/PATS-A01-Akhbar-train/corrections.jsonl
+results/phase2/PATS-A01-Akhbar-val/corrections.jsonl
+results/phase2/PATS-A01-Andalus-train/corrections.jsonl
+...
 results/phase2/KHATT-train/corrections.jsonl
 results/phase2/KHATT-validation/corrections.jsonl
 ```
@@ -274,7 +276,7 @@ for ds_key, recs in records.items():
 python pipelines/run_phase2.py --mode analyze
 
 # One dataset (faster for testing)
-python pipelines/run_phase2.py --mode analyze --dataset KHATT-train
+python pipelines/run_phase2.py --mode analyze --datasets KHATT-train
 
 # Skip error analysis (much faster)
 python pipelines/run_phase2.py --mode analyze --no-error-analysis

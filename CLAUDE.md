@@ -10,7 +10,7 @@
 - **Problem**: Qaari (open-source Arabic OCR) produces errors; can LLMs correct them?
 - **Datasets**: PATS-A01 (typewritten/synthetic), KHATT (handwritten/real)
 - **Metrics**: CER (Character Error Rate), WER (Word Error Rate)
-- **Model**: Qwen2.5-3B-Instruct (primary)
+- **Model**: Qwen3-4B-Instruct-2507 (primary)
 
 ## Experimental Structure (8 Phases)
 
@@ -32,10 +32,10 @@
 | Source | Location | Used In |
 |--------|----------|---------|
 | Confusion Matrix | Generated in Phase 1 | Phase 3, 6 |
-| Arabic Rules | `../data/rules/` | Phase 4A, 6 |
-| QALB Corpus | `../data/QALB-*/` | Phase 4B, 6 |
+| Arabic Rules | `./data/rules/` | Phase 4A, 6 |
+| QALB Corpus | `./data/QALB-*/` | Phase 4B, 6 |
 | CAMeL Tools | `pip install camel-tools` | Phase 1, 4C, 6 |
-| OpenITI | `../data/OpenITI/` | Phase 5, 6 |
+| OpenITI | `./data/OpenITI/` | Phase 5, 6 |
 
 ### CAMeL Tools (Morphological Analysis)
 
@@ -117,8 +117,8 @@ See `docs/Guidelines.md` for full standards.
 - [x] Architecture document created (8 phases)
 - [x] Guidelines established
 - [x] CAMeL Tools integration designed
-- [ ] Phase 1: Baseline & Error Taxonomy
-- [ ] Phase 2: Zero-Shot LLM
+- [x] Phase 1: Baseline & Error Taxonomy
+- [x] Phase 2: Zero-Shot LLM
 - [ ] Phase 3: OCR-Aware Prompting
 - [ ] Phase 4A: Rule-Augmented
 - [ ] Phase 4B: Few-Shot (QALB)
