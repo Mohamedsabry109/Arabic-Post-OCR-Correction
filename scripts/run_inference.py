@@ -31,16 +31,24 @@ import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# Ensure project src/ is importable when run from any working directory.
-# On Kaggle: upload the project repo as a dataset or add src/ to the notebook.
+# Flexible import: works in two layouts:
+#   A) Project structure — script lives in scripts/, src/core/ is one level up
+#   B) Flat Kaggle/Colab upload — all .py files in the same directory
 # ---------------------------------------------------------------------------
 _SCRIPT_DIR = Path(__file__).resolve().parent
 _PROJECT_ROOT = _SCRIPT_DIR.parent
-if str(_PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.core.prompt_builder import PromptBuilder
-from src.core.llm_corrector import TransformersCorrector, CorrectionResult
+for _p in [str(_PROJECT_ROOT), str(_SCRIPT_DIR)]:
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+try:
+    from src.core.prompt_builder import PromptBuilder
+    from src.core.llm_corrector import TransformersCorrector, CorrectionResult
+except ModuleNotFoundError:
+    # Flat layout: prompt_builder.py and llm_corrector.py sit next to this script
+    from prompt_builder import PromptBuilder  # type: ignore
+    from llm_corrector import TransformersCorrector, CorrectionResult  # type: ignore
 
 logging.basicConfig(
     level=logging.INFO,
