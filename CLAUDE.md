@@ -64,18 +64,20 @@ Arabic-Post-OCR-Correction/
 ## Data Location
 
 ```
-./ocr-results/results/              # Qaari OCR predictions
-├── pats-a01-data/A01-Akhbar/
-└── khatt-data/{train,validation}/
-
-../data/                            # External data
-├── train/                          # Ground truth
+./data/
+├── ocr-results/                    # OCR predictions (one sub-folder per model)
+│   └── qaari-results/              # Qaari outputs (active model)
+│       ├── pats-a01-data/A01-Akhbar/
+│       └── khatt-data/{train,validation}/
+├── ocr-raw-data/                   # Original ground-truth texts
 │   ├── PATS_A01_Dataset/
 │   └── KHATT/
 ├── OpenITI/                        # Arabic corpus (RAG)
 ├── QALB-*/                         # Error-correction pairs
 └── rules/                          # Arabic spelling rules
 ```
+
+To switch OCR models: set `data.ocr_model` in `configs/config.yaml`.
 
 ## Key Commands
 

@@ -789,15 +789,15 @@ Arabic-Post-OCR-Correction/
 ├── tests/
 ├── scripts/
 │   └── hf_download_dataset.py
-└── ocr-results/                    # Downloaded OCR predictions
-
-External Data (../data/):
-├── train/                          # Ground truth
-│   ├── PATS_A01_Dataset/
-│   └── KHATT/
-├── OpenITI/                        # Arabic corpus for RAG
-├── QALB-0.9.1-Dec03-2021-SharedTasks/  # Error-correction pairs
-└── rules/                          # Arabic spelling rules
+└── data/                           # All data (consolidated)
+    ├── ocr-results/                # OCR predictions, one sub-folder per model
+    │   └── qaari-results/          # Active model (change via config.data.ocr_model)
+    ├── ocr-raw-data/               # Original ground-truth texts
+    │   ├── PATS_A01_Dataset/
+    │   └── KHATT/
+    ├── OpenITI/                    # Arabic corpus for RAG
+    ├── QALB-0.9.1-Dec03-2021-SharedTasks/  # Error-correction pairs
+    └── rules/                      # Arabic spelling rules
 ```
 
 ### 4.2 Data & Comparison Dependencies
@@ -838,11 +838,12 @@ Phase 3       Phase 4A       Phase 4B       Phase 4C        Phase 5           �
 ```yaml
 # Data paths
 data:
-  ocr_results: "./ocr-results/results"
-  ground_truth: "../data/train"
-  openiti: "../data/OpenITI"
-  qalb: "../data/QALB-0.9.1-Dec03-2021-SharedTasks"
-  rules: "../data/rules"
+  ocr_root: "./data/ocr-results"   # root for all OCR model outputs
+  ocr_model: "qaari-results"       # active model sub-folder
+  ground_truth: "./data/ocr-raw-data"
+  openiti: "./data/OpenITI"
+  qalb: "./data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
+  rules: "./data/rules"
 
 # Datasets
 datasets:

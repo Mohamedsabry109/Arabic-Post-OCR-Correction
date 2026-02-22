@@ -7,16 +7,20 @@
 # Data paths
 # ---------------------------------------------------------------------------
 data:
-  ocr_results: "./ocr-results/results"
-  ground_truth: "../data/train"
+  # Root directory that holds one sub-folder per OCR model.
+  # To switch models just change ocr_model; ocr_root stays fixed.
+  ocr_root: "./data/ocr-results"
+  ocr_model: "qaari-results"     # sub-folder: qaari-results | <future-model>
+
+  ground_truth: "./data/ocr-raw-data"
 
   # PATS-A01 GT is auto-derived: {ground_truth}/PATS_A01_Dataset/A01-{font}Text.txt
   # Encoded in cp1256. No explicit config needed.
 
   # Knowledge sources (used from Phase 3 onward)
-  openiti: "../data/OpenITI"
-  qalb: "../data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
-  rules: "../data/rules"
+  openiti: "./data/OpenITI"
+  qalb: "./data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
+  rules: "./data/rules"
 
 # ---------------------------------------------------------------------------
 # Datasets to process
@@ -27,6 +31,24 @@ datasets:
     type: "PATS-A01"
   - name: "PATS-A01-Andalus"
     font: "Andalus"
+    type: "PATS-A01"
+  - name: "PATS-A01-Arial"
+    font: "Arial"
+    type: "PATS-A01"
+  - name: "PATS-A01-Naskh"
+    font: "Naskh"
+    type: "PATS-A01"
+  - name: "PATS-A01-Simplified"
+    font: "Simplified"
+    type: "PATS-A01"
+  - name: "PATS-A01-Tahoma"
+    font: "Tahoma"
+    type: "PATS-A01"
+  - name: "PATS-A01-Thuluth"
+    font: "Thuluth"
+    type: "PATS-A01"
+  - name: "PATS-A01-Traditional"
+    font: "Traditional"
     type: "PATS-A01"
   - name: "KHATT-train"
     split: "train"
@@ -39,10 +61,12 @@ datasets:
 # Model settings (Phase 2+)
 # ---------------------------------------------------------------------------
 model:
-  name: "Qwen/Qwen2.5-3B-Instruct"
+  name: "Qwen/Qwen3-4B-Instruct-2507"
+  backend: "transformers"    # "transformers" (Kaggle/Colab) | "api" (future)
   temperature: 0.1
   max_tokens: 1024
   device: "auto"
+  quantize_4bit: false       # set true for GPUs with <8GB VRAM
 
 # ---------------------------------------------------------------------------
 # RAG settings (Phase 5)
@@ -71,6 +95,23 @@ camel:
     enabled: true
     re_correct: false
     min_confidence: 0.5
+
+# ---------------------------------------------------------------------------
+# API backend settings (used when model.backend = "api") — future extension
+# ---------------------------------------------------------------------------
+api:
+  base_url: null               # e.g., "https://api.openai.com/v1"
+  api_key_env: "OPENAI_API_KEY"  # environment variable holding the key (never hardcoded)
+  timeout_s: 30
+  requests_per_minute: 60
+
+# ---------------------------------------------------------------------------
+# Phase 2 specific
+# ---------------------------------------------------------------------------
+phase2:
+  prompt_version: "v1"         # increment if prompt wording changes between runs
+  analyze_errors: true          # run error_changes.json (adds ~10% runtime)
+  max_retries: 2                # LLM retry count on empty or failed output
 
 # ---------------------------------------------------------------------------
 # Phase 1 specific

@@ -17,6 +17,21 @@ logger = logging.getLogger(__name__)
 # Guards against runaway OCR outputs consuming excessive memory/time.
 _MAX_TEXT_LEN = 2000
 
+# Default dataset entries when config['datasets'] is absent.
+# Covers all 8 PATS fonts + both KHATT splits.
+_DEFAULT_DATASET_ENTRIES: list[dict] = [
+    {"name": "PATS-A01-Akhbar",      "type": "PATS-A01"},
+    {"name": "PATS-A01-Andalus",     "type": "PATS-A01"},
+    {"name": "PATS-A01-Arial",       "type": "PATS-A01"},
+    {"name": "PATS-A01-Naskh",       "type": "PATS-A01"},
+    {"name": "PATS-A01-Simplified",  "type": "PATS-A01"},
+    {"name": "PATS-A01-Tahoma",      "type": "PATS-A01"},
+    {"name": "PATS-A01-Thuluth",     "type": "PATS-A01"},
+    {"name": "PATS-A01-Traditional", "type": "PATS-A01"},
+    {"name": "KHATT-train",          "type": "KHATT"},
+    {"name": "KHATT-validation",     "type": "KHATT"},
+]
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -64,9 +79,14 @@ class DataLoader:
 
         Expected config keys::
 
-            config['data']['ocr_results']    → base dir for OCR files
+            config['data']['ocr_root']       → root dir for OCR model outputs
+            config['data']['ocr_model']      → model sub-folder (e.g. "qaari-results")
             config['data']['ground_truth']   → base dir for GT files
             config['processing']['limit_per_dataset'] → int | None
+
+        Legacy (tests / old configs)::
+
+            config['data']['ocr_results']    → used directly as OCR root
 
         PATS-A01 GT files are auto-derived from the ground_truth root:
         ``{ground_truth}/PATS_A01_Dataset/A01-{font}Text.txt`` (cp1256 encoding).
@@ -79,13 +99,23 @@ class DataLoader:
         """
         try:
             data_cfg = config["data"]
-            self._ocr_root = Path(data_cfg["ocr_results"])
+            # Extensible form: ocr_root + ocr_model (one sub-folder per OCR engine).
+            # Legacy form: ocr_results (used in tests and old configs).
+            if "ocr_root" in data_cfg:
+                ocr_root = Path(data_cfg["ocr_root"])
+                ocr_model = data_cfg.get("ocr_model", "")
+                self._ocr_root = ocr_root / ocr_model if ocr_model else ocr_root
+            else:
+                self._ocr_root = Path(data_cfg["ocr_results"])
             self._gt_root = Path(data_cfg["ground_truth"])
         except KeyError as exc:
             raise DataError(f"Missing required config key: {exc}") from exc
 
         proc_cfg = config.get("processing", {})
         self._default_limit: Optional[int] = proc_cfg.get("limit_per_dataset")
+
+        # Dataset registry: read from config, fall back to all 10 defaults.
+        self._dataset_entries: list[dict] = config.get("datasets", _DEFAULT_DATASET_ENTRIES)
 
     # ------------------------------------------------------------------
     # Public loaders
@@ -236,31 +266,25 @@ class DataLoader:
         self,
         limit: Optional[int] = None,
     ) -> dict[str, list[OCRSample]]:
-        """Load all available datasets.
+        """Load all datasets listed in config['datasets'].
 
         Datasets where GT is unavailable are omitted with a warning.
+        The list of datasets comes from self._dataset_entries, which is
+        populated from config['datasets'] in __init__ (or the built-in
+        10-dataset default if the config key is absent).
 
         Args:
             limit: If set, cap each dataset at this many samples.
 
         Returns:
             Dict mapping dataset key → list[OCRSample].
-            Possible keys: "PATS-A01-Akhbar", "PATS-A01-Andalus",
-                           "KHATT-train", "KHATT-validation".
         """
         result: dict[str, list[OCRSample]] = {}
 
-        for font in ("Akhbar", "Andalus"):
-            key = f"PATS-A01-{font}"
+        for entry in self._dataset_entries:
+            key = entry["name"]
             try:
-                result[key] = self.load_pats(font=font, limit=limit)
-            except DataError as exc:
-                logger.warning("Skipping %s: %s", key, exc)
-
-        for split in ("train", "validation"):
-            key = f"KHATT-{split}"
-            try:
-                result[key] = self.load_khatt(split=split, limit=limit)
+                result[key] = list(self.iter_samples(key, limit=limit))
             except DataError as exc:
                 logger.warning("Skipping %s: %s", key, exc)
 
