@@ -207,6 +207,17 @@ phase5:
   max_retries: 2
 
 # ---------------------------------------------------------------------------
+# Phase 6 specific
+# ---------------------------------------------------------------------------
+phase6:
+  pair_best: null              # Set after reviewing pair results (e.g. "pair_conf_rules")
+  analyze_errors: true
+  max_retries: 2
+  stats:
+    alpha: 0.05                # Family-wise error rate for Bonferroni correction
+    n_bootstrap: 1000          # Bootstrap iterations for confidence intervals
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:

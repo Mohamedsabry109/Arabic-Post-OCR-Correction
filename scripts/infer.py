@@ -365,6 +365,24 @@ def main() -> None:
                 prompt_ver = builder.rag_prompt_version
                 if not retrieval_context.strip():
                     prompt_type = "zero_shot_fallback"
+            elif prompt_type == "combined":
+                messages = builder.build_combined(
+                    ocr_text=record["ocr_text"],
+                    confusion_context=record.get("confusion_context") or "",
+                    rules_context=record.get("rules_context") or "",
+                    examples_context=record.get("examples_context") or "",
+                    retrieval_context=record.get("retrieval_context") or "",
+                )
+                prompt_ver = builder.combined_prompt_version
+                # Detect if all contexts were empty (fell back to zero_shot internally)
+                _any_ctx = any([
+                    record.get("confusion_context"),
+                    record.get("rules_context"),
+                    record.get("examples_context"),
+                    record.get("retrieval_context"),
+                ])
+                if not _any_ctx:
+                    prompt_type = "zero_shot_fallback"
             elif prompt_type == "zero_shot":
                 messages = builder.build_zero_shot(record["ocr_text"])
                 prompt_ver = builder.prompt_version

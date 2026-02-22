@@ -124,4 +124,4 @@ See `docs/Guidelines.md` for full standards.
 - [x] Phase 4B: Few-Shot (QALB)
 - [x] Phase 4C: CAMeL Validation (isolated)
 - [x] Phase 5: RAG (OpenITI)
-- [ ] Phase 6: Combinations + Ablation
+- [x] Phase 6: Combinations + Ablation

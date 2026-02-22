@@ -5,6 +5,9 @@
 editdistance>=0.6.0
 jiwer>=3.0.0
 
+# Statistical tests (Phase 6)
+scipy>=1.10.0
+
 # Testing
 pytest>=7.0.0
 

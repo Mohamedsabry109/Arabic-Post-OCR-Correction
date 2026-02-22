@@ -1,10 +1,11 @@
 # How to Run — Arabic Post-OCR Correction Pipeline
 
-This guide covers how to run Phases 1, 2, and 3 end-to-end.
+This guide covers how to run all 6 phases end-to-end.
 
 **Workflow overview:**
 - **Phase 1** runs entirely locally (no LLM needed).
-- **Phases 2 & 3** use a 3-stage pipeline: `export` (local) → `infer` (Kaggle/Colab) → `analyze` (local).
+- **Phases 2–5** use a 3-stage pipeline: `export` (local) → `infer` (Kaggle/Colab) → `analyze` (local).
+- **Phase 6** uses a 4-stage pipeline: `export` → `infer` → `analyze` → `validate` + `summarize` (local).
 
 ---
 
@@ -447,6 +448,180 @@ results/phase5/
 
 ---
 
+## Phase 6 — Combinations & Ablation Study
+
+Phase 6 tests combinations of the Phase 3–5 prompt techniques and adds CAMeL post-processing. It runs **9 inference combos** (need Kaggle) plus **2 CAMeL combos** that run locally. The pipeline has four modes: `export`, `analyze`, `validate`, and `summarize`.
+
+**Prerequisites**: Phases 1, 2, 3, 4A, 4B, and 5 must be complete. The Phase 5 FAISS index (`results/phase5/faiss.index`) must exist.
+
+### Combo IDs
+
+| Combo ID | Confusion | Rules | Few-Shot | RAG | CAMeL |
+|----------|-----------|-------|----------|-----|-------|
+| `pair_conf_rules` | yes | yes | — | — | — |
+| `pair_conf_fewshot` | yes | — | yes | — | — |
+| `pair_conf_rag` | yes | — | — | yes | — |
+| `pair_rules_fewshot` | — | yes | yes | — | — |
+| `full_prompt` | yes | yes | yes | yes | — |
+| `abl_no_confusion` | — | yes | yes | yes | — |
+| `abl_no_rules` | yes | — | yes | yes | — |
+| `abl_no_fewshot` | yes | yes | — | yes | — |
+| `abl_no_rag` | yes | yes | yes | — | — |
+| `pair_best_camel` | *(base: pair_best)* | | | | yes |
+| `full_system` | yes | yes | yes | yes | yes |
+
+### Stage 1 — Export (local)
+
+Builds combined JSONL with all context fields pre-filled for each combo.
+
+```bash
+# Export all inference combos (9 combos)
+python pipelines/run_phase6.py --mode export --combo all
+
+# Export a single combo
+python pipelines/run_phase6.py --mode export --combo full_prompt
+
+# Subset / smoke test
+python pipelines/run_phase6.py --mode export --combo pair_conf_rules --datasets KHATT-train --limit 50
+
+# Force re-export
+python pipelines/run_phase6.py --mode export --combo all --force
+```
+
+Exports write to `results/phase6/{combo_id}/inference_input.jsonl`.
+
+### Stage 2 — Inference (Kaggle / Colab / local GPU)
+
+Same `scripts/infer.py` used by all phases — `prompt_type="combined"` is embedded in each record.
+
+```bash
+# Default paths (after placing input at the expected location)
+python scripts/infer.py \
+    --input  results/phase6/pair_conf_rules/inference_input.jsonl \
+    --output results/phase6/pair_conf_rules/corrections.jsonl
+
+# Kaggle with HF sync
+python scripts/infer.py \
+    --input  /kaggle/input/your-dataset/inference_input.jsonl \
+    --output /kaggle/working/corrections.jsonl \
+    --hf-repo  your-username/arabic-ocr-phase6 \
+    --hf-token $HF_TOKEN \
+    --sync-every 100
+```
+
+Copy `corrections.jsonl` to `results/phase6/{combo_id}/corrections.jsonl` before analyze.
+
+### Stage 3 — Analyze (local)
+
+Computes CER/WER, comparison vs Phase 2, and per-error-type analysis.
+
+```bash
+# Analyze a single combo
+python pipelines/run_phase6.py --mode analyze --combo pair_conf_rules
+
+# Analyze all inference combos
+python pipelines/run_phase6.py --mode analyze --combo all
+
+# Subset / skip error analysis
+python pipelines/run_phase6.py --mode analyze --combo full_prompt --datasets KHATT-train
+python pipelines/run_phase6.py --mode analyze --combo all --no-error-analysis
+```
+
+### Stage 4 — Validate (local, CAMeL combos)
+
+Applies CAMeL morphological revert strategy to `full_prompt` and `pair_best_camel` corrections. No GPU or inference needed.
+
+```bash
+# Validate full_system (applies CAMeL to full_prompt)
+python pipelines/run_phase6.py --mode validate --combo full_system
+
+# Validate pair_best_camel
+# First set phase6.pair_best in configs/config.yaml to the best pair combo ID
+# (e.g. "pair_conf_rules"), then:
+python pipelines/run_phase6.py --mode validate --combo pair_best_camel
+```
+
+### Stage 5 — Summarize (local)
+
+Aggregates all combo results, computes synergy analysis, ablation impact, statistical tests, and writes paper-ready tables.
+
+```bash
+python pipelines/run_phase6.py --mode summarize
+```
+
+Reads whatever combos have been analyzed and produces:
+- `combinations_summary.json` — pairs + full vs Phase 2
+- `ablation_summary.json` — component impact from ablation runs
+- `synergy_analysis.json` — super-additive / sub-additive effects
+- `statistical_tests.json` — Bonferroni-corrected paired t-tests
+- `final_comparison.json` — all phases + all Phase 6 combos
+- `paper_tables.md` — LaTeX-ready markdown tables
+
+### Recommended full Phase 6 workflow
+
+```bash
+# 1. Export all 9 inference combos
+python pipelines/run_phase6.py --mode export --combo all
+
+# 2. Run inference on Kaggle for each combo (or loop locally with GPU)
+#    For each combo_id in: pair_conf_rules pair_conf_fewshot pair_conf_rag
+#                          pair_rules_fewshot full_prompt
+#                          abl_no_confusion abl_no_rules abl_no_fewshot abl_no_rag
+python scripts/infer.py \
+    --input  results/phase6/{combo_id}/inference_input.jsonl \
+    --output results/phase6/{combo_id}/corrections.jsonl
+
+# 3. Analyze all combos
+python pipelines/run_phase6.py --mode analyze --combo all
+
+# 4. Review pair results, set pair_best in config.yaml, then validate CAMeL combos
+python pipelines/run_phase6.py --mode validate --combo full_system
+python pipelines/run_phase6.py --mode validate --combo pair_best_camel
+
+# 5. Analyze CAMeL combos
+python pipelines/run_phase6.py --mode analyze --combo full_system
+python pipelines/run_phase6.py --mode analyze --combo pair_best_camel
+
+# 6. Generate final summary and paper tables
+python pipelines/run_phase6.py --mode summarize
+```
+
+### Smoke test
+
+```bash
+python pipelines/run_phase6.py --mode export --combo pair_conf_rules --datasets KHATT-train --limit 50
+python scripts/infer.py \
+    --input  results/phase6/pair_conf_rules/inference_input.jsonl \
+    --output results/phase6/pair_conf_rules/corrections.jsonl \
+    --datasets KHATT-train --limit 50
+python pipelines/run_phase6.py --mode analyze --combo pair_conf_rules --datasets KHATT-train
+python pipelines/run_phase6.py --mode summarize
+```
+
+### Outputs
+
+```
+results/phase6/
+├── {combo_id}/
+│   ├── inference_input.jsonl       # Export: input to infer.py
+│   ├── corrections.jsonl           # Inference output (place here before analyze)
+│   ├── {dataset_name}/
+│   │   ├── metrics.json
+│   │   ├── comparison_vs_phase2.json
+│   │   ├── error_changes.json
+│   │   └── validation_stats.json   # CAMeL combos only
+│   └── metrics.json                # Aggregated across datasets
+├── combinations_summary.json       # Summarize output: pairs + full
+├── ablation_summary.json           # Summarize output: ablation deltas
+├── synergy_analysis.json           # Summarize output: synergy scores
+├── statistical_tests.json          # Summarize output: Bonferroni tests
+├── final_comparison.json           # Summarize output: all phases
+├── paper_tables.md                 # Summarize output: LaTeX-ready tables
+└── report.md
+```
+
+---
+
 ## Common Patterns
 
 ### Run all three phases end-to-end (local inference)
@@ -502,6 +677,9 @@ All settings are in `configs/config.yaml`. Key knobs:
 | `phase3` | `top_n` | How many pairs to inject into prompts (default: 10) |
 | `phase3` | `format_style` | `flat_arabic` or `grouped_arabic` |
 | `phase3` | `min_substitutions` | Sparsity threshold for per-dataset matrix |
+| `phase6` | `pair_best` | Best pair combo ID for `pair_best_camel` (set after reviewing pairs) |
+| `phase6.stats` | `alpha` | Family-wise error rate for Bonferroni correction (default: 0.05) |
+| `phase6.stats` | `n_bootstrap` | Bootstrap iterations for confidence intervals (default: 1000) |
 | `processing` | `limit_per_dataset` | Global sample limit (overridden by `--limit`) |
 
 ---
@@ -522,3 +700,12 @@ This is a display issue only — files are always written with UTF-8. Safe to ig
 
 **Empty `confusion_context` in export log**
 The dataset's confusion matrix either doesn't exist or has fewer than 200 substitutions. The script falls back to a pooled matrix. If the pooled matrix is also missing, the record uses `prompt_type: zero_shot` (identical to Phase 2 behaviour).
+
+**`FileNotFoundError: faiss.index` during Phase 6 export with RAG**
+The Phase 5 FAISS index is required for combos that include RAG. Run `python pipelines/run_phase5.py --mode build` first.
+
+**`phase6.pair_best` is null — validate aborted**
+Set `phase6.pair_best` in `configs/config.yaml` to the best pair combo ID (e.g. `"pair_conf_rules"`) after reviewing pair analyze results, then re-run validate.
+
+**Statistical tests skipped in summarize**
+Each combo needs at least 10 paired samples in its `corrections.jsonl`. Run analyze first. If `scipy` is not installed, a normal-approximation fallback is used automatically.
