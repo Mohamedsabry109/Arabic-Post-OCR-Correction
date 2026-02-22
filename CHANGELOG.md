@@ -6,6 +6,98 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-02-23 — Phase 6: Combinations & Ablation Study
+
+### Added
+- `pipelines/run_phase6.py` — 4-mode pipeline (export/analyze/validate/summarize)
+  - 9 inference combos (pair_conf_rules, pair_conf_fewshot, pair_conf_rag,
+    pair_rules_fewshot, full_prompt, abl_no_confusion, abl_no_rules,
+    abl_no_fewshot, abl_no_rag)
+  - 2 CAMeL post-processing combos (pair_best_camel, full_system) — local only
+  - Summarize mode: synergy analysis, ablation impact, paper_tables.md
+- `src/analysis/stats_tester.py` — `StatsTester` class with paired t-test,
+  Cohen's d effect size, Bonferroni correction, bootstrap CI; scipy optional
+  with normal-approximation fallback
+- `src/core/prompt_builder.py` — `build_combined()` merging confusion/rules/
+  few-shot/RAG contexts in fixed order; prompt version `p6v1`
+- `docs/Phase6_Design.md` — full design document for Phase 6
+- `pipelines/run_all.py` — sequential orchestrator for all phases (export/analyze/full modes)
+- `tests/test_stats_tester.py` — 33 tests covering all StatsTester methods
+- `tests/test_prompt_builder.py` — 36 tests covering all build_* methods
+  including build_combined context inclusion/exclusion/ordering
+
+### Changed
+- `scripts/infer.py` — added `combined` prompt_type dispatch for Phase 6
+- `configs/config.yaml` — added `phase6:` config block (pair_best, stats alpha/n_bootstrap)
+- `requirements.txt` — added `scipy>=1.10.0`
+- `HOW_TO_RUN.md` — added full Phase 6 section with combo table, all modes, and workflow
+
+## [0.5.0] - 2026-02-22 — Phase 5: RAG with OpenITI Corpus
+
+### Added
+- `pipelines/run_phase5.py` — 3-mode pipeline (build/export/analyze)
+  - Build mode: extracts up to 200K sentences from OpenITI, embeds with
+    sentence-transformers, saves FAISS index
+  - Export mode: retrieves top-k similar sentences per OCR sample
+  - Analyze mode: CER/WER comparison vs Phase 2, retrieval quality statistics
+- `src/core/rag_retriever.py` — `RAGRetriever` with build_index, load_index,
+  retrieve, format_for_prompt; lazy numpy/faiss imports
+- `src/data/knowledge_base.py` — `OpenITILoader`, `CorpusSentence` for corpus
+  extraction with stratified era sampling
+- `src/core/prompt_builder.py` — `build_rag()` with prompt version `p5v1`
+- `docs/Phase5_Design.md` — full design document for Phase 5
+- `configs/config.yaml` — added `phase5:` config block
+
+## [0.4.0] - 2026-02-22 — Phase 4: Linguistic Knowledge Enhancement
+
+### Added
+- `pipelines/run_phase4.py` — unified pipeline for sub-phases 4A, 4B, 4C
+  - Phase 4A (rule_augmented): Arabic orthographic rules injected into prompt
+  - Phase 4B (few_shot): QALB error-correction examples injected into prompt
+  - Phase 4C (camel_validation): CAMeL morphological post-processing of Phase 2
+    corrections using revert strategy (no inference needed)
+- `src/data/knowledge_base.py` — `RulesLoader` (Phase 4A) and `QALBLoader`
+  (Phase 4B) with OCR-error filtering and diverse example selection
+- `src/linguistic/validator.py` — `WordValidator.validate_correction()` revert
+  strategy: reverts LLM-introduced invalid words back to OCR words
+- `src/core/prompt_builder.py` — `build_rule_augmented()` (p4av1) and
+  `build_few_shot()` (p4bv1)
+- `configs/config.yaml` — added `phase4:` config block with rules, few-shot,
+  and camel_validation settings
+
+## [0.3.0] - 2026-02-22 — Phase 3: OCR-Aware Prompting
+
+### Added
+- `pipelines/run_phase3.py` — 3-mode pipeline (export/analyze/full)
+  - Injects top-N character confusion pairs from Phase 1 into the system prompt
+  - Per-dataset confusion matrix with pooled fallback for sparse datasets
+  - Confusion impact analysis: per-injected-pair fix-rate vs Phase 2
+- `src/data/knowledge_base.py` — `ConfusionMatrixLoader` with
+  `format_for_prompt()` supporting flat_arabic and grouped_arabic styles
+- `src/core/prompt_builder.py` — `build_ocr_aware()` with prompt version `p3v1`
+- `docs/Phase3_Design.md` — full design document for Phase 3
+- `configs/config.yaml` — added `phase3:` config block
+
+## [0.2.0] - 2026-02-22 — Phase 2: Zero-Shot LLM Correction
+
+### Added
+- `pipelines/run_phase2.py` — export/analyze pipeline for zero-shot LLM correction
+- `scripts/infer.py` — unified inference script (local/Kaggle/Colab) with
+  HuggingFace cross-session sync and automatic resume
+- `src/core/llm_corrector.py` — `BaseLLMCorrector` ABC, `TransformersCorrector`
+  (HuggingFace), `APICorrector` stub; `get_corrector()` factory
+- `src/core/prompt_builder.py` — `PromptBuilder` with `build_zero_shot()` (v1)
+- `notebooks/kaggle_setup.ipynb` — Kaggle notebook: clone repo + run infer.py
+- `notebooks/colab_setup.ipynb` — Colab notebook: mount Drive + run infer.py
+- `docs/Kaggle_Colab_Guide.md` — full remote inference workflow documentation
+- `pipelines/_utils.py` — `resolve_datasets()` helper used by all pipelines
+- `configs/config.yaml` — added `phase2:` config block and `model:` settings
+
+### Changed
+- Established 3-stage pipeline pattern (export → infer → analyze) used by all
+  subsequent phases; `enable_thinking=False` in Qwen3 chat template to suppress
+  `<think>` scratchpad tokens
+
 ## [0.1.0] - 2026-02-20 — Phase 1 Implementation
 
 ### Added
