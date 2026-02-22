@@ -187,6 +187,26 @@ phase4:
     phase2_dir: "results/phase2" # source of corrections.jsonl for Phase 4C
 
 # ---------------------------------------------------------------------------
+# Phase 5 specific
+# ---------------------------------------------------------------------------
+phase5:
+  corpus:
+    max_sentences: 200000        # Sentences to extract from OpenITI
+    min_char_len: 30             # Minimum sentence character length
+    max_char_len: 300            # Maximum sentence character length
+    status_filter: "pri"         # Only use primary-status OpenITI texts
+    seed: 42
+  index:
+    type: "FlatIP"               # FAISS index type: "FlatIP" | "IVFFlat"
+    batch_size: 256              # Embedding batch size
+  retrieval:
+    top_k: 3                     # Sentences to retrieve per OCR sample
+    min_score: 0.0               # Minimum cosine similarity (0 = no filter)
+    format_style: "numbered_arabic"
+  analyze_errors: true
+  max_retries: 2
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:

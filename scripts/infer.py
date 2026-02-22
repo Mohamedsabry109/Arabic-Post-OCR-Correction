@@ -359,6 +359,12 @@ def main() -> None:
                 prompt_ver = builder.few_shot_prompt_version
                 if not examples_context.strip():
                     prompt_type = "zero_shot_fallback"
+            elif prompt_type == "rag":
+                retrieval_context = record.get("retrieval_context", "")
+                messages = builder.build_rag(record["ocr_text"], retrieval_context)
+                prompt_ver = builder.rag_prompt_version
+                if not retrieval_context.strip():
+                    prompt_type = "zero_shot_fallback"
             elif prompt_type == "zero_shot":
                 messages = builder.build_zero_shot(record["ocr_text"])
                 prompt_ver = builder.prompt_version

@@ -348,6 +348,105 @@ results/phase4c/
 
 ---
 
+## Phase 5 — RAG with OpenITI Corpus
+
+Phase 5 tests whether retrieving similar correct Arabic sentences from the OpenITI corpus helps the LLM. It has **four** stages: `build` (one-time) → `export` → inference → `analyze`.
+
+**Prerequisite**: `data/OpenITI/` must be populated. Install dependencies:
+
+```bash
+pip install sentence-transformers faiss-cpu
+```
+
+### Stage 0 — Build corpus + FAISS index (one-time, local)
+
+Extracts 200K sentences from OpenITI (stratified by era), embeds them, and saves a FAISS index. Takes 20–60 min on first run; subsequent runs reuse the index.
+
+```bash
+python pipelines/run_phase5.py --mode build
+
+# Smoke test (1000 sentences only — fast)
+python pipelines/run_phase5.py --mode build --max-sentences 1000
+
+# Force rebuild even if index exists
+python pipelines/run_phase5.py --mode build --force
+```
+
+### Stage 1 — Export (local)
+
+Retrieves top-3 similar sentences for each OCR sample and writes `results/phase5/inference_input.jsonl`.
+
+```bash
+python pipelines/run_phase5.py --mode export
+
+# Subset / smoke test
+python pipelines/run_phase5.py --mode export --datasets KHATT-train --limit 50
+
+# Use top-5 instead of default top-3
+python pipelines/run_phase5.py --mode export --top-k 5
+
+# Force re-export
+python pipelines/run_phase5.py --mode export --force
+```
+
+### Stage 2 — Inference (Kaggle / Colab / local GPU)
+
+Same script as all other phases. `prompt_type` is embedded in the JSONL.
+
+```bash
+python scripts/infer.py \
+    --input  results/phase5/inference_input.jsonl \
+    --output results/phase5/corrections.jsonl
+
+# With HF sync
+python scripts/infer.py \
+    --input  /kaggle/input/your-dataset/inference_input.jsonl \
+    --output /kaggle/working/corrections.jsonl \
+    --hf-repo  your-username/arabic-ocr-corrections-phase5 \
+    --hf-token $HF_TOKEN \
+    --sync-every 100
+```
+
+Copy the output `corrections.jsonl` to `results/phase5/corrections.jsonl` before running analyze.
+
+### Stage 3 — Analyze (local)
+
+Reads `results/phase5/corrections.jsonl`, computes CER/WER, comparison vs Phase 2, retrieval quality statistics.
+
+```bash
+python pipelines/run_phase5.py --mode analyze
+
+# Subset analyze
+python pipelines/run_phase5.py --mode analyze --datasets KHATT-train
+
+# Skip error analysis (faster)
+python pipelines/run_phase5.py --mode analyze --no-error-analysis
+
+# Point to non-default Phase 2 results
+python pipelines/run_phase5.py --mode analyze --phase2-dir results/phase2
+```
+
+### Outputs
+
+```
+results/phase5/
+├── corpus.jsonl                  # Extracted OpenITI sentences
+├── faiss.index                   # FAISS binary index
+├── faiss.index.sentences.jsonl   # Sentence lookup list
+├── inference_input.jsonl         # Export: one record per OCR sample
+├── corrections.jsonl             # Inference output (place here before analyze)
+├── {dataset_name}/
+│   ├── metrics.json
+│   ├── comparison_vs_phase2.json
+│   ├── error_changes.json
+│   └── retrieval_analysis.json   # Retrieval quality statistics
+├── metrics.json                  # Aggregated across all datasets
+├── comparison.json               # Aggregated comparison vs Phase 2
+└── report.md
+```
+
+---
+
 ## Common Patterns
 
 ### Run all three phases end-to-end (local inference)

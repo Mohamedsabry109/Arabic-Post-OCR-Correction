@@ -195,3 +195,46 @@ class PromptBuilder:
     def few_shot_prompt_version(self) -> str:
         """Return the Phase 4B prompt version string."""
         return self.FEWSHOT_PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Phase 5 — RAG (OpenITI corpus retrieval)
+    # -----------------------------------------------------------------------
+
+    RAG_SYSTEM_V1: str = (
+        "أنت مصحح نصوص عربية متخصص. "
+        "فيما يلي نصوص عربية صحيحة مشابهة للنص المراد تصحيحه، استخدمها كمرجع:\n\n"
+        "{retrieval_context}\n\n"
+        "صحح النص التالي مستعيناً بهذه النصوص المرجعية. "
+        "أعد النص المصحح فقط بدون أي شرح أو تعليق إضافي."
+    )
+
+    RAG_PROMPT_VERSION: str = "p5v1"
+
+    def build_rag(self, ocr_text: str, retrieval_context: str) -> list[dict]:
+        """Build RAG-augmented correction prompt (Phase 5).
+
+        Injects retrieved OpenITI sentences as reference context. If
+        retrieval_context is empty, falls back to the zero-shot prompt.
+
+        Args:
+            ocr_text: OCR prediction text to correct.
+            retrieval_context: Pre-formatted Arabic string of retrieved
+                sentences (produced by RAGRetriever.format_for_prompt()).
+                Pass empty string to trigger zero-shot fallback.
+
+        Returns:
+            Two-element messages list in OpenAI chat format.
+        """
+        if not retrieval_context.strip():
+            return self.build_zero_shot(ocr_text)
+
+        system = self.RAG_SYSTEM_V1.format(retrieval_context=retrieval_context)
+        return [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": ocr_text},
+        ]
+
+    @property
+    def rag_prompt_version(self) -> str:
+        """Return the Phase 5 prompt version string."""
+        return self.RAG_PROMPT_VERSION
