@@ -221,3 +221,6 @@ models/
 
 # HuggingFace cache
 ~/.cache/huggingface/
+
+# Windows null device artifact (created when "> nul" is run in bash on Windows)
+/nul
