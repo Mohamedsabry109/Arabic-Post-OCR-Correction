@@ -14,18 +14,27 @@ RESUME SUPPORT: If the output file already exists, completed sample IDs are
 read on startup and skipped. Restart the kernel after a timeout — progress
 is preserved.
 
+HF SYNC: Pass --hf-repo to sync corrections.jsonl to a HuggingFace dataset.
+On startup the existing file is pulled from HF (enabling cross-session resume).
+During inference the file is pushed every --sync-every samples and at the end.
+The HF token is read from --hf-token or the HF_TOKEN environment variable.
+
 Usage (Kaggle/Colab cell):
     !python run_inference.py
     !python run_inference.py --input /kaggle/input/my-data/inference_input.jsonl \\
                              --output /kaggle/working/corrections.jsonl \\
                              --model Qwen/Qwen3-4B-Instruct-2507 \\
                              --limit 100 \\
-                             --quantize-4bit
+                             --quantize-4bit \\
+                             --hf-repo username/my-corrections \\
+                             --hf-token hf_xxx \\
+                             --sync-every 50
 """
 
 import argparse
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -115,6 +124,24 @@ def parse_args() -> argparse.Namespace:
         default=1024,
         help="Maximum new tokens to generate per sample.",
     )
+    parser.add_argument(
+        "--hf-repo",
+        type=str,
+        default=None,
+        help="HuggingFace dataset repo ID to sync corrections.jsonl (e.g. username/my-corrections).",
+    )
+    parser.add_argument(
+        "--hf-token",
+        type=str,
+        default=None,
+        help="HuggingFace token. Falls back to HF_TOKEN environment variable.",
+    )
+    parser.add_argument(
+        "--sync-every",
+        type=int,
+        default=100,
+        help="Push to HF every N completed samples (default: 100).",
+    )
     return parser.parse_args()
 
 
@@ -156,12 +183,135 @@ def load_completed_ids(output_path: Path) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
+# HuggingFace sync helpers
+# ---------------------------------------------------------------------------
+
+_HF_FILENAME = "corrections.jsonl"
+
+
+def _hf_token(args_token: str | None) -> str | None:
+    """Return HF token from CLI arg or HF_TOKEN env var."""
+    return args_token or os.environ.get("HF_TOKEN")
+
+
+def hf_pull(output_path: Path, repo: str, token: str | None) -> None:
+    """Download existing corrections.jsonl from HF dataset into output_path.
+
+    Merges with any locally-existing records so neither source loses progress.
+    Silently skips if the file doesn't exist in the repo yet.
+    """
+    try:
+        from huggingface_hub import hf_hub_download, HfApi
+        from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError
+    except ImportError:
+        logger.warning("huggingface_hub not installed — HF sync disabled.")
+        return
+
+    try:
+        remote_path = hf_hub_download(
+            repo_id=repo,
+            filename=_HF_FILENAME,
+            repo_type="dataset",
+            token=token,
+        )
+    except (EntryNotFoundError, RepositoryNotFoundError):
+        logger.info("HF repo has no existing %s — starting fresh.", _HF_FILENAME)
+        return
+    except Exception as exc:
+        logger.warning("HF pull failed (will start from local file): %s", exc)
+        return
+
+    # Merge remote records with any local records (union by sample_id).
+    remote_ids: set[str] = set()
+    remote_lines: list[str] = []
+    with open(remote_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                sid = r.get("sample_id", "")
+                if sid and sid not in remote_ids:
+                    remote_ids.add(sid)
+                    remote_lines.append(line)
+            except json.JSONDecodeError:
+                pass
+
+    local_ids: set[str] = set()
+    local_lines: list[str] = []
+    if output_path.exists():
+        with open(output_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                    sid = r.get("sample_id", "")
+                    if sid and sid not in local_ids:
+                        local_ids.add(sid)
+                        local_lines.append(line)
+                except json.JSONDecodeError:
+                    pass
+
+    # Write merged result: remote first, then any local-only records.
+    merged = remote_lines + [l for l in local_lines if json.loads(l).get("sample_id") not in remote_ids]
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        for line in merged:
+            f.write(line + "\n")
+
+    logger.info(
+        "HF pull complete: %d remote + %d local-only = %d total records.",
+        len(remote_ids), len(local_ids) - len(local_ids & remote_ids), len(merged),
+    )
+
+
+def hf_push(output_path: Path, repo: str, token: str | None) -> None:
+    """Upload corrections.jsonl to HF dataset repo.
+
+    Creates the repo if it doesn't exist. Silently logs on failure so
+    inference is never interrupted by a network hiccup.
+    """
+    try:
+        from huggingface_hub import HfApi
+    except ImportError:
+        return
+
+    try:
+        api = HfApi()
+        api.create_repo(repo_id=repo, repo_type="dataset", exist_ok=True, token=token)
+        api.upload_file(
+            path_or_fileobj=str(output_path),
+            path_in_repo=_HF_FILENAME,
+            repo_id=repo,
+            repo_type="dataset",
+            token=token,
+            commit_message=f"sync: {sum(1 for _ in open(output_path, encoding='utf-8') if _.strip())} records",
+        )
+        logger.info("HF push OK -> %s/%s", repo, _HF_FILENAME)
+    except Exception as exc:
+        logger.warning("HF push failed (progress saved locally): %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
     args = parse_args()
+
+    hf_repo  = args.hf_repo
+    hf_token = _hf_token(args.hf_token)
+
+    # ------------------------------------------------------------------
+    # HF pull — restore progress from previous session before anything else
+    # ------------------------------------------------------------------
+    if hf_repo:
+        logger.info("HF sync enabled: %s (pulling existing progress...)", hf_repo)
+        hf_pull(args.output, hf_repo, hf_token)
 
     # ------------------------------------------------------------------
     # Validate input
@@ -232,6 +382,7 @@ def main() -> None:
     n_success = 0
     n_failed = 0
     total_latency = 0.0
+    n_since_sync = 0
 
     try:
         from tqdm import tqdm
@@ -279,6 +430,19 @@ def main() -> None:
                 n_success += 1
             else:
                 n_failed += 1
+
+            # Periodic HF sync
+            n_since_sync += 1
+            if hf_repo and n_since_sync >= args.sync_every:
+                out_f.flush()
+                hf_push(args.output, hf_repo, hf_token)
+                n_since_sync = 0
+
+    # ------------------------------------------------------------------
+    # Final HF push
+    # ------------------------------------------------------------------
+    if hf_repo:
+        hf_push(args.output, hf_repo, hf_token)
 
     # ------------------------------------------------------------------
     # Summary
