@@ -228,6 +228,126 @@ results/phase3/
 
 ---
 
+## Phase 4 — Linguistic Knowledge Enhancement
+
+Phase 4 has three isolated sub-phases (4A, 4B, 4C).
+**Prerequisite**: Phase 2 must be complete (used as baseline for all comparisons).
+
+### Phase 4A — Rule-Augmented Prompting
+
+#### Stage 1 — Export (local)
+
+```bash
+python pipelines/run_phase4.py --sub-phase 4a --mode export
+```
+
+Options:
+```bash
+# Subset / smoke test
+python pipelines/run_phase4.py --sub-phase 4a --mode export --datasets KHATT-train --limit 50
+
+# Limit to specific rule categories
+python pipelines/run_phase4.py --sub-phase 4a --mode export --rule-categories taa_marbuta hamza
+
+# Force re-export
+python pipelines/run_phase4.py --sub-phase 4a --mode export --force
+```
+
+#### Stage 2 — Inference (Kaggle / Colab / local GPU)
+
+```bash
+python scripts/infer.py \
+    --input  results/phase4a/inference_input.jsonl \
+    --output results/phase4a/corrections.jsonl
+```
+
+#### Stage 3 — Analyze (local)
+
+```bash
+python pipelines/run_phase4.py --sub-phase 4a --mode analyze
+```
+
+### Phase 4B — Few-Shot Prompting (QALB)
+
+#### Stage 1 — Export (local)
+
+```bash
+python pipelines/run_phase4.py --sub-phase 4b --mode export
+```
+
+Options:
+```bash
+# Use 10 examples instead of default 5
+python pipelines/run_phase4.py --sub-phase 4b --mode export --num-examples 10
+
+# Use random selection instead of diverse
+python pipelines/run_phase4.py --sub-phase 4b --mode export --selection random
+
+# Subset / smoke test
+python pipelines/run_phase4.py --sub-phase 4b --mode export --datasets KHATT-train --limit 50
+```
+
+#### Stage 2 — Inference (Kaggle / Colab / local GPU)
+
+```bash
+python scripts/infer.py \
+    --input  results/phase4b/inference_input.jsonl \
+    --output results/phase4b/corrections.jsonl
+```
+
+#### Stage 3 — Analyze (local)
+
+```bash
+python pipelines/run_phase4.py --sub-phase 4b --mode analyze
+```
+
+### Phase 4C — CAMeL Tools Validation (local only)
+
+Phase 4C is a **local post-processing step** — no GPU or Kaggle needed.
+It reads Phase 2 corrections and applies morphological revert strategy.
+
+```bash
+python pipelines/run_phase4.py --sub-phase 4c --mode validate
+```
+
+Options:
+```bash
+# Subset
+python pipelines/run_phase4.py --sub-phase 4c --mode validate --datasets KHATT-train
+
+# Point to non-default Phase 2 results
+python pipelines/run_phase4.py --sub-phase 4c --mode validate --phase2-dir results/phase2
+```
+
+### Outputs
+
+```
+results/phase4a/
+├── inference_input.jsonl       # Export: input to infer.py (with rules_context)
+├── corrections.jsonl           # Inference output (place here before analyze)
+└── {dataset_name}/
+    ├── metrics.json
+    ├── comparison_vs_phase2.json
+    └── error_changes.json
+
+results/phase4b/
+├── inference_input.jsonl       # Export: input to infer.py (with examples_context)
+├── corrections.jsonl           # Inference output (place here before analyze)
+└── {dataset_name}/
+    ├── metrics.json
+    ├── comparison_vs_phase2.json
+    └── error_changes.json
+
+results/phase4c/
+└── {dataset_name}/
+    ├── corrections.jsonl       # Post-validation corrected texts
+    ├── metrics.json
+    ├── comparison_vs_phase2.json
+    └── validation_stats.json   # Word-level revert statistics
+```
+
+---
+
 ## Common Patterns
 
 ### Run all three phases end-to-end (local inference)

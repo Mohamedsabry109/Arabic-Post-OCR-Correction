@@ -119,9 +119,9 @@ See `docs/Guidelines.md` for full standards.
 - [x] CAMeL Tools integration designed
 - [x] Phase 1: Baseline & Error Taxonomy
 - [x] Phase 2: Zero-Shot LLM
-- [ ] Phase 3: OCR-Aware Prompting
-- [ ] Phase 4A: Rule-Augmented
-- [ ] Phase 4B: Few-Shot (QALB)
-- [ ] Phase 4C: CAMeL Validation (isolated)
+- [x] Phase 3: OCR-Aware Prompting
+- [x] Phase 4A: Rule-Augmented
+- [x] Phase 4B: Few-Shot (QALB)
+- [x] Phase 4C: CAMeL Validation (isolated)
 - [ ] Phase 5: RAG (OpenITI)
 - [ ] Phase 6: Combinations + Ablation

@@ -347,12 +347,24 @@ def main() -> None:
                 if not confusion_context.strip():
                     # build_ocr_aware fell back to zero_shot internally
                     prompt_type = "zero_shot_fallback"
+            elif prompt_type == "rule_augmented":
+                rules_context = record.get("rules_context", "")
+                messages = builder.build_rule_augmented(record["ocr_text"], rules_context)
+                prompt_ver = builder.rules_prompt_version
+                if not rules_context.strip():
+                    prompt_type = "zero_shot_fallback"
+            elif prompt_type == "few_shot":
+                examples_context = record.get("examples_context", "")
+                messages = builder.build_few_shot(record["ocr_text"], examples_context)
+                prompt_ver = builder.few_shot_prompt_version
+                if not examples_context.strip():
+                    prompt_type = "zero_shot_fallback"
             elif prompt_type == "zero_shot":
                 messages = builder.build_zero_shot(record["ocr_text"])
                 prompt_ver = builder.prompt_version
             else:
                 logger.warning(
-                    "Unknown prompt_type '%s' for %s — falling back to zero_shot.",
+                    "Unknown prompt_type '%s' for %s -- falling back to zero_shot.",
                     prompt_type, record["sample_id"],
                 )
                 messages = builder.build_zero_shot(record["ocr_text"])

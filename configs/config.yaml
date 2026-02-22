@@ -161,6 +161,32 @@ phase3:
   max_retries: 2               # LLM retry count on empty or failed output
 
 # ---------------------------------------------------------------------------
+# Phase 4 specific
+# ---------------------------------------------------------------------------
+phase4:
+  rules:
+    categories: null             # null = all categories; or list e.g. ["taa_marbuta","hamza"]
+    n_rules: null                # null = all rules; or integer to cap
+    format_style: "compact_arabic"  # "compact_arabic" only (extensible)
+    max_retries: 2
+    analyze_errors: true
+  few_shot:
+    splits: ["train"]
+    years: ["2014"]
+    num_examples: 5
+    selection: "diverse"         # "diverse" | "random" | "most_common"
+    seed: 42
+    max_length: 100
+    min_length: 10
+    max_words_changed: 4
+    format_style: "inline_arabic"  # "inline_arabic" | "numbered_arabic"
+    max_retries: 2
+    analyze_errors: true
+  camel_validation:
+    strategy: "revert"           # "revert" = revert invalid LLM words to valid OCR words
+    phase2_dir: "results/phase2" # source of corrections.jsonl for Phase 4C
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:
