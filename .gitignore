@@ -214,6 +214,8 @@ results/
 
 # Data directory (user-specific data)
 data/
+# Exception: commit the PATS split definition (small metadata, needed for reproducibility)
+!data/ocr-raw-data/PATS_A01_Dataset/pats_splits.json
 
 # Model cache
 models/

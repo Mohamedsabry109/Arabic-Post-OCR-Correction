@@ -79,9 +79,10 @@ class DataLoader:
 
         Expected config keys::
 
-            config['data']['ocr_root']       → root dir for OCR model outputs
-            config['data']['ocr_model']      → model sub-folder (e.g. "qaari-results")
-            config['data']['ground_truth']   → base dir for GT files
+            config['data']['ocr_root']        → root dir for OCR model outputs
+            config['data']['ocr_model']       → model sub-folder (e.g. "qaari-results")
+            config['data']['ground_truth']    → base dir for GT files
+            config['data']['pats_splits_file'] → path to pats_splits.json (optional)
             config['processing']['limit_per_dataset'] → int | None
 
         Legacy (tests / old configs)::
@@ -116,6 +117,21 @@ class DataLoader:
 
         # Dataset registry: read from config, fall back to all 10 defaults.
         self._dataset_entries: list[dict] = config.get("datasets", _DEFAULT_DATASET_ENTRIES)
+        # Index by name for fast lookup in iter_samples.
+        self._entry_by_name: dict[str, dict] = {e["name"]: e for e in self._dataset_entries}
+
+        # PATS split file (optional — if absent, no split filtering is applied).
+        splits_path_str = config.get("data", {}).get("pats_splits_file")
+        self._pats_splits: dict[str, dict[str, list[str]]] = {}
+        if splits_path_str:
+            splits_path = Path(splits_path_str)
+            if splits_path.exists():
+                import json as _json
+                raw = _json.loads(splits_path.read_text(encoding="utf-8"))
+                self._pats_splits = raw.get("splits", {})
+                logger.info("Loaded PATS splits from %s", splits_path)
+            else:
+                logger.warning("pats_splits_file not found: %s (split filtering disabled)", splits_path)
 
     # ------------------------------------------------------------------
     # Public loaders
@@ -124,6 +140,7 @@ class DataLoader:
     def load_pats(
         self,
         font: str = "Akhbar",
+        split: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[OCRSample]:
         """Load PATS-A01 samples for a specific font.
@@ -134,6 +151,9 @@ class DataLoader:
         Args:
             font: Font subdirectory name, e.g. "Akhbar" or "Andalus".
                   The OCR directory is expected as ``A01-{font}``.
+            split: "train" or "validation". If provided, only samples listed
+                   in the pats_splits.json for that split are returned.
+                   If None, all samples are returned.
             limit: If set, return at most this many samples (sorted by ID).
 
         Returns:
@@ -146,6 +166,19 @@ class DataLoader:
         if not ocr_dir.exists():
             raise DataError(f"PATS OCR directory not found: {ocr_dir}")
 
+        # Resolve the allowed sample IDs for this split (None = all).
+        allowed_ids: Optional[set[str]] = None
+        if split is not None:
+            font_splits = self._pats_splits.get(font)
+            if font_splits is None:
+                logger.warning(
+                    "No split data for font '%s' in pats_splits.json — loading all samples.", font
+                )
+            else:
+                allowed_ids = set(font_splits.get(split, []))
+                if not allowed_ids:
+                    raise DataError(f"Split '{split}' for font '{font}' is empty in pats_splits.json")
+
         # Discover all OCR .txt files for this font
         ocr_files = sorted(
             ocr_dir.glob("*.txt"),
@@ -153,6 +186,10 @@ class DataLoader:
         )
         if not ocr_files:
             raise DataError(f"No OCR text files found in {ocr_dir}")
+
+        # Filter to the requested split before applying limit.
+        if allowed_ids is not None:
+            ocr_files = [p for p in ocr_files if p.stem in allowed_ids]
 
         # Load GT
         gt_lines, gt_file = self._load_pats_gt(font, len(ocr_files))
@@ -180,7 +217,7 @@ class DataLoader:
                 sample_id=ocr_path.stem,
                 dataset="PATS-A01",
                 font=font,
-                split=None,
+                split=split,
                 ocr_text=ocr_text,
                 gt_text=gt_text,
                 ocr_path=ocr_path,
@@ -308,8 +345,11 @@ class DataLoader:
             DataError: If the dataset key is unrecognised.
         """
         if dataset.startswith("PATS-A01-"):
-            font = dataset.split("-", 2)[2]
-            samples = self.load_pats(font=font, limit=limit)
+            # Look up the entry to get font + optional pats_split.
+            entry = self._entry_by_name.get(dataset, {})
+            font = entry.get("font") or dataset.split("-", 2)[2]
+            pats_split = entry.get("pats_split")  # "train" | "validation" | None
+            samples = self.load_pats(font=font, split=pats_split, limit=limit)
         elif dataset.startswith("KHATT-"):
             split = dataset.split("-", 1)[1]
             samples = self.load_khatt(split=split, limit=limit)
