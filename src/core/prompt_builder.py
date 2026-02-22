@@ -60,3 +60,52 @@ class PromptBuilder:
     def prompt_version(self) -> str:
         """Return the current prompt version string (included in all metadata)."""
         return self.PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Phase 3 — OCR-Aware Prompting
+    # -----------------------------------------------------------------------
+
+    OCR_AWARE_SYSTEM_V1: str = (
+        "أنت مصحح نصوص عربية متخصص في تصحيح مخرجات نظام Qaari للتعرف الضوئي. "
+        "فيما يلي أبرز الأخطاء الشائعة التي يرتكبها هذا النظام:\n\n"
+        "{confusion_context}\n\n"
+        "صحح النص التالي مع الانتباه بشكل خاص لهذه الأخطاء. "
+        "أعد النص المصحح فقط بدون أي شرح أو تعليق إضافي."
+    )
+
+    OCR_AWARE_PROMPT_VERSION: str = "p3v1"
+
+    def build_ocr_aware(self, ocr_text: str, confusion_context: str) -> list[dict]:
+        """Build OCR-aware correction prompt (Phase 3).
+
+        Injects Qaari's top-N character confusion pairs into the system prompt.
+        If confusion_context is empty, falls back to the zero-shot prompt.
+
+        Args:
+            ocr_text: OCR prediction text to correct.
+            confusion_context: Pre-formatted Arabic string describing confusion
+                pairs (produced by ConfusionMatrixLoader.format_for_prompt()).
+                Pass empty string to trigger zero-shot fallback.
+
+        Returns:
+            Two-element messages list in OpenAI chat format::
+
+                [
+                  {"role": "system", "content": <system with confusion list>},
+                  {"role": "user",   "content": ocr_text}
+                ]
+        """
+        if not confusion_context.strip():
+            # No confusion data available — fall back gracefully to zero-shot
+            return self.build_zero_shot(ocr_text)
+
+        system = self.OCR_AWARE_SYSTEM_V1.format(confusion_context=confusion_context)
+        return [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": ocr_text},
+        ]
+
+    @property
+    def ocr_aware_prompt_version(self) -> str:
+        """Return the Phase 3 prompt version string."""
+        return self.OCR_AWARE_PROMPT_VERSION

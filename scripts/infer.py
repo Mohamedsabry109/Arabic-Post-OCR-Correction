@@ -336,7 +336,29 @@ def main() -> None:
 
     with open(args.output, "a", encoding="utf-8") as out_f:
         for i, record in enumerate(tqdm(pending, desc="Inference", unit="sample")):
-            messages = builder.build_zero_shot(record["ocr_text"])
+            # Dispatch to the correct prompt builder based on prompt_type.
+            # Phase 2 records have no prompt_type field — default to "zero_shot".
+            prompt_type = record.get("prompt_type", "zero_shot")
+
+            if prompt_type == "ocr_aware":
+                confusion_context = record.get("confusion_context", "")
+                messages = builder.build_ocr_aware(record["ocr_text"], confusion_context)
+                prompt_ver = builder.ocr_aware_prompt_version
+                if not confusion_context.strip():
+                    # build_ocr_aware fell back to zero_shot internally
+                    prompt_type = "zero_shot_fallback"
+            elif prompt_type == "zero_shot":
+                messages = builder.build_zero_shot(record["ocr_text"])
+                prompt_ver = builder.prompt_version
+            else:
+                logger.warning(
+                    "Unknown prompt_type '%s' for %s — falling back to zero_shot.",
+                    prompt_type, record["sample_id"],
+                )
+                messages = builder.build_zero_shot(record["ocr_text"])
+                prompt_ver = builder.prompt_version
+                prompt_type = "zero_shot_fallback"
+
             result = corrector.correct(
                 sample_id=record["sample_id"],
                 ocr_text=record["ocr_text"],
@@ -351,7 +373,8 @@ def main() -> None:
                 "corrected_text": result.corrected_text,
                 "gt_text":        record.get("gt_text", ""),
                 "model":          corrector.model_name,
-                "prompt_version": builder.prompt_version,
+                "prompt_type":    prompt_type,
+                "prompt_version": prompt_ver,
                 "prompt_tokens":  result.prompt_tokens,
                 "output_tokens":  result.output_tokens,
                 "latency_s":      result.latency_s,

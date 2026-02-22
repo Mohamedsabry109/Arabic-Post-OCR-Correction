@@ -149,6 +149,18 @@ api:
   requests_per_minute: 60
 
 # ---------------------------------------------------------------------------
+# Phase 3 specific
+# ---------------------------------------------------------------------------
+phase3:
+  top_n: 10                    # number of top confusion pairs to inject into prompt
+  format_style: "flat_arabic"  # "flat_arabic" | "grouped_arabic"
+  min_substitutions: 200       # minimum substitutions for per-dataset matrix to be used
+                               # (datasets below threshold fall back to pooled matrix)
+  analyze_errors: true         # run error_changes.json (adds ~10% runtime)
+  analyze_impact: true         # run confusion_impact.json (requires analyze_errors)
+  max_retries: 2               # LLM retry count on empty or failed output
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:
