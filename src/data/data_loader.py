@@ -18,18 +18,26 @@ logger = logging.getLogger(__name__)
 _MAX_TEXT_LEN = 2000
 
 # Default dataset entries when config['datasets'] is absent.
-# Covers all 8 PATS fonts + both KHATT splits.
+# Mirrors the canonical list in configs/config.yaml.
 _DEFAULT_DATASET_ENTRIES: list[dict] = [
-    {"name": "PATS-A01-Akhbar",      "type": "PATS-A01"},
-    {"name": "PATS-A01-Andalus",     "type": "PATS-A01"},
-    {"name": "PATS-A01-Arial",       "type": "PATS-A01"},
-    {"name": "PATS-A01-Naskh",       "type": "PATS-A01"},
-    {"name": "PATS-A01-Simplified",  "type": "PATS-A01"},
-    {"name": "PATS-A01-Tahoma",      "type": "PATS-A01"},
-    {"name": "PATS-A01-Thuluth",     "type": "PATS-A01"},
-    {"name": "PATS-A01-Traditional", "type": "PATS-A01"},
-    {"name": "KHATT-train",          "type": "KHATT"},
-    {"name": "KHATT-validation",     "type": "KHATT"},
+    {"name": "PATS-A01-Akhbar-train",      "font": "Akhbar",      "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Akhbar-val",        "font": "Akhbar",      "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Andalus-train",     "font": "Andalus",     "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Andalus-val",       "font": "Andalus",     "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Arial-train",       "font": "Arial",       "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Arial-val",         "font": "Arial",       "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Naskh-train",       "font": "Naskh",       "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Naskh-val",         "font": "Naskh",       "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Simplified-train",  "font": "Simplified",  "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Simplified-val",    "font": "Simplified",  "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Tahoma-train",      "font": "Tahoma",      "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Tahoma-val",        "font": "Tahoma",      "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Thuluth-train",     "font": "Thuluth",     "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Thuluth-val",       "font": "Thuluth",     "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "PATS-A01-Traditional-train", "font": "Traditional", "type": "PATS-A01", "pats_split": "train"},
+    {"name": "PATS-A01-Traditional-val",   "font": "Traditional", "type": "PATS-A01", "pats_split": "validation"},
+    {"name": "KHATT-train",                "type": "KHATT"},
+    {"name": "KHATT-validation",           "type": "KHATT"},
 ]
 
 
@@ -347,8 +355,18 @@ class DataLoader:
         if dataset.startswith("PATS-A01-"):
             # Look up the entry to get font + optional pats_split.
             entry = self._entry_by_name.get(dataset, {})
-            font = entry.get("font") or dataset.split("-", 2)[2]
-            pats_split = entry.get("pats_split")  # "train" | "validation" | None
+            if entry:
+                font = entry["font"]
+                pats_split = entry.get("pats_split")  # "train" | "validation" | None
+            else:
+                # Fallback for ad-hoc keys: strip known split suffixes.
+                tail = dataset.split("-", 2)[2]  # e.g. "Akhbar-train" or "Akhbar"
+                for suffix in ("-train", "-val", "-validation"):
+                    if tail.endswith(suffix):
+                        tail = tail[: -len(suffix)]
+                        break
+                font = tail
+                pats_split = None
             samples = self.load_pats(font=font, split=pats_split, limit=limit)
         elif dataset.startswith("KHATT-"):
             split = dataset.split("-", 1)[1]
