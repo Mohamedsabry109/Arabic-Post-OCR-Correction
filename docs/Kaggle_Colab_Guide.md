@@ -3,13 +3,21 @@
 This guide explains how to run LLM inference for Arabic OCR correction on Kaggle or
 Google Colab when no local GPU is available.
 
-The pipeline is split into three stages:
+## Script Overview
+
+| Script | Where it runs | Key feature |
+|--------|--------------|-------------|
+| `scripts/run_local.py` | Local machine (GPU or API) | Integrates with project, no HF sync |
+| `scripts/kaggle_inference.py` | Kaggle | Self-contained (1 file), HF sync required |
+| `scripts/colab_inference.py` | Google Colab | Self-contained (1 file), Drive primary + optional HF sync |
+
+The pipeline has three stages:
 
 | Stage | Runs On | Command |
 |-------|---------|---------|
-| **1. Export** | Local machine | `python pipelines/run_phase2.py --mode export` |
-| **2. Inference** | Kaggle / Colab | `python run_inference.py` |
-| **3. Analyze** | Local machine | `python pipelines/run_phase2.py --mode analyze` |
+| **1. Export** | Local | `python pipelines/run_phase2.py --mode export` |
+| **2. Inference** | Kaggle / Colab / Local GPU | see below |
+| **3. Analyze** | Local | `python pipelines/run_phase2.py --mode analyze` |
 
 ---
 
@@ -18,7 +26,7 @@ The pipeline is split into three stages:
 Run this on your local machine to produce the input file for remote inference.
 
 ```bash
-# Full dataset
+# Full dataset (all 18 datasets)
 python pipelines/run_phase2.py --mode export
 
 # Quick smoke test (50 samples)
@@ -37,217 +45,177 @@ Each line is one sample:
 
 ---
 
-## Stage 2 — Inference on Kaggle
+## Stage 2a — Inference on Kaggle (`kaggle_inference.py`)
 
-### 2.1 Files to Upload
+### What to upload
 
-Upload these four items to your Kaggle notebook (as a dataset or directly):
-
+Upload **two files** to a Kaggle dataset:
 ```
 results/phase2/inference_input.jsonl    ← produced by Stage 1
-src/core/prompt_builder.py
-src/core/llm_corrector.py
-scripts/run_inference.py
+scripts/kaggle_inference.py             ← self-contained, no other files needed
 ```
 
-The inference script only needs these four files. No database, GT files, or
-full project structure is required on the remote machine.
+### Notebook setup
 
-### 2.2 Kaggle Notebook Setup
+Create a new Kaggle notebook: **GPU T4 x2** accelerator, **Internet enabled**.
 
-Create a new Kaggle notebook with **GPU T4 x2** accelerator and **Internet enabled**.
-
-#### Cell 1 — Install dependencies
 ```python
-!pip install transformers accelerate -q
-# Only needed if using --quantize-4bit:
+# Cell 1 — install deps
+!pip install transformers accelerate huggingface_hub -q
+# Only if using --quantize-4bit:
 # !pip install bitsandbytes -q
 ```
 
-#### Cell 2 — Set paths (adjust to your Kaggle dataset paths)
 ```python
-INPUT_JSONL  = "/kaggle/input/your-dataset-name/inference_input.jsonl"
-OUTPUT_JSONL = "/kaggle/working/corrections.jsonl"
-MODEL_NAME   = "Qwen/Qwen3-4B-Instruct-2507"
+# Cell 2 — run (with HF sync — recommended)
+!python /kaggle/input/your-dataset/kaggle_inference.py \
+    --input  /kaggle/input/your-dataset/inference_input.jsonl \
+    --output /kaggle/working/corrections.jsonl \
+    --model  Qwen/Qwen3-4B-Instruct-2507 \
+    --hf-repo  YourUsername/arabic-ocr-corrections \
+    --hf-token hf_xxxxxxxxxxxx \
+    --sync-every 100
 ```
 
-#### Cell 3 — Run inference
-```python
-!python /kaggle/input/your-dataset-name/run_inference.py \
-    --input  {INPUT_JSONL} \
-    --output {OUTPUT_JSONL} \
-    --model  {MODEL_NAME}
-```
-
-Or if you uploaded the scripts directly into the working directory:
-```python
-import subprocess
-result = subprocess.run([
-    "python", "run_inference.py",
-    "--input",  INPUT_JSONL,
-    "--output", OUTPUT_JSONL,
-    "--model",  MODEL_NAME,
-], capture_output=False)
-```
-
-#### Cell 4 — Verify output
-```python
-import json
-with open(OUTPUT_JSONL) as f:
-    lines = [json.loads(l) for l in f if l.strip()]
-print(f"Total records: {len(lines)}")
-print(f"Successful   : {sum(1 for r in lines if r['success'])}")
-print(f"Failed       : {sum(1 for r in lines if not r['success'])}")
-print("\nExample:")
-print(json.dumps(lines[0], ensure_ascii=False, indent=2))
-```
-
-### 2.3 Running Per Dataset
-
-The full dataset (~7,000 samples) may take 4–6 hours on a T4 GPU. Run one dataset
-at a time if your session might time out:
-
-```bash
-# Export one dataset
-python pipelines/run_phase2.py --mode export --datasets KHATT-train
-
-# Run inference for that dataset on Kaggle
-python run_inference.py --input inference_input.jsonl --output KHATT-train_corrections.jsonl
-
-# Then repeat for other datasets
-```
-
-**Resume after timeout**: The script writes results line-by-line. If the Kaggle session
-expires, restart and re-run the same command. Already-completed sample IDs are detected
-and skipped automatically.
-
-### 2.4 Low VRAM GPUs (P100 / T4 with 16GB)
-
-The Qwen3-4B model in float16 uses approximately 8GB VRAM. If you hit OOM errors:
+> **Tip**: Store `hf_xxxxxxxxxxxx` as a Kaggle secret (`HF_TOKEN`) instead of
+> passing it on the command line. The script reads `HF_TOKEN` automatically.
 
 ```python
-!python run_inference.py \
-    --input  {INPUT_JSONL} \
-    --output {OUTPUT_JSONL} \
-    --model  {MODEL_NAME} \
-    --quantize-4bit   # enables 4-bit NF4 via bitsandbytes (~4GB VRAM)
+# Cell 3 — check progress at any time (no model reload)
+!python /kaggle/input/your-dataset/kaggle_inference.py \
+    --hf-repo YourUsername/arabic-ocr-corrections \
+    --hf-token hf_xxxxxxxxxxxx
 ```
 
-### 2.5 Uploading the Project as a Kaggle Dataset
-
-**Option A** (recommended for ease): Upload only the four required files as a Kaggle dataset.
-
-**Option B** (for reusability): Upload the entire project `src/` directory as a dataset so
-the full package is available for all phases. Add this to your notebook:
+### Without HF sync (manual download)
 
 ```python
-import sys
-sys.path.insert(0, "/kaggle/input/your-project-dataset/")
-```
-
-### 2.6 Accessing the Model on Kaggle
-
-**Option A** — Download from HuggingFace (requires Internet enabled in Settings):
-```python
-# The model downloads automatically on first run
-# ~8GB download — allow 10-15 minutes
-```
-
-**Option B** — Use as a Kaggle model (faster, no internet needed):
-1. Go to [kaggle.com/models](https://www.kaggle.com/models) and search for `Qwen3-4B`
-2. Add it to your notebook as a model input
-3. Pass the local path to `--model`:
-```python
-!python run_inference.py \
-    --input  {INPUT_JSONL} \
-    --output {OUTPUT_JSONL} \
-    --model  /kaggle/input/qwen3-4b/transformers/default/1
-```
-
----
-
-## Stage 2 — Inference on Google Colab
-
-### 2A.1 Mount Google Drive (recommended for large datasets)
-
-```python
-from google.colab import drive
-drive.mount('/content/drive')
-
-INPUT_JSONL  = "/content/drive/MyDrive/arabic-ocr/inference_input.jsonl"
-OUTPUT_JSONL = "/content/drive/MyDrive/arabic-ocr/corrections.jsonl"
-```
-
-Saving to Drive means output is preserved if the Colab session disconnects.
-
-### 2A.2 Install Dependencies
-
-```python
-!pip install transformers accelerate -q
-```
-
-### 2A.3 Upload Project Files
-
-Upload via the Files panel (left sidebar) or from Drive:
-
-```python
-# From Drive (if you uploaded them there)
-import shutil
-shutil.copy("/content/drive/MyDrive/arabic-ocr/run_inference.py", ".")
-shutil.copy("/content/drive/MyDrive/arabic-ocr/prompt_builder.py", "src/core/")
-shutil.copy("/content/drive/MyDrive/arabic-ocr/llm_corrector.py", "src/core/")
-```
-
-Or use the Colab file upload widget:
-```python
-from google.colab import files
-uploaded = files.upload()  # select inference_input.jsonl + the three .py files
-```
-
-### 2A.4 Run Inference
-
-```python
-!python run_inference.py \
-    --input  {INPUT_JSONL} \
-    --output {OUTPUT_JSONL} \
+!python /kaggle/input/your-dataset/kaggle_inference.py \
+    --input  /kaggle/input/your-dataset/inference_input.jsonl \
+    --output /kaggle/working/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 ```
 
-### 2A.5 Download Output
+Download `corrections.jsonl` from the **Output** tab when done.
+
+### Resume after timeout
+
+HF sync is the easiest resume path: re-run the same command and the script pulls
+existing progress from HF before starting. Without HF sync, progress is in
+`/kaggle/working/corrections.jsonl` — re-run the command and it resumes from the
+last written sample automatically.
+
+### Low VRAM (P100 / T4 with 16GB)
 
 ```python
-from google.colab import files
-files.download(OUTPUT_JSONL)
+!python /kaggle/input/your-dataset/kaggle_inference.py \
+    --input  /kaggle/input/your-dataset/inference_input.jsonl \
+    --output /kaggle/working/corrections.jsonl \
+    --model  Qwen/Qwen3-4B-Instruct-2507 \
+    --quantize-4bit
 ```
 
-Or it's already in Drive if you used Drive paths.
+### Accessing the model on Kaggle
 
-### 2A.6 Colab Session Limits
+**Option A** — Download from HuggingFace (Internet enabled required, ~8GB, 10-15 min):
+```python
+# Model downloads automatically — no extra setup needed
+```
 
-Free Colab sessions run for up to 12 hours and may disconnect. Resume support is built in:
-- If the session disconnects, re-mount Drive and re-run the inference command
-- The script reads already-completed lines from `corrections.jsonl` and skips them
+**Option B** — Add as a Kaggle model (faster, no internet):
+1. Go to [kaggle.com/models](https://www.kaggle.com/models) → search `Qwen3-4B`
+2. Add it to the notebook as a model input
+3. Pass the local path: `--model /kaggle/input/qwen3-4b/transformers/default/1`
 
-**Tip**: Use Colab Pro for longer sessions and GPU priority.
+---
+
+## Stage 2b — Inference on Google Colab (`colab_inference.py`)
+
+### What to upload
+
+Upload **two files** to Google Drive (e.g. `MyDrive/arabic-ocr/`):
+```
+results/phase2/inference_input.jsonl
+scripts/colab_inference.py
+```
+
+### Notebook setup
+
+```python
+# Cell 1 — mount Drive and install deps
+from google.colab import drive
+drive.mount('/content/drive')
+!pip install transformers accelerate huggingface_hub -q
+```
+
+```python
+# Cell 2 — copy script from Drive and run
+import shutil
+shutil.copy('/content/drive/MyDrive/arabic-ocr/colab_inference.py', '.')
+
+!python colab_inference.py \
+    --input  /content/drive/MyDrive/arabic-ocr/inference_input.jsonl \
+    --output /content/drive/MyDrive/arabic-ocr/corrections.jsonl \
+    --model  Qwen/Qwen3-4B-Instruct-2507
+```
+
+Output goes directly to Drive — it survives session disconnects automatically.
+
+### With HF backup (optional)
+
+```python
+!python colab_inference.py \
+    --input  /content/drive/MyDrive/arabic-ocr/inference_input.jsonl \
+    --output /content/drive/MyDrive/arabic-ocr/corrections.jsonl \
+    --model  Qwen/Qwen3-4B-Instruct-2507 \
+    --hf-repo  YourUsername/arabic-ocr-corrections \
+    --hf-token hf_xxxxxxxxxxxx \
+    --sync-every 50
+```
+
+### Check progress without reloading the model
+
+```python
+!python colab_inference.py --summary-only \
+    --output /content/drive/MyDrive/arabic-ocr/corrections.jsonl
+```
+
+### Resume after disconnect
+
+Re-mount Drive and re-run the same command. The script reads already-completed
+sample IDs from the Drive file and skips them.
+
+---
+
+## Stage 2c — Local Inference (`run_local.py`)
+
+If you have a local GPU or API key, skip Kaggle/Colab entirely:
+
+```bash
+# Local GPU (set model.backend: "transformers" in config.yaml)
+python scripts/run_local.py
+
+# API backend (set model.backend: "api" in config.yaml)
+python scripts/run_local.py
+
+# Subset of datasets
+python scripts/run_local.py --datasets KHATT-train KHATT-validation
+
+# Smoke test
+python scripts/run_local.py --limit 50
+```
+
+Output is written directly to `results/phase2/{dataset_key}/corrections.jsonl`.
+Then run analysis as normal.
 
 ---
 
 ## Stage 3 — Download and Analyze (Local)
 
-### 3.1 Place Downloaded Files
+### Place downloaded files
 
-After downloading `corrections.jsonl` from Kaggle/Colab, place it at:
-
-```
-results/phase2/PATS-A01-Akhbar-train/corrections.jsonl
-results/phase2/PATS-A01-Akhbar-val/corrections.jsonl
-results/phase2/PATS-A01-Andalus-train/corrections.jsonl
-...
-results/phase2/KHATT-train/corrections.jsonl
-results/phase2/KHATT-validation/corrections.jsonl
-```
-
-If you ran all datasets in one JSONL, split by the `"dataset"` field:
+After downloading `corrections.jsonl` from Kaggle/Colab (or HF), split it
+by dataset key and place each piece at the right path:
 
 ```python
 import json
@@ -255,7 +223,7 @@ from pathlib import Path
 from collections import defaultdict
 
 records = defaultdict(list)
-with open("corrections.jsonl") as f:
+with open("corrections.jsonl", encoding="utf-8") as f:
     for line in f:
         r = json.loads(line)
         records[r["dataset"]].append(r)
@@ -269,7 +237,9 @@ for ds_key, recs in records.items():
     print(f"Wrote {len(recs)} records to {out}")
 ```
 
-### 3.2 Run Analysis
+Or if you used `run_local.py`, files are already in the right place.
+
+### Run analysis
 
 ```bash
 # All datasets
@@ -280,27 +250,22 @@ python pipelines/run_phase2.py --mode analyze --datasets KHATT-train
 
 # Skip error analysis (much faster)
 python pipelines/run_phase2.py --mode analyze --no-error-analysis
-
-# Specific results directory
-python pipelines/run_phase2.py --mode analyze --results-dir results/phase2
 ```
 
-### 3.3 Output Files
-
-After a successful analyze run:
+### Output structure after analyze
 
 ```
 results/phase2/
 ├── KHATT-train/
-│   ├── corrections.jsonl          ← downloaded from Kaggle/Colab
+│   ├── corrections.jsonl          ← from inference
 │   ├── metrics.json               ← CER/WER on corrected text
 │   ├── comparison_vs_phase1.json  ← delta vs Qaari baseline
 │   └── error_changes.json         ← which error types were fixed/introduced
-├── [other datasets...]
+├── [17 more dataset folders...]
 ├── metrics.json                   ← aggregated across all datasets
 ├── comparison.json                ← aggregated comparison
-├── phase2.log                     ← full run log
-└── report.md                      ← human-readable summary
+├── phase2.log
+└── report.md
 ```
 
 ---
@@ -309,69 +274,61 @@ results/phase2/
 
 ### "corrections.jsonl not found"
 
-```
-FileNotFoundError: corrections.jsonl not found: results/phase2/KHATT-train/corrections.jsonl
-```
-
-You need to download the file from Kaggle/Colab first. See Stage 2 above.
+You need to download the file from Kaggle/Colab first (or pull from HF).
 
 ### "Input file not found" (on Kaggle)
 
-The `inference_input.jsonl` was not uploaded correctly. Check the Kaggle dataset path:
+Check the dataset path:
 ```python
-import os
-os.listdir("/kaggle/input/your-dataset-name/")
+import os; os.listdir("/kaggle/input/your-dataset-name/")
 ```
 
 ### OOM / CUDA out of memory
 
-Add `--quantize-4bit` to the inference command. Requires `bitsandbytes`:
+Add `--quantize-4bit`. Requires `bitsandbytes`:
 ```bash
 pip install bitsandbytes
-python run_inference.py --quantize-4bit ...
 ```
-
-### Model outputs wrong language or empty text
-
-This is handled automatically: `TransformersCorrector._extract_corrected_text()` checks for
-Arabic characters and falls back to the original OCR text if the output is empty or non-Arabic.
-These samples are marked `"success": false` in `corrections.jsonl`.
-
-### Kaggle session timed out
-
-Re-run the same inference command — the script resumes from the last completed sample.
-Do not delete `corrections.jsonl` between runs.
 
 ### "enable_thinking is not supported"
 
-Older versions of `transformers` may not support `enable_thinking=False` for Qwen3. Update:
+Update transformers:
 ```bash
 pip install -U transformers
 ```
+
+### Kaggle session timed out (with HF sync)
+
+Re-run the same command. The script pulls existing progress from HF first.
+
+### Kaggle session timed out (without HF sync)
+
+Re-run the same command. Progress is read from `/kaggle/working/corrections.jsonl`
+and completed samples are skipped. **Do not delete** `corrections.jsonl`.
 
 ---
 
 ## Quick Reference
 
 ```bash
-# ─── LOCAL ────────────────────────────────────────────────────
-# Prepare data for remote inference
-python pipelines/run_phase2.py --mode export
+# ─── LOCAL ────────────────────────────────────────────────────────
+python pipelines/run_phase2.py --mode export       # produce inference_input.jsonl
+python scripts/run_local.py                        # run inference locally (GPU/API)
+python pipelines/run_phase2.py --mode analyze      # compute metrics
 
-# After downloading corrections.jsonl:
-python pipelines/run_phase2.py --mode analyze
-
-# ─── KAGGLE/COLAB ──────────────────────────────────────────────
-# Full dataset
-python run_inference.py --model Qwen/Qwen3-4B-Instruct-2507
-
-# One dataset, 4-bit quantization, resume-safe
-python run_inference.py \
-    --input  inference_input.jsonl \
-    --output corrections.jsonl \
+# ─── KAGGLE ───────────────────────────────────────────────────────
+# Upload: inference_input.jsonl + kaggle_inference.py
+python kaggle_inference.py \
+    --input  /kaggle/input/.../inference_input.jsonl \
+    --output /kaggle/working/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507 \
-    --quantize-4bit
+    --hf-repo  user/arabic-ocr-corrections \
+    --hf-token hf_xxx
 
-# Smoke test (100 samples)
-python run_inference.py --limit 100
+# ─── COLAB ────────────────────────────────────────────────────────
+# Upload: inference_input.jsonl + colab_inference.py to Drive
+python colab_inference.py \
+    --input  /content/drive/MyDrive/arabic-ocr/inference_input.jsonl \
+    --output /content/drive/MyDrive/arabic-ocr/corrections.jsonl \
+    --model  Qwen/Qwen3-4B-Instruct-2507
 ```
