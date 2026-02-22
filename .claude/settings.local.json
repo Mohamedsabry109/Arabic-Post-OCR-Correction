@@ -5,7 +5,20 @@
       "Bash(findstr:*)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "WebFetch(domain:camel-tools.readthedocs.io)"
+      "WebFetch(domain:camel-tools.readthedocs.io)",
+      "Bash(xargs file:*)",
+      "Bash(unzip:*)",
+      "Bash(python:*)",
+      "Bash(xargs:*)",
+      "Bash(# Check Python version and available packages python3 --version pip list)",
+      "Bash(# Check if we''re in a venv, and what''s installed there /d/Masters/Arabic-Post-OCR-Correction/venv/Scripts/python.exe --version /d/Masters/Arabic-Post-OCR-Correction/venv/Scripts/pip.exe list)",
+      "Bash(venv/Scripts/python.exe -m pytest:*)",
+      "Bash(venv/Scripts/pip.exe install pytest -q)",
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(git add:*)",
+      "Bash(git rm:*)",
+      "Bash(git commit:*)",
+      "Bash(cd:*)"
     ]
   }
 }

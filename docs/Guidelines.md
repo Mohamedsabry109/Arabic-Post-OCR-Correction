@@ -370,3 +370,244 @@ Before committing new code, verify:
 - [ ] Tests for new functionality
 - [ ] CHANGELOG.md updated
 - [ ] Works with both datasets (PATS-A01 and KHATT)
+- [ ] Pipeline uses `--datasets` flag for dataset selection (no hardcoded list)
+- [ ] Pipeline reads active dataset list from `config['datasets']` by default
+- [ ] Pipeline skips already-completed datasets unless `--force` is set
+
+---
+
+## 12. Compute Environment
+
+### 12.1 No Local GPU — Remote Inference Required
+
+LLM inference (Phases 2–6) requires a GPU. This project uses **Kaggle** or **Google Colab**
+for all LLM inference because no local GPU is available.
+
+**Rule**: Never assume local GPU access for any LLM-related code.
+
+### 12.2 Two-Stage Pipeline Design
+
+All LLM-dependent phases are split into two clearly separated stages:
+
+| Stage | Runs On | Input | Output |
+|-------|---------|-------|--------|
+| **Export** | Local | OCR texts from DataLoader | `inference_input.jsonl` |
+| **Inference** | Kaggle / Colab | `inference_input.jsonl` | `corrections.jsonl` |
+| **Analyze** | Local | `corrections.jsonl` | metrics, reports |
+
+The pipeline script exposes this split via a `--mode` flag:
+
+```bash
+python pipelines/run_phase2.py --mode export    # local: prepare data for upload
+python pipelines/run_phase2.py --mode analyze   # local: process downloaded corrections
+python pipelines/run_phase2.py --mode full      # future/API: end-to-end in one run
+```
+
+The inference stage runs from a separate script designed to be self-contained on Kaggle/Colab:
+
+```bash
+python scripts/run_inference.py                 # executed on Kaggle/Colab kernel
+```
+
+### 12.3 The Contract File: `corrections.jsonl`
+
+The only coupling between the inference stage and the analysis stage is a JSONL file.
+Each line is one completed correction:
+
+```json
+{
+  "sample_id": "AHTD3A0001_Para2_3",
+  "dataset":   "KHATT-train",
+  "ocr_text":  "... raw OCR ...",
+  "corrected_text": "... LLM output ...",
+  "gt_text":   "... ground truth ...",
+  "model":     "Qwen/Qwen2.5-3B-Instruct",
+  "prompt_version": "v1",
+  "prompt_tokens": 89,
+  "output_tokens": 92,
+  "latency_s": 2.31,
+  "success": true,
+  "error": null
+}
+```
+
+`gt_text` is included in the export so the Kaggle kernel does not need access to the
+full ground-truth dataset — the inference stage is self-contained from this JSONL alone.
+
+### 12.4 Corrector Abstraction Layer
+
+All LLM backends implement the same abstract interface (`BaseLLMCorrector`). This keeps
+the pipeline code backend-agnostic.
+
+```
+BaseLLMCorrector (ABC)
+├── TransformersCorrector   — HuggingFace transformers; used on Kaggle/Colab
+└── APICorrector            — OpenAI-compatible REST API; used for future API access
+```
+
+The active backend is selected by config, not by hardcoded imports:
+
+```yaml
+model:
+  backend: "transformers"   # switch to "api" for API-based inference
+```
+
+The pipeline (`run_phaseN.py`) calls `get_corrector(config)` which returns the correct
+implementation. **No pipeline code changes when switching backends.**
+
+### 12.5 Adding a New LLM Backend
+
+To add a new backend (e.g., Anthropic Claude API, a local vLLM server, Ollama):
+
+1. Create a new class inheriting `BaseLLMCorrector` in `src/core/`
+2. Implement `correct()` and the `model_name` property
+3. Add one `elif` case in the `get_corrector(config)` factory function
+4. Add any backend-specific config keys under a new top-level key in `config.yaml`
+
+The pipeline, PromptBuilder, and all analysis modules require **zero changes**.
+
+### 12.6 What Runs Where
+
+| Code | Runs On | Notes |
+|------|---------|-------|
+| `src/data/data_loader.py` | Local | Reads local OCR and GT files |
+| `src/data/text_utils.py` | Local + Kaggle | No external deps; safe to upload |
+| `src/core/prompt_builder.py` | Local + Kaggle | No external deps; safe to upload |
+| `src/core/llm_corrector.py` | Local + Kaggle | TransformersCorrector runs on Kaggle |
+| `src/core/api_corrector.py` | Local | API calls go from local machine |
+| `src/analysis/` | Local | Metrics and analysis always run locally |
+| `pipelines/run_phase*.py` | Local | Orchestration always on local machine |
+| `scripts/run_inference.py` | Kaggle / Colab | Standalone inference script |
+
+### 12.7 Kaggle/Colab Inference Workflow (Step by Step)
+
+```
+1. LOCAL   → python pipelines/run_phase2.py --mode export
+             → produces: results/phase2/inference_input.jsonl
+
+2. UPLOAD  → upload to Kaggle/Colab:
+             - results/phase2/inference_input.jsonl
+             - src/core/prompt_builder.py
+             - src/core/llm_corrector.py   (TransformersCorrector)
+             - scripts/run_inference.py
+
+3. REMOTE  → on Kaggle/Colab kernel, run:
+             python scripts/run_inference.py \
+               --input inference_input.jsonl \
+               --output corrections.jsonl \
+               --model Qwen/Qwen2.5-3B-Instruct
+
+4. DOWNLOAD → download corrections.jsonl from Kaggle/Colab output
+              → place at: results/phase2/KHATT-train/corrections.jsonl
+
+5. LOCAL   → python pipelines/run_phase2.py --mode analyze
+             → reads corrections.jsonl, computes metrics, writes report
+```
+
+### 12.8 API Extension (Future)
+
+When API-based inference is needed:
+
+```yaml
+# configs/config.yaml
+model:
+  backend: "api"
+  name: "gpt-4o"             # or any OpenAI-compatible model name
+
+api:
+  base_url: "https://api.openai.com/v1"
+  api_key_env: "OPENAI_API_KEY"   # read from environment, never hardcoded
+  timeout_s: 30
+  requests_per_minute: 60         # rate limiting
+```
+
+With `backend: "api"`, the pipeline runs fully locally in `--mode full` (no Kaggle needed):
+
+```bash
+OPENAI_API_KEY=sk-... python pipelines/run_phase2.py --mode full
+```
+
+**Security**: API keys are **never** stored in config files or committed to git.
+Always read from environment variables.
+
+### 12.9 Checklist for LLM-Dependent Code
+
+In addition to the general checklist (§11), verify for any LLM phase:
+
+- [ ] Pipeline supports `--mode export`, `--mode analyze` (and `--mode full` for API)
+- [ ] `inference_input.jsonl` includes `gt_text` so Kaggle is self-contained
+- [ ] `corrections.jsonl` includes all fields specified in §12.3
+- [ ] Analysis stage reads from `corrections.jsonl`, not from LLM directly
+- [ ] New LLM feature uses `BaseLLMCorrector`; does not hardcode `TransformersCorrector`
+- [ ] API keys read from environment variables only
+
+---
+
+## 13. Dataset Selection and Resume Policy
+
+### 13.1 Configurable Dataset Selection
+
+All processing scripts support flexible dataset selection through two mechanisms:
+
+**Default (all datasets from config)**:
+```bash
+python pipelines/run_phase1.py            # processes all datasets in config['datasets']
+python pipelines/run_phase2.py --mode export
+```
+
+**Subset via `--datasets` flag**:
+```bash
+python pipelines/run_phase1.py --datasets KHATT-train KHATT-validation
+python pipelines/run_phase2.py --mode export --datasets PATS-A01-Akhbar
+```
+
+**Rules:**
+- `config.yaml` `datasets:` list is the **single source of truth** for what "all" means.
+- The `--datasets` CLI flag overrides the config list for that run only.
+- No `choices=` restriction on `--datasets` — any dataset key supported by `DataLoader` works.
+- Never hardcode a dataset list inside a pipeline script; always use `resolve_datasets()`.
+
+### 13.2 The `resolve_datasets()` Helper
+
+All pipeline scripts use the shared `pipelines/_utils.py::resolve_datasets()` function:
+
+```python
+from pipelines._utils import resolve_datasets
+
+active_datasets = resolve_datasets(config, args.datasets)
+# Returns args.datasets if provided; otherwise reads names from config['datasets'].
+```
+
+### 13.3 Full Dataset Coverage
+
+The default `config['datasets']` list covers all 10 datasets:
+- 8 PATS-A01 fonts: Akhbar, Andalus, Arial, Naskh, Simplified, Tahoma, Thuluth, Traditional
+- 2 KHATT splits: train, validation
+
+`DataLoader.iter_samples()` dynamically resolves any `PATS-A01-{font}` or `KHATT-{split}` key.
+No code changes are needed to add a new PATS font — just add it to `config.yaml`.
+
+### 13.4 Resume-After-Break Policy
+
+Every processing step must be re-runnable without re-doing completed work.
+
+**Convention**: a dataset step is "complete" when its primary output JSON exists:
+- Phase 1: `results/phase1/{key}/metrics.json`
+- Phase 2 export: dataset key present in `results/phase2/inference_input.jsonl`
+- Phase 2 analyze: `results/phase2/{key}/metrics.json`
+
+**Behavior**:
+- On restart, completed datasets are detected and skipped automatically.
+- Use `--force` to override resume and re-process regardless.
+- Inference scripts (`run_inference.py`) write line-by-line and read completed IDs on restart.
+
+```bash
+# Resume example: run already partially completed phase1
+python pipelines/run_phase1.py             # skips KHATT-train if metrics.json exists
+
+# Force re-run
+python pipelines/run_phase1.py --force     # re-processes all datasets
+
+# Force re-run for one dataset
+python pipelines/run_phase1.py --datasets KHATT-train --force
+```

@@ -122,17 +122,23 @@ def calculate_wer(reference: str, hypothesis: str) -> float:
 
 
 def calculate_metrics(
-    samples: list["OCRSample"],
+    samples: list,
     dataset_name: str,
+    text_field: str = "ocr_text",
     normalise: bool = True,
 ) -> MetricResult:
-    """Calculate CER and WER over a list of OCRSample objects.
+    """Calculate CER and WER over a list of OCRSample or CorrectedSample objects.
 
     Computes per-sample scores, then aggregates with mean/std/median/p95.
 
     Args:
-        samples: List of OCRSample with ocr_text and gt_text populated.
+        samples: List of OCRSample (Phase 1) or CorrectedSample (Phase 2+).
         dataset_name: Label for the MetricResult (e.g., "KHATT-train").
+        text_field: Attribute name to use as the hypothesis text.
+            - ``"ocr_text"`` (default) — original OCR output; Phase 1 behaviour.
+            - ``"corrected_text"`` — LLM-corrected output; Phase 2+ mode.
+            For CorrectedSample the attribute is resolved on the nested
+            ``sample.sample`` (OCRSample) if not found directly on the object.
         normalise: If True, apply normalise_arabic() before scoring.
                    Should always be True; exposed for testing only.
 
@@ -157,14 +163,34 @@ def calculate_metrics(
     total_words = 0
 
     for sample in samples:
-        ref = normalise_arabic(sample.gt_text) if normalise else sample.gt_text
-        hyp = normalise_arabic(sample.ocr_text) if normalise else sample.ocr_text
+        # Resolve ground truth: CorrectedSample nests OCRSample as .sample
+        if hasattr(sample, "gt_text"):
+            gt_text = sample.gt_text
+        elif hasattr(sample, "sample") and hasattr(sample.sample, "gt_text"):
+            gt_text = sample.sample.gt_text
+        else:
+            raise AttributeError(
+                f"Cannot find 'gt_text' on sample of type {type(sample).__name__}."
+            )
 
+        # Resolve hypothesis text via text_field
+        if hasattr(sample, text_field):
+            hyp_text = getattr(sample, text_field)
+        elif hasattr(sample, "sample") and hasattr(sample.sample, text_field):
+            hyp_text = getattr(sample.sample, text_field)
+        else:
+            raise AttributeError(
+                f"Cannot find attribute '{text_field}' on sample of type "
+                f"{type(sample).__name__}. "
+                f"Valid values: 'ocr_text', 'corrected_text'."
+            )
+
+        ref = normalise_arabic(gt_text) if normalise else gt_text
         total_chars += len(ref)
         total_words += len(tokenise_arabic(ref))
 
-        per_cer.append(calculate_cer(sample.gt_text, sample.ocr_text))
-        per_wer.append(calculate_wer(sample.gt_text, sample.ocr_text))
+        per_cer.append(calculate_cer(gt_text, hyp_text))
+        per_wer.append(calculate_wer(gt_text, hyp_text))
 
     return MetricResult(
         dataset=dataset_name,

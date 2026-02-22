@@ -7,8 +7,10 @@ and error taxonomies for PATS-A01 and KHATT datasets. No LLM calls.
 Usage:
     python pipelines/run_phase1.py
     python pipelines/run_phase1.py --limit 50
-    python pipelines/run_phase1.py --dataset KHATT-train
+    python pipelines/run_phase1.py --datasets KHATT-train
+    python pipelines/run_phase1.py --datasets KHATT-train KHATT-validation
     python pipelines/run_phase1.py --no-camel
+    python pipelines/run_phase1.py --force
     python pipelines/run_phase1.py --config configs/config.yaml
 """
 
@@ -33,6 +35,7 @@ from src.analysis.metrics import calculate_metrics, calculate_metrics_split, Met
 from src.analysis.error_analyzer import ErrorAnalyzer, SampleError
 from src.linguistic.morphology import MorphAnalyzer
 from src.linguistic.validator import WordValidator
+from pipelines._utils import resolve_datasets
 
 logger = logging.getLogger(__name__)
 
@@ -53,11 +56,22 @@ def parse_args() -> argparse.Namespace:
         help="Maximum samples per dataset (for quick testing).",
     )
     parser.add_argument(
-        "--dataset",
+        "--datasets",
         type=str,
+        nargs="+",
         default=None,
-        choices=["PATS-A01-Akhbar", "PATS-A01-Andalus", "KHATT-train", "KHATT-validation"],
-        help="Run only one specific dataset.",
+        metavar="DATASET",
+        help=(
+            "One or more dataset keys to process "
+            "(e.g. KHATT-train PATS-A01-Akhbar). "
+            "Defaults to all datasets from config."
+        ),
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Re-process datasets that already have results (overrides resume).",
     )
     parser.add_argument(
         "--no-camel",
@@ -605,6 +619,48 @@ def _collect_error_examples(
 
 
 # ---------------------------------------------------------------------------
+# Resume helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_cached_metrics(
+    metrics_path: Path,
+) -> tuple[MetricResult, MetricResult, dict]:
+    """Reconstruct MetricResult objects from a previously saved metrics.json.
+
+    Args:
+        metrics_path: Path to an existing Phase 1 metrics.json file.
+
+    Returns:
+        Tuple of (all_samples MetricResult, normal_only MetricResult, data_quality dict).
+    """
+    with open(metrics_path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    def _make(d: dict, dataset: str) -> MetricResult:
+        return MetricResult(
+            dataset=dataset,
+            num_samples=d.get("num_samples", 0),
+            num_chars_ref=d.get("num_chars_ref", 0),
+            num_words_ref=d.get("num_words_ref", 0),
+            cer=d.get("cer", 0.0),
+            wer=d.get("wer", 0.0),
+            cer_std=d.get("cer_std", 0.0),
+            wer_std=d.get("wer_std", 0.0),
+            cer_median=d.get("cer_median", 0.0),
+            wer_median=d.get("wer_median", 0.0),
+            cer_p95=d.get("cer_p95", 0.0),
+            wer_p95=d.get("wer_p95", 0.0),
+        )
+
+    dataset_name = data.get("meta", {}).get("dataset", metrics_path.parent.name)
+    all_r = _make(data.get("all_samples", {}), dataset_name)
+    norm_r = _make(data.get("normal_samples_only", {}), dataset_name)
+    quality = data.get("data_quality", {})
+    return all_r, norm_r, quality
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -645,17 +701,9 @@ def main() -> None:
     # Load data
     loader = DataLoader(config)
 
-    # Determine which datasets to run
-    all_dataset_keys = [
-        "PATS-A01-Akhbar",
-        "PATS-A01-Andalus",
-        "KHATT-train",
-        "KHATT-validation",
-    ]
-    if args.dataset:
-        dataset_keys = [args.dataset]
-    else:
-        dataset_keys = all_dataset_keys
+    # Determine which datasets to run (CLI --datasets overrides config list)
+    dataset_keys = resolve_datasets(config, args.datasets)
+    logger.info("Datasets to process: %s", dataset_keys)
 
     all_metric_results: dict[str, MetricResult] = {}
     normal_metric_results: dict[str, MetricResult] = {}
@@ -663,6 +711,18 @@ def main() -> None:
 
     for ds_key in dataset_keys:
         try:
+            # Resume: skip if already processed (unless --force)
+            metrics_path = results_dir / ds_key / "metrics.json"
+            if metrics_path.exists() and not args.force:
+                logger.info(
+                    "[%s] Already processed — skipping (use --force to re-run).", ds_key
+                )
+                all_r, norm_r, dq = _load_cached_metrics(metrics_path)
+                all_metric_results[ds_key] = all_r
+                normal_metric_results[ds_key] = norm_r
+                all_quality_stats[ds_key] = dq
+                continue
+
             logger.info("Loading dataset: %s ...", ds_key)
             samples = list(loader.iter_samples(ds_key, limit=limit))
 
