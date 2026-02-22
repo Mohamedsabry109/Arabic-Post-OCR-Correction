@@ -4,16 +4,17 @@
 Three-stage pipeline (no local GPU required):
 
   --mode export   → Export OCR texts to inference_input.jsonl for Kaggle/Colab
-  --mode analyze  → Load downloaded corrections.jsonl, compute metrics and reports
-  --mode full     → End-to-end with API backend (future; requires model.backend='api')
+  --mode analyze  → Load corrections.jsonl, compute metrics and reports
+  --mode full     → End-to-end with API backend (requires model.backend='api')
 
 Typical workflow
 ----------------
 1. LOCAL:  python pipelines/run_phase2.py --mode export
-2. REMOTE: upload inference_input.jsonl + src/ + scripts/run_inference.py to Kaggle/Colab
-           then run: python run_inference.py
-3. LOCAL:  download corrections.jsonl to results/phase2/{dataset_key}/corrections.jsonl
+2. REMOTE: git clone <repo> && python scripts/infer.py --input ... --output ...
+           (see notebooks/kaggle_setup.ipynb or notebooks/colab_setup.ipynb)
+3. LOCAL:  copy corrections.jsonl to results/phase2/
            then run: python pipelines/run_phase2.py --mode analyze
+           (analyze auto-splits a combined corrections.jsonl by dataset)
 
 Usage
 -----
@@ -313,18 +314,19 @@ def run_export(
             logger.info("Exported %d samples for %s", len(samples), ds_key)
 
     logger.info("=" * 60)
-    logger.info("Export complete: %d new samples → %s", total_written, output_path)
+    logger.info("Export complete: %d new samples -> %s", total_written, output_path)
     logger.info("")
     logger.info("NEXT STEPS:")
-    logger.info("  1. Upload to Kaggle/Colab:")
-    logger.info("       - %s", output_path)
-    logger.info("       - src/core/prompt_builder.py")
-    logger.info("       - src/core/llm_corrector.py")
-    logger.info("       - scripts/run_inference.py")
-    logger.info("  2. Run on Kaggle/Colab:")
-    logger.info("       python run_inference.py --model Qwen/Qwen3-4B-Instruct-2507")
-    logger.info("  3. Download corrections.jsonl and place it at:")
-    logger.info("       results/phase2/{dataset_key}/corrections.jsonl")
+    logger.info("  1. Push latest code:  git push")
+    logger.info("  2. On Kaggle/Colab:")
+    logger.info("       git clone <repo_url> project")
+    logger.info("       pip install transformers accelerate huggingface_hub pyyaml tqdm -q")
+    logger.info("       python project/scripts/infer.py \\")
+    logger.info("           --input  <path>/inference_input.jsonl \\")
+    logger.info("           --output <path>/corrections.jsonl \\")
+    logger.info("           --model  Qwen/Qwen3-4B-Instruct-2507")
+    logger.info("     See notebooks/kaggle_setup.ipynb or notebooks/colab_setup.ipynb")
+    logger.info("  3. Copy corrections.jsonl to results/phase2/corrections.jsonl")
     logger.info("  4. Run analysis locally:")
     logger.info("       python pipelines/run_phase2.py --mode analyze")
     logger.info("=" * 60)
@@ -399,6 +401,46 @@ def load_corrections(corrections_path: Path) -> list[CorrectedSample]:
 
     logger.info("Loaded %d corrections from %s", len(corrected), corrections_path)
     return corrected
+
+
+def _maybe_split_combined_corrections(results_dir: Path) -> None:
+    """Split a combined corrections.jsonl into per-dataset files if needed.
+
+    scripts/infer.py writes a single corrections.jsonl containing all datasets.
+    This function detects that file and splits it into the per-dataset paths
+    that the analyze mode expects (results_dir/{dataset_key}/corrections.jsonl).
+
+    Already-split datasets are left untouched (their per-dataset file exists).
+    """
+    combined = results_dir / "corrections.jsonl"
+    if not combined.exists():
+        return
+
+    logger.info("Found combined corrections.jsonl — splitting by dataset ...")
+    records_by_dataset: dict[str, list[dict]] = {}
+    with open(combined, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+                ds = r.get("dataset", "")
+                if ds:
+                    records_by_dataset.setdefault(ds, []).append(r)
+            except json.JSONDecodeError:
+                pass
+
+    for ds_key, records in records_by_dataset.items():
+        out_path = results_dir / ds_key / "corrections.jsonl"
+        if out_path.exists():
+            logger.info("  [%s] Already split — skipping.", ds_key)
+            continue
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_path, "w", encoding="utf-8") as f:
+            for r in records:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+        logger.info("  Split: %d records -> %s", len(records), out_path)
 
 
 # ---------------------------------------------------------------------------
@@ -994,14 +1036,18 @@ def main() -> None:
         if backend == "transformers":
             logger.error(
                 "--mode full requires an API backend (model.backend='api'). "
-                "TransformersCorrector needs a GPU and is designed for Kaggle/Colab. "
-                "Use --mode export to prepare data, run run_inference.py on Kaggle/Colab, "
-                "then --mode analyze locally."
+                "For GPU inference use: export -> scripts/infer.py (Kaggle/Colab) -> analyze."
             )
             sys.exit(1)
         corrector = get_corrector(config)
         builder = PromptBuilder()
         logger.info("Corrector ready: %s (backend=%s)", corrector.model_name, backend)
+
+    # ------------------------------------------------------------------
+    # ANALYZE mode: auto-split combined corrections.jsonl if present
+    # ------------------------------------------------------------------
+    if args.mode == "analyze":
+        _maybe_split_combined_corrections(results_dir)
 
     # ------------------------------------------------------------------
     # Per-dataset processing
