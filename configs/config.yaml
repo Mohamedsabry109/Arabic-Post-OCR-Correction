@@ -218,6 +218,22 @@ phase6:
     n_bootstrap: 1000          # Bootstrap iterations for confidence intervals
 
 # ---------------------------------------------------------------------------
+# Phase 4D specific
+# ---------------------------------------------------------------------------
+phase4d:
+  source_phase: "phase2"         # which phase's train predictions to analyze
+  insights:
+    min_fix_rate_strength: 0.6   # show as "strength" if fix_rate > this
+    max_fix_rate_weakness: 0.4   # show as "weakness" if fix_rate < this
+    min_intro_rate: 0.05         # show as over-correction if intro_rate > this
+    min_sample_size: 10          # min baseline count to include an error type
+    top_n_weaknesses: 3          # max weakness items in prompt
+    top_n_overcorrections: 2     # max over-correction items in prompt
+  analyze_errors: true
+  max_retries: 2
+  prompt_version: "p4dv1"
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:

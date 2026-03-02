@@ -372,6 +372,7 @@ def main() -> None:
                     rules_context=record.get("rules_context") or "",
                     examples_context=record.get("examples_context") or "",
                     retrieval_context=record.get("retrieval_context") or "",
+                    insights_context=record.get("insights_context") or "",
                 )
                 prompt_ver = builder.combined_prompt_version
                 # Detect if all contexts were empty (fell back to zero_shot internally)
@@ -380,8 +381,15 @@ def main() -> None:
                     record.get("rules_context"),
                     record.get("examples_context"),
                     record.get("retrieval_context"),
+                    record.get("insights_context"),
                 ])
                 if not _any_ctx:
+                    prompt_type = "zero_shot_fallback"
+            elif prompt_type == "self_reflective":
+                insights_context = record.get("insights_context", "")
+                messages = builder.build_self_reflective(record["ocr_text"], insights_context)
+                prompt_ver = builder.self_reflective_prompt_version
+                if not insights_context.strip():
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "zero_shot":
                 messages = builder.build_zero_shot(record["ocr_text"])

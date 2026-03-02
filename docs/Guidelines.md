@@ -489,20 +489,30 @@ The pipeline, PromptBuilder, and all analysis modules require **zero changes**.
              - results/phase2/inference_input.jsonl
              - src/core/prompt_builder.py
              - src/core/llm_corrector.py   (TransformersCorrector)
-             - scripts/run_inference.py
+             - scripts/infer.py
 
 3. REMOTE  → on Kaggle/Colab kernel, run:
-             python scripts/run_inference.py \
+             python scripts/infer.py \
                --input inference_input.jsonl \
                --output corrections.jsonl \
-               --model Qwen/Qwen2.5-3B-Instruct
+               --model Qwen/Qwen3-4B-Instruct-2507
 
 4. DOWNLOAD → download corrections.jsonl from Kaggle/Colab output
-              → place at: results/phase2/KHATT-train/corrections.jsonl
+              → place at: results/phase2/corrections.jsonl
 
 5. LOCAL   → python pipelines/run_phase2.py --mode analyze
              → reads corrections.jsonl, computes metrics, writes report
 ```
+
+**Phase 4D special case** — has an extra prerequisite stage that runs entirely locally before export:
+
+```
+0. LOCAL (once) → python pipelines/run_phase4d.py --mode analyze-train
+                  → reads Phase 2 train corrections vs GT
+                  → saves results/phase4d/insights/{PATS-A01,KHATT}_insights.json
+```
+
+Then the standard 3-stage pipeline (export → infer → analyze) runs on validation splits only.
 
 ### 12.8 API Extension (Future)
 

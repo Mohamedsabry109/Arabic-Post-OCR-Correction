@@ -267,6 +267,10 @@ class PromptBuilder:
         "رابعاً: نصوص مرجعية صحيحة مشابهة:\n{retrieval_context}"
     )
 
+    _COMBINED_SECTION_SELF: str = (
+        "خامساً: ملاحظات تحسين الأداء الذاتي:\n{insights_context}"
+    )
+
     _COMBINED_FOOTER: str = (
         "\n\nصحح النص التالي. أعد النص المصحح فقط بدون أي شرح أو تعليق."
     )
@@ -280,6 +284,7 @@ class PromptBuilder:
         rules_context: str = "",
         examples_context: str = "",
         retrieval_context: str = "",
+        insights_context: str = "",
     ) -> list[dict]:
         """Build a combined correction prompt including any subset of context types.
 
@@ -288,6 +293,7 @@ class PromptBuilder:
         2. Rules context      (Arabic spelling rules from Phase 4A)
         3. Examples context   (few-shot correction pairs from Phase 4B)
         4. Retrieval context  (similar correct sentences from Phase 5 / OpenITI)
+        5. Insights context   (self-reflective LLM failure patterns from Phase 4D)
 
         Falls back to zero-shot if all context strings are empty or whitespace.
 
@@ -297,6 +303,7 @@ class PromptBuilder:
             rules_context: Pre-formatted Arabic rules (Phase 4A format).
             examples_context: Pre-formatted few-shot examples (Phase 4B format).
             retrieval_context: Pre-formatted retrieved sentences (Phase 5 format).
+            insights_context: Pre-formatted LLM self-reflective insights (Phase 4D format).
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -319,6 +326,10 @@ class PromptBuilder:
             sections.append(
                 self._COMBINED_SECTION_RETRIEVAL.format(retrieval_context=retrieval_context)
             )
+        if insights_context.strip():
+            sections.append(
+                self._COMBINED_SECTION_SELF.format(insights_context=insights_context)
+            )
 
         if not sections:
             return self.build_zero_shot(ocr_text)
@@ -337,3 +348,51 @@ class PromptBuilder:
     def combined_prompt_version(self) -> str:
         """Return the Phase 6 combined prompt version string."""
         return self.COMBINED_PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Phase 4D — Self-Reflective Prompting
+    # -----------------------------------------------------------------------
+
+    SELF_REFLECTIVE_SYSTEM_V1: str = (
+        "أنت مصحح نصوص عربية متخصص. بناءً على تحليل أخطائك السابقة في تصحيح نصوص عربية "
+        "مشابهة، إليك ملاحظات مهمة لتحسين أدائك:\n\n"
+        "{insights_context}\n\n"
+        "صحح النص التالي مع مراعاة هذه الملاحظات. "
+        "أعد النص المصحح فقط بدون أي شرح أو تعليق إضافي."
+    )
+
+    SELF_REFLECTIVE_PROMPT_VERSION: str = "p4dv1"
+
+    def build_self_reflective(
+        self, ocr_text: str, insights_context: str
+    ) -> list[dict]:
+        """Build a self-reflective correction prompt (Phase 4D).
+
+        Injects insights about the model's own failure patterns derived from
+        training-split predictions. Falls back to zero-shot if insights_context
+        is empty.
+
+        Args:
+            ocr_text: OCR prediction text to correct.
+            insights_context: Pre-formatted Arabic insights string
+                (produced by LLMInsightsLoader.format_for_prompt()).
+                Pass empty string to trigger zero-shot fallback.
+
+        Returns:
+            Two-element messages list in OpenAI chat format.
+        """
+        if not insights_context.strip():
+            return self.build_zero_shot(ocr_text)
+
+        system = self.SELF_REFLECTIVE_SYSTEM_V1.format(
+            insights_context=insights_context
+        )
+        return [
+            {"role": "system", "content": system},
+            {"role": "user",   "content": ocr_text},
+        ]
+
+    @property
+    def self_reflective_prompt_version(self) -> str:
+        """Return the Phase 4D prompt version string."""
+        return self.SELF_REFLECTIVE_PROMPT_VERSION

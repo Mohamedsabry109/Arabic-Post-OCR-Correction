@@ -2,7 +2,7 @@
 
 > **Audience**: Author (thesis self-reference) and advisor review
 > **Purpose**: What to do if LLM results are disappointing, what to modify, novel ideas, and how to write the paper
-> **Based on**: Deep analysis of the full 8-phase pipeline (Phases 1–6 implemented)
+> **Based on**: Deep analysis of the full pipeline (Phases 1–6 + 4D implemented)
 
 ---
 

@@ -6,6 +6,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-03-02 — Phase 4D: Self-Reflective Prompting
+
+### Added
+- `src/analysis/llm_error_analyzer.py` — `LLMErrorAnalyzer` class: analyses LLM
+  predictions on training splits, computes per-ErrorType fixed/introduced counts,
+  and aggregates into dataset-level insights JSON
+- `src/data/knowledge_base.py` — `LLMInsightsLoader` class: loads Phase 4D insights
+  JSON and formats Arabic weakness/over-correction sections for prompt injection
+- `src/core/prompt_builder.py` — `build_self_reflective()` with prompt version `p4dv1`;
+  extended `build_combined()` with `insights_context` parameter for Phase 6 combos
+- `pipelines/run_phase4d.py` — 3-mode pipeline:
+  - `analyze-train`: analyses LLM training predictions vs GT, saves insights JSON
+  - `export`: builds val-split inference JSONL with self-reflective prompts
+  - `analyze`: post-Kaggle CER/WER metrics, comparison vs Phase 2, paper_tables.md
+- `configs/config.yaml` — added `phase4d:` config block (source_phase, insights thresholds)
+
+### Changed
+- `pipelines/run_phase6.py` — extended `COMBO_COMPONENTS` to 5-tuples
+  `(use_confusion, use_rules, use_fewshot, use_rag, use_self)`; added 3 new combos:
+  `self_reflective`, `pair_self_conf`, `full_with_self`; updated `run_export()` to
+  load Phase 4D insights and pass `insights_context` to `build_combined()`
+- `scripts/infer.py` — added `"self_reflective"` prompt_type dispatch;
+  extended `"combined"` dispatch to pass `insights_context`
+
 ## [0.6.0] - 2026-02-23 — Phase 6: Combinations & Ablation Study
 
 ### Added

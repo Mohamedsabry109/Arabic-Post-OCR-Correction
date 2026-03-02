@@ -16,6 +16,9 @@ Inference-based combos (need export -> Kaggle -> analyze):
   abl_no_rules       Confusion + Few-Shot + RAG
   abl_no_fewshot     Confusion + Rules + RAG
   abl_no_rag         Confusion + Rules + Few-Shot
+  self_reflective    Self-Reflective (Phase 4D) only
+  pair_self_conf     Self-Reflective + Confusion
+  full_with_self     All 5 components (Full + Self-Reflective)
 
 CAMeL post-processing combos (local only, no Kaggle step):
   pair_best_camel    Best pair (config.phase6.pair_best) + CAMeL revert
@@ -84,6 +87,7 @@ from src.data.knowledge_base import (
     ConfusionMatrixLoader, ConfusionPair,
     RulesLoader,
     QALBLoader,
+    LLMInsightsLoader,
 )
 from src.core.rag_retriever import RAGRetriever
 from src.core.prompt_builder import PromptBuilder
@@ -102,17 +106,23 @@ logger = logging.getLogger(__name__)
 # Combo definitions
 # ---------------------------------------------------------------------------
 
-# (use_confusion, use_rules, use_fewshot, use_rag)
-COMBO_COMPONENTS: dict[str, tuple[bool, bool, bool, bool]] = {
-    "pair_conf_rules":    (True,  True,  False, False),
-    "pair_conf_fewshot":  (True,  False, True,  False),
-    "pair_conf_rag":      (True,  False, False, True),
-    "pair_rules_fewshot": (False, True,  True,  False),
-    "full_prompt":        (True,  True,  True,  True),
-    "abl_no_confusion":   (False, True,  True,  True),
-    "abl_no_rules":       (True,  False, True,  True),
-    "abl_no_fewshot":     (True,  True,  False, True),
-    "abl_no_rag":         (True,  True,  True,  False),
+# (use_confusion, use_rules, use_fewshot, use_rag, use_self)
+# use_self = True requires Phase 4D insights files to exist in results/phase4d/insights/
+COMBO_COMPONENTS: dict[str, tuple[bool, bool, bool, bool, bool]] = {
+    # Phase 3–5 combinations (self=False)
+    "pair_conf_rules":    (True,  True,  False, False, False),
+    "pair_conf_fewshot":  (True,  False, True,  False, False),
+    "pair_conf_rag":      (True,  False, False, True,  False),
+    "pair_rules_fewshot": (False, True,  True,  False, False),
+    "full_prompt":        (True,  True,  True,  True,  False),
+    "abl_no_confusion":   (False, True,  True,  True,  False),
+    "abl_no_rules":       (True,  False, True,  True,  False),
+    "abl_no_fewshot":     (True,  True,  False, True,  False),
+    "abl_no_rag":         (True,  True,  True,  False, False),
+    # Phase 4D extension combos (use_self=True)
+    "self_reflective":    (False, False, False, False, True),
+    "pair_self_conf":     (True,  False, False, False, True),
+    "full_with_self":     (True,  True,  True,  True,  True),
 }
 
 CAMEL_COMBOS = {"pair_best_camel", "full_system"}
@@ -130,6 +140,9 @@ COMBO_DESCRIPTIONS: dict[str, str] = {
     "abl_no_rules":       "Full Prompt minus Rules",
     "abl_no_fewshot":     "Full Prompt minus Few-Shot",
     "abl_no_rag":         "Full Prompt minus RAG",
+    "self_reflective":    "Self-Reflective Prompting (Phase 4D only)",
+    "pair_self_conf":     "Self-Reflective + Confusion",
+    "full_with_self":     "Full Prompt + Self-Reflective (All 5 components)",
     "pair_best_camel":    "Best Pair + CAMeL Validation",
     "full_system":        "Full System (All + CAMeL)",
 }
@@ -308,9 +321,9 @@ def _active_component_names(combo_id: str) -> list[str]:
     if combo_id in CAMEL_COMBOS:
         base = "full_prompt" if combo_id == "full_system" else "pair_best"
         return [base, "camel"]
-    flags = COMBO_COMPONENTS.get(combo_id, (False, False, False, False))
+    flags = COMBO_COMPONENTS.get(combo_id, (False, False, False, False, False))
     names = []
-    labels = ["confusion", "rules", "fewshot", "rag"]
+    labels = ["confusion", "rules", "fewshot", "rag", "self"]
     for flag, label in zip(flags, labels):
         if flag:
             names.append(label)
@@ -812,7 +825,7 @@ def run_export(
     Loads contexts once, then iterates over all active datasets.
     Confusion context is per-dataset; rules/examples are global; retrieval is per-sample.
     """
-    use_conf, use_rules, use_fewshot, use_rag = COMBO_COMPONENTS[combo_id]
+    use_conf, use_rules, use_fewshot, use_rag, use_self = COMBO_COMPONENTS[combo_id]
 
     output_path = combo_dir / "inference_input.jsonl"
     combo_dir.mkdir(parents=True, exist_ok=True)
@@ -820,8 +833,8 @@ def run_export(
     logger.info("=" * 60)
     logger.info("Phase 6 EXPORT: combo=%s  (%s)", combo_id, COMBO_DESCRIPTIONS[combo_id])
     logger.info(
-        "  Components: confusion=%s  rules=%s  fewshot=%s  rag=%s",
-        use_conf, use_rules, use_fewshot, use_rag,
+        "  Components: confusion=%s  rules=%s  fewshot=%s  rag=%s  self=%s",
+        use_conf, use_rules, use_fewshot, use_rag, use_self,
     )
 
     # --- Build global contexts once ---
@@ -874,6 +887,59 @@ def run_export(
         min_score = 0.0
         format_style_rag = "numbered_arabic"
 
+    # --- Phase 4D self-reflective insights ---
+    pats_insights_context = ""
+    khatt_insights_context = ""
+    if use_self:
+        insights_dir = _PROJECT_ROOT / "results" / "phase4d" / "insights"
+        pats_path = insights_dir / "PATS-A01_insights.json"
+        khatt_path = insights_dir / "KHATT_insights.json"
+
+        insights_loader = LLMInsightsLoader()
+        phase4d_cfg = config.get("phase4d", {})
+        insight_cfg = phase4d_cfg.get("insights", {})
+        format_kwargs = {
+            "min_fix_rate_strength":  float(insight_cfg.get("min_fix_rate_strength",  0.6)),
+            "max_fix_rate_weakness":  float(insight_cfg.get("max_fix_rate_weakness",  0.4)),
+            "min_intro_rate":         float(insight_cfg.get("min_intro_rate",         0.05)),
+            "min_sample_size":        int(insight_cfg.get("min_sample_size",           10)),
+            "top_n_weaknesses":       int(insight_cfg.get("top_n_weaknesses",           3)),
+            "top_n_overcorrections":  int(insight_cfg.get("top_n_overcorrections",      2)),
+        }
+
+        if pats_path.exists():
+            pats_insights_context = insights_loader.format_for_prompt(
+                insights_loader.load(pats_path), **format_kwargs
+            )
+            logger.info("Loaded PATS-A01 insights (%d chars).", len(pats_insights_context))
+        else:
+            logger.warning(
+                "Phase 4D PATS-A01 insights not found: %s\n"
+                "Run: python pipelines/run_phase4d.py --mode analyze-train",
+                pats_path,
+            )
+
+        if khatt_path.exists():
+            khatt_insights_context = insights_loader.format_for_prompt(
+                insights_loader.load(khatt_path), **format_kwargs
+            )
+            logger.info("Loaded KHATT insights (%d chars).", len(khatt_insights_context))
+        else:
+            logger.warning(
+                "Phase 4D KHATT insights not found: %s\n"
+                "Run: python pipelines/run_phase4d.py --mode analyze-train",
+                khatt_path,
+            )
+
+        if not pats_insights_context and not khatt_insights_context:
+            logger.error(
+                "use_self=True but no insights files found. "
+                "Cannot export combo '%s'. "
+                "Run: python pipelines/run_phase4d.py --mode analyze-train",
+                combo_id,
+            )
+            return
+
     loader_data = DataLoader(config)
     already_exported = _load_exported_datasets(output_path) if not force else set()
     total_written = 0
@@ -900,8 +966,19 @@ def run_export(
             else:
                 confusion_context, conf_source = "", "disabled"
 
+            # Resolve self-reflective insights context for this dataset
+            if use_self:
+                if ds_key.startswith("PATS-A01-"):
+                    insights_context = pats_insights_context
+                else:
+                    insights_context = khatt_insights_context
+            else:
+                insights_context = ""
+
             # Determine prompt_type
-            any_context = any([confusion_context, rules_context, examples_context, use_rag])
+            any_context = any([
+                confusion_context, rules_context, examples_context, use_rag, insights_context
+            ])
             prompt_type = "combined" if any_context else "zero_shot"
 
             try:
@@ -938,6 +1015,7 @@ def run_export(
                     "rules_context":     rules_context or None,
                     "examples_context":  examples_context or None,
                     "retrieval_context": retrieval_context or None,
+                    "insights_context":  insights_context or None,
                 }
                 if use_rag:
                     record["retrieved_k"] = retrieved_k

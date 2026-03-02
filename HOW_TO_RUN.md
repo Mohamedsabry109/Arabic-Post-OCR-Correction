@@ -1,10 +1,11 @@
 # How to Run — Arabic Post-OCR Correction Pipeline
 
-This guide covers how to run all 6 phases end-to-end.
+This guide covers how to run all phases end-to-end.
 
 **Workflow overview:**
 - **Phase 1** runs entirely locally (no LLM needed).
 - **Phases 2–5** use a 3-stage pipeline: `export` (local) → `infer` (Kaggle/Colab) → `analyze` (local).
+- **Phase 4D** has a prerequisite local stage (`analyze-train`) before the standard 3-stage pipeline.
 - **Phase 6** uses a 4-stage pipeline: `export` → `infer` → `analyze` → `validate` + `summarize` (local).
 
 ---
@@ -349,6 +350,102 @@ results/phase4c/
 
 ---
 
+## Phase 4D — Self-Reflective Prompting
+
+Phase 4D analyses the LLM's own mistakes on training splits and injects that self-knowledge into validation prompts. It is an **isolated experiment** vs Phase 2.
+
+**Prerequisites**: Phase 2 (or any source phase) must be complete on **training splits** (to supply `corrections.jsonl` files with GT available).
+
+### Stage 0 — Analyze training predictions (local)
+
+Reads Phase 2 train-split corrections, computes per-ErrorType fix/introduction rates, and saves insight JSON files to `results/phase4d/insights/`.
+
+```bash
+python pipelines/run_phase4d.py --mode analyze-train
+```
+
+Options:
+```bash
+# Use a different source phase (e.g. phase3)
+python pipelines/run_phase4d.py --mode analyze-train --source-phase phase3
+
+# Force re-analyze even if insights exist
+python pipelines/run_phase4d.py --mode analyze-train --force
+```
+
+This step is **required** before export. Outputs:
+```
+results/phase4d/insights/
+├── PATS-A01_insights.json   # Pooled across all PATS-A01 train fonts
+└── KHATT_insights.json      # KHATT-train only
+```
+
+### Stage 1 — Export (local)
+
+Loads the insight JSON files, formats Arabic self-reflective context, and writes `results/phase4d/inference_input.jsonl` for **validation splits only**.
+
+```bash
+python pipelines/run_phase4d.py --mode export
+```
+
+Options:
+```bash
+# Subset / smoke test
+python pipelines/run_phase4d.py --mode export --datasets PATS-A01-Akhbar-val --limit 50
+
+# Force re-export
+python pipelines/run_phase4d.py --mode export --force
+```
+
+### Stage 2 — Inference (Kaggle / Colab / local GPU)
+
+Same `scripts/infer.py` as all other phases. `prompt_type="self_reflective"` is embedded in the JSONL.
+
+```bash
+python scripts/infer.py \
+    --input  results/phase4d/inference_input.jsonl \
+    --output results/phase4d/corrections.jsonl
+```
+
+Copy `corrections.jsonl` to `results/phase4d/corrections.jsonl` before analyze.
+
+### Stage 3 — Analyze (local)
+
+Computes CER/WER, comparison vs Phase 2, and per-error-type analysis.
+
+```bash
+python pipelines/run_phase4d.py --mode analyze
+```
+
+Options:
+```bash
+# Subset
+python pipelines/run_phase4d.py --mode analyze --datasets PATS-A01-Akhbar-val
+
+# Skip error analysis (faster)
+python pipelines/run_phase4d.py --mode analyze --no-error-analysis
+
+# Point to non-default Phase 2 results
+python pipelines/run_phase4d.py --mode analyze --phase2-dir results/phase2
+```
+
+### Outputs
+
+```
+results/phase4d/
+├── insights/
+│   ├── PATS-A01_insights.json      # Training-split error analysis (analyze-train)
+│   └── KHATT_insights.json
+├── inference_input.jsonl            # Export: val-split input to infer.py
+├── corrections.jsonl                # Inference output (place here before analyze)
+└── {dataset_name}/
+    ├── metrics.json
+    ├── comparison_vs_phase2.json
+    └── error_changes.json
+```
+
+---
+
 ## Phase 5 — RAG with OpenITI Corpus
 
 Phase 5 tests whether retrieving similar correct Arabic sentences from the OpenITI corpus helps the LLM. It has **four** stages: `build` (one-time) → `export` → inference → `analyze`.
@@ -450,14 +547,14 @@ results/phase5/
 
 ## Phase 6 — Combinations & Ablation Study
 
-Phase 6 tests combinations of the Phase 3–5 prompt techniques and adds CAMeL post-processing. It runs **9 inference combos** (need Kaggle) plus **2 CAMeL combos** that run locally. The pipeline has four modes: `export`, `analyze`, `validate`, and `summarize`.
+Phase 6 tests combinations of the Phase 3–5 prompt techniques, adds Phase 4D self-reflective combos, and CAMeL post-processing. It runs **12 inference combos** (need Kaggle) plus **2 CAMeL combos** that run locally. The pipeline has four modes: `export`, `analyze`, `validate`, and `summarize`.
 
-**Prerequisites**: Phases 1, 2, 3, 4A, 4B, and 5 must be complete. The Phase 5 FAISS index (`results/phase5/faiss.index`) must exist.
+**Prerequisites**: Phases 1, 2, 3, 4A, 4B, 4D (analyze-train), and 5 must be complete. The Phase 5 FAISS index (`results/phase5/faiss.index`) must exist.
 
 ### Combo IDs
 
-| Combo ID | Confusion | Rules | Few-Shot | RAG | CAMeL |
-|----------|-----------|-------|----------|-----|-------|
+| Combo ID | Confusion | Rules | Few-Shot | RAG | Self |
+|----------|-----------|-------|----------|-----|------|
 | `pair_conf_rules` | yes | yes | — | — | — |
 | `pair_conf_fewshot` | yes | — | yes | — | — |
 | `pair_conf_rag` | yes | — | — | yes | — |
@@ -467,8 +564,13 @@ Phase 6 tests combinations of the Phase 3–5 prompt techniques and adds CAMeL p
 | `abl_no_rules` | yes | — | yes | yes | — |
 | `abl_no_fewshot` | yes | yes | — | yes | — |
 | `abl_no_rag` | yes | yes | yes | — | — |
-| `pair_best_camel` | *(base: pair_best)* | | | | yes |
-| `full_system` | yes | yes | yes | yes | yes |
+| `self_reflective` | — | — | — | — | yes |
+| `pair_self_conf` | yes | — | — | — | yes |
+| `full_with_self` | yes | yes | yes | yes | yes |
+| `pair_best_camel` | *(base: pair_best)* | | | | — + CAMeL |
+| `full_system` | yes | yes | yes | yes | — + CAMeL |
+
+> **Note**: `self_reflective`, `pair_self_conf`, and `full_with_self` require Phase 4D insights (`results/phase4d/insights/`) to exist.
 
 ### Stage 1 — Export (local)
 
@@ -560,13 +662,17 @@ Reads whatever combos have been analyzed and produces:
 ### Recommended full Phase 6 workflow
 
 ```bash
-# 1. Export all 9 inference combos
+# 0. Prerequisite: Phase 4D insights must exist for self-reflective combos
+python pipelines/run_phase4d.py --mode analyze-train
+
+# 1. Export all 12 inference combos
 python pipelines/run_phase6.py --mode export --combo all
 
 # 2. Run inference on Kaggle for each combo (or loop locally with GPU)
 #    For each combo_id in: pair_conf_rules pair_conf_fewshot pair_conf_rag
 #                          pair_rules_fewshot full_prompt
 #                          abl_no_confusion abl_no_rules abl_no_fewshot abl_no_rag
+#                          self_reflective pair_self_conf full_with_self
 python scripts/infer.py \
     --input  results/phase6/{combo_id}/inference_input.jsonl \
     --output results/phase6/{combo_id}/corrections.jsonl
@@ -677,6 +783,10 @@ All settings are in `configs/config.yaml`. Key knobs:
 | `phase3` | `top_n` | How many pairs to inject into prompts (default: 10) |
 | `phase3` | `format_style` | `flat_arabic` or `grouped_arabic` |
 | `phase3` | `min_substitutions` | Sparsity threshold for per-dataset matrix |
+| `phase4d` | `source_phase` | Which phase's train corrections to analyse (default: `"phase2"`) |
+| `phase4d.insights` | `max_fix_rate_weakness` | Treat error type as weakness if fix_rate < this (default: 0.4) |
+| `phase4d.insights` | `min_intro_rate` | Treat as over-correction if intro_rate > this (default: 0.05) |
+| `phase4d.insights` | `top_n_weaknesses` | Max weakness items in prompt (default: 3) |
 | `phase6` | `pair_best` | Best pair combo ID for `pair_best_camel` (set after reviewing pairs) |
 | `phase6.stats` | `alpha` | Family-wise error rate for Bonferroni correction (default: 0.05) |
 | `phase6.stats` | `n_bootstrap` | Bootstrap iterations for confidence intervals (default: 1000) |
@@ -703,6 +813,12 @@ The dataset's confusion matrix either doesn't exist or has fewer than 200 substi
 
 **`FileNotFoundError: faiss.index` during Phase 6 export with RAG**
 The Phase 5 FAISS index is required for combos that include RAG. Run `python pipelines/run_phase5.py --mode build` first.
+
+**Phase 6 self-reflective combos skipped (`use_self=True but no insights files found`)**
+Run `python pipelines/run_phase4d.py --mode analyze-train` before exporting Phase 6 combos that use `self_reflective`.
+
+**Empty `insights_context` in Phase 4D export log**
+The insights JSON exists but all error types were filtered out (below `min_sample_size=10` or no weaknesses). Check `results/phase4d/insights/*.json` and lower thresholds in `configs/config.yaml` under `phase4d.insights` if needed.
 
 **`phase6.pair_best` is null — validate aborted**
 Set `phase6.pair_best` in `configs/config.yaml` to the best pair combo ID (e.g. `"pair_conf_rules"`) after reviewing pair analyze results, then re-run validate.

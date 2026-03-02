@@ -22,10 +22,11 @@
 | **4A** | Rule-Augmented | Do spelling rules help? | vs Phase 2 (**isolated**) |
 | **4B** | Few-Shot Learning | Do correction examples help? | vs Phase 2 (**isolated**) |
 | **4C** | CAMeL Validation | Does morphological post-processing help? | vs Phase 2 (**isolated**) |
+| **4D** | Self-Reflective | Do LLM's own error patterns help? | vs Phase 2 (**isolated**) |
 | **5** | RAG | Does corpus grounding help? | vs Phase 2 (**isolated**) |
 | **6** | Combinations + Ablation | What's optimal? What contributes? | Pairs + Full + Ablation |
 
-**Key Design**: Phases 3-5 (including 4C) are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests meaningful combinations before ablation.
+**Key Design**: Phases 3-5 (including 4A-4D) are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests meaningful combinations before ablation.
 
 ## Knowledge Sources
 
@@ -53,7 +54,7 @@ Arabic-Post-OCR-Correction/
 │   ├── linguistic/     # CAMeL Tools wrappers (MorphAnalyzer, WordValidator)
 │   ├── core/           # LLMCorrector, PromptBuilder, RAGRetriever
 │   └── analysis/       # Metrics, ErrorAnalyzer, StatsTester, Visualizer
-├── pipelines/          # run_phase1.py ... run_phase6.py
+├── pipelines/          # run_phase1.py ... run_phase6.py, run_phase4d.py
 ├── configs/            # config.yaml
 ├── results/            # Phase outputs (gitignored)
 ├── docs/               # Architecture.md, Guidelines.md
@@ -123,5 +124,6 @@ See `docs/Guidelines.md` for full standards.
 - [x] Phase 4A: Rule-Augmented
 - [x] Phase 4B: Few-Shot (QALB)
 - [x] Phase 4C: CAMeL Validation (isolated)
+- [x] Phase 4D: Self-Reflective Prompting (isolated)
 - [x] Phase 5: RAG (OpenITI)
 - [x] Phase 6: Combinations + Ablation
