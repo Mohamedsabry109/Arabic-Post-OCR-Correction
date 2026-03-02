@@ -1494,7 +1494,7 @@ def print_combo_summary(
     all_comparisons: dict[str, dict],
 ) -> None:
     print("\n" + "=" * 80)
-    print(f"PHASE6 [{combo_id}] SUMMARY — {COMBO_DESCRIPTIONS.get(combo_id, combo_id)}")
+    print(f"PHASE6 [{combo_id}] SUMMARY -- {COMBO_DESCRIPTIONS.get(combo_id, combo_id)}")
     print("=" * 80)
     print(f"{'Dataset':<28} {'P2 CER':>8} {'This CER':>9} {'D CER':>8} {'This WER':>9} {'N':>6}")
     print("-" * 80)
@@ -1773,7 +1773,7 @@ def run_summarize(
     p2_cers_by_id: dict[str, float] = {}
     for p2_corrections_path in [
         phase2_dir / "corrections.jsonl",
-        *(phase2_dir / ds / "corrections.jsonl"
+        *(phase2_dir / ds["name"] / "corrections.jsonl"
           for ds in (config.get("datasets", [{}]) or [{}])
           if isinstance(ds, dict) and ds.get("name")),
     ]:
@@ -2030,9 +2030,10 @@ def _generate_summary_report(
         lines.append("| Ablation | Avg CER | Delta from Full System |")
         lines.append("|----------|---------|------------------------|")
         for abl_id, a in abls.items():
+            delta_val = a.get('delta_from_full_system')
             delta_s = (
-                f"{a.get('delta_from_full_system', 0)*100:+.2f}%"
-                if "delta_from_full_system" in a else "—"
+                f"{delta_val*100:+.2f}%"
+                if delta_val is not None else "—"
             )
             lines.append(
                 f"| {abl_id} | {a.get('avg_cer', 0)*100:.2f}% | {delta_s} |"

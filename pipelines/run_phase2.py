@@ -964,9 +964,9 @@ def print_summary(
 ) -> None:
     """Print a final summary table to stdout."""
     print("\n" + "=" * 80)
-    print("PHASE 2 SUMMARY — Zero-Shot LLM Correction")
+    print("PHASE 2 SUMMARY -- Zero-Shot LLM Correction")
     print("=" * 80)
-    print(f"{'Dataset':<28} {'P1 CER':>8} {'P2 CER':>8} {'Δ CER':>8} {'P2 WER':>8} {'N':>6}")
+    print(f"{'Dataset':<28} {'P1 CER':>8} {'P2 CER':>8} {'D CER':>8} {'P2 WER':>8} {'N':>6}")
     print("-" * 80)
     for ds, r in all_corrected.items():
         cmp = all_comparisons.get(ds, {})
@@ -1035,8 +1035,10 @@ def main() -> None:
         backend = config.get("model", {}).get("backend", "transformers")
         if backend == "transformers":
             logger.error(
-                "--mode full requires an API backend (model.backend='api'). "
-                "For GPU inference use: export -> scripts/infer.py (Kaggle/Colab) -> analyze."
+                "--mode full requires a non-GPU backend (model.backend='mock' or 'api'). "
+                "For GPU inference use: export -> scripts/infer.py (Kaggle/Colab) -> analyze. "
+                "For local smoke testing use: model.backend='mock' in config or "
+                "--config configs/config_dev.yaml"
             )
             sys.exit(1)
         corrector = get_corrector(config)

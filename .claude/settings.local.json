@@ -22,7 +22,9 @@
       "Bash(cat:*)",
       "Bash(head:*)",
       "Bash(cd \"D:\\\\Masters\\\\Arabic-Post-OCR-Correction\" && rm -f results/phase4a/inference_input.jsonl && python pipelines/run_phase4.py --sub-phase 4a --mode export 2>&1)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(grep:*)",
+      "Bash(do:*)"
     ]
   }
 }

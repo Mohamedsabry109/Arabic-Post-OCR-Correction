@@ -1414,7 +1414,7 @@ def print_summary(
 ) -> None:
     """Print a final summary table to stdout."""
     print("\n" + "=" * 80)
-    print(f"PHASE 3 SUMMARY — OCR-Aware Prompting (Top-{top_n} confusions)")
+    print(f"PHASE 3 SUMMARY -- OCR-Aware Prompting (Top-{top_n} confusions)")
     print("=" * 80)
     print(f"{'Dataset':<28} {'P2 CER':>8} {'P3 CER':>8} {'D CER':>8} {'P3 WER':>8} {'N':>6}")
     print("-" * 80)

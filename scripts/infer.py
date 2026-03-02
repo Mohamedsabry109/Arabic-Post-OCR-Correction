@@ -90,6 +90,15 @@ def parse_args() -> argparse.Namespace:
         help="Override model name from config.",
     )
     parser.add_argument(
+        "--backend", type=str, default=None,
+        choices=["mock", "transformers", "api"],
+        help=(
+            "Override model backend from config. "
+            "Use 'mock' for local smoke tests (no GPU, no model download). "
+            "Use 'transformers' for Kaggle/Colab GPU inference."
+        ),
+    )
+    parser.add_argument(
         "--datasets", nargs="+", default=None, metavar="DATASET",
         help="Process only these dataset keys (default: all in input file).",
     )
@@ -274,9 +283,11 @@ def main() -> None:
         logger.warning("Config not found at %s — using defaults.", args.config)
         config = {}
 
-    # Apply --model override
+    # Apply --model / --backend overrides
     if args.model:
         config.setdefault("model", {})["name"] = args.model
+    if args.backend:
+        config.setdefault("model", {})["backend"] = args.backend
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
 

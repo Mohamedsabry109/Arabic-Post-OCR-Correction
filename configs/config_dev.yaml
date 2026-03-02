@@ -1,0 +1,190 @@
+# Arabic Post-OCR Correction — Development / Smoke Test Configuration
+# =====================================================================
+# Use this config to run the entire pipeline locally without a GPU.
+# The MockCorrector returns OCR text unchanged — no model is loaded.
+#
+# Quickstart:
+#   python pipelines/run_phase1.py  --config configs/config_dev.yaml
+#   python pipelines/run_phase2.py  --config configs/config_dev.yaml --mode full
+#   python pipelines/run_phase3.py  --config configs/config_dev.yaml --mode export
+#   python scripts/infer.py         --config configs/config_dev.yaml --backend mock \
+#       --input results/phase3/inference_input.jsonl \
+#       --output results/phase3/corrections.jsonl
+#   python pipelines/run_phase3.py  --config configs/config_dev.yaml --mode analyze
+#
+# See docs/Local_Dev_Guide.md for the full walkthrough.
+
+# ---------------------------------------------------------------------------
+# Model — mock backend: no download, no GPU, instant
+# ---------------------------------------------------------------------------
+model:
+  name: "mock"
+  backend: "mock"
+  temperature: 0.1
+  max_tokens: 64
+  device: "cpu"
+  quantize_4bit: false
+
+# ---------------------------------------------------------------------------
+# Data paths — identical to production config
+# ---------------------------------------------------------------------------
+data:
+  ocr_root: "./data/ocr-results"
+  ocr_model: "qaari-results"
+  ground_truth: "./data/ocr-raw-data"
+  pats_splits_file: "./data/ocr-raw-data/PATS_A01_Dataset/pats_splits.json"
+  openiti: "./data/OpenITI"
+  qalb: "./data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
+  rules: "./data/rules"
+
+# ---------------------------------------------------------------------------
+# Datasets — 4 datasets (Akhbar font + KHATT, both splits)
+# Covers all code paths: train splits (Phase 4D analyze-train),
+# val splits (all comparison phases), both dataset types (PATS + KHATT).
+# ---------------------------------------------------------------------------
+datasets:
+  - name: "PATS-A01-Akhbar-train"
+    font: "Akhbar"
+    type: "PATS-A01"
+    pats_split: "train"
+  - name: "PATS-A01-Akhbar-val"
+    font: "Akhbar"
+    type: "PATS-A01"
+    pats_split: "validation"
+  - name: "KHATT-train"
+    split: "train"
+    type: "KHATT"
+  - name: "KHATT-validation"
+    split: "validation"
+    type: "KHATT"
+
+# ---------------------------------------------------------------------------
+# Processing limits — keep runs fast (20 samples per dataset = 80 total)
+# ---------------------------------------------------------------------------
+processing:
+  limit_per_dataset: 20
+  batch_size: 1
+
+# ---------------------------------------------------------------------------
+# Phase-specific settings — same as production but smaller where possible
+# ---------------------------------------------------------------------------
+phase1:
+  min_confusion_count: 1       # lower threshold to get some confusion data at 20 samples
+  top_confusions_n: 10
+  error_examples_per_type: 2
+
+phase2:
+  prompt_version: "v1"
+  analyze_errors: true
+  max_retries: 0               # no retries needed for mock
+
+phase3:
+  top_n: 5
+  format_style: "flat_arabic"
+  min_substitutions: 1         # lower threshold — dev data is small
+  analyze_errors: true
+  analyze_impact: true
+  max_retries: 0
+
+phase4:
+  rules:
+    categories: null
+    n_rules: null
+    format_style: "compact_arabic"
+    max_retries: 0
+    analyze_errors: true
+  few_shot:
+    splits: ["train"]
+    years: ["2014"]
+    num_examples: 3
+    selection: "diverse"
+    seed: 42
+    max_length: 300
+    min_length: 10
+    max_words_changed: 15
+    format_style: "inline_arabic"
+    max_retries: 0
+    analyze_errors: true
+  camel_validation:
+    strategy: "revert"
+    phase2_dir: "results/phase2"
+
+phase4d:
+  source_phase: "phase2"
+  insights:
+    min_fix_rate_strength: 0.6
+    max_fix_rate_weakness: 0.4
+    min_intro_rate: 0.05
+    min_sample_size: 1           # lower threshold — dev data is small
+    top_n_weaknesses: 3
+    top_n_overcorrections: 2
+  analyze_errors: true
+  max_retries: 0
+  prompt_version: "p4dv1"
+
+phase5:
+  corpus:
+    max_sentences: 1000          # tiny index for fast build
+    min_char_len: 30
+    max_char_len: 300
+    status_filter: "pri"
+    seed: 42
+  index:
+    type: "FlatIP"
+    batch_size: 64
+  retrieval:
+    top_k: 3
+    min_score: 0.0
+    format_style: "numbered_arabic"
+  analyze_errors: true
+  max_retries: 0
+
+phase6:
+  pair_best: null
+  analyze_errors: true
+  max_retries: 0
+  stats:
+    alpha: 0.05
+    n_bootstrap: 100             # fewer iterations for speed
+
+# ---------------------------------------------------------------------------
+# CAMeL Tools (Phase 4C / 6)
+# ---------------------------------------------------------------------------
+camel:
+  enabled: true
+  morphology:
+    db: "calima-msa-r13"
+    cache_size: 1000
+  validation:
+    enabled: true
+    re_correct: false
+    min_confidence: 0.5
+
+# ---------------------------------------------------------------------------
+# API backend (future — not used in dev config)
+# ---------------------------------------------------------------------------
+api:
+  base_url: null
+  api_key_env: "OPENAI_API_KEY"
+  timeout_s: 30
+  requests_per_minute: 60
+
+# ---------------------------------------------------------------------------
+# RAG settings
+# ---------------------------------------------------------------------------
+rag:
+  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  top_k: 3
+  chunk_size: 200
+
+few_shot:
+  num_examples: 3
+  selection: "diverse"
+
+# ---------------------------------------------------------------------------
+# Output
+# ---------------------------------------------------------------------------
+output:
+  results_dir: "results"
+  save_corrected: true
+  save_comparisons: true

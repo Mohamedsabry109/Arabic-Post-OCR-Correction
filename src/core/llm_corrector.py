@@ -1,7 +1,10 @@
 """LLM corrector backends for Arabic OCR post-correction.
 
-Defines the abstract interface (BaseLLMCorrector) and the primary
-HuggingFace transformers implementation (TransformersCorrector).
+Defines the abstract interface (BaseLLMCorrector) and concrete backends:
+  TransformersCorrector — HuggingFace transformers (Kaggle/Colab GPU)
+  MockCorrector         — No-op identity corrector for local dev/smoke tests
+  APICorrector          — OpenAI-compatible REST API (see api_corrector.py)
+
 A factory function (get_corrector) selects the backend from config.
 
 All backends accept OpenAI-format message lists from PromptBuilder and
@@ -78,6 +81,7 @@ class BaseLLMCorrector(ABC):
     never on a concrete implementation.
 
     Implementations:
+        MockCorrector         — No-op for local dev/smoke tests (no model needed)
         TransformersCorrector — HuggingFace transformers (Kaggle/Colab)
         APICorrector          — OpenAI-compatible REST API (see api_corrector.py)
 
@@ -116,6 +120,60 @@ class BaseLLMCorrector(ABC):
     @abstractmethod
     def model_name(self) -> str:
         """Return a string identifying the model (for metadata and logging)."""
+
+
+# ---------------------------------------------------------------------------
+# MockCorrector — local development / smoke testing (no model required)
+# ---------------------------------------------------------------------------
+
+
+class MockCorrector(BaseLLMCorrector):
+    """No-op corrector for pipeline smoke testing — zero model loading.
+
+    Returns the OCR text unchanged (identity correction). Use backend="mock"
+    to run the full pipeline loop locally without a GPU or internet access.
+
+    All pipeline stages (export → infer → analyze) complete normally and
+    produce valid JSON outputs. CER/WER metrics will equal the OCR baseline
+    because no actual correction is performed — this is expected and correct
+    for verifying pipeline logic.
+
+    Config keys read (all optional)::
+
+        config['model']['name']  → used as model_name label (default "mock")
+    """
+
+    def __init__(self, config: dict) -> None:
+        self._label: str = config.get("model", {}).get("name", "mock") or "mock"
+
+    @property
+    def model_name(self) -> str:
+        """Return the mock model label (always starts with 'mock')."""
+        return f"mock:{self._label}" if not self._label.startswith("mock") else self._label
+
+    def correct(
+        self,
+        sample_id: str,
+        ocr_text: str,
+        messages: list[dict],
+        max_retries: int = 2,
+    ) -> CorrectionResult:
+        """Return the OCR text unchanged. Never fails, always instant.
+
+        prompt_tokens is estimated from message content length.
+        output_tokens is estimated from ocr_text word count.
+        """
+        prompt_chars = sum(len(m.get("content", "")) for m in messages)
+        return CorrectionResult(
+            sample_id=sample_id,
+            ocr_text=ocr_text,
+            corrected_text=ocr_text,
+            prompt_tokens=max(1, prompt_chars // 4),   # rough char→token estimate
+            output_tokens=max(1, len(ocr_text.split())),
+            latency_s=0.0,
+            success=True,
+            error=None,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +460,8 @@ def get_corrector(config: dict) -> BaseLLMCorrector:
     """Instantiate the corrector backend specified in config.
 
     Config key: ``config['model']['backend']``
-        - ``"transformers"`` → TransformersCorrector (default)
+        - ``"mock"``         → MockCorrector  (no model, for local dev/smoke tests)
+        - ``"transformers"`` → TransformersCorrector (default, GPU required)
         - ``"api"``          → APICorrector (from src.core.api_corrector)
 
     Args:
@@ -416,7 +475,10 @@ def get_corrector(config: dict) -> BaseLLMCorrector:
     """
     backend = config.get("model", {}).get("backend", "transformers")
 
-    if backend == "transformers":
+    if backend == "mock":
+        logger.info("Using MockCorrector — no model loaded (local dev mode).")
+        return MockCorrector(config)
+    elif backend == "transformers":
         return TransformersCorrector(config)
     elif backend == "api":
         from src.core.api_corrector import APICorrector
@@ -424,5 +486,5 @@ def get_corrector(config: dict) -> BaseLLMCorrector:
     else:
         raise ValueError(
             f"Unknown corrector backend '{backend}'. "
-            "Valid values: 'transformers', 'api'."
+            "Valid values: 'mock', 'transformers', 'api'."
         )
