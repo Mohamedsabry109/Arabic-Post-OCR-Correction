@@ -1,0 +1,128 @@
+\setstretch{1}
+\setlength{\parskip}{\baselineskip}
+
+Chapter 1 content goes here.
+
+\section{Section Example}\label{sec_sec1label}
+This is section example you can refer to this section as follow \ref{sec_sec1label}.
+You can write in italic as follows \textit{Italic text}
+You can write in bold as follows \textbf{bold text}
+You can start a new paragraph by leaving an empty line as follows.
+
+New Paragraph starts here.
+
+\section{Another Section Example}\label{sec_sec2label}
+You can create sub-sections and sub-sub-sections as follows.
+\subsection{Sub-Section 1 Example}\label{subsec_subsec1label}
+\subsection{Sub-Section 2 Example}\label{subsec_subsec2label}
+\subsubsection{Sub-Sub-Section 1 Example}\label{subsubsec_subsubsec1label}
+\subsubsection{Sub-Sub-Section 2 Example}\label{subsubsec_subsubsec2label}
+You can add a figure that takes the whole text width as follows. 
+\begin{figure}
+\centering
+\includegraphics[width=\linewidth]{Figures/Ch1/fig1.jpg}
+\caption{Text Width Figure Example}
+\label{fig_fig1label}
+\end{figure}
+You can refer to the figure using its label as follows:
+
+As shown in Fig. \ref{fig_fig1label}, .....
+
+Also, you can add a figure that takes a specific width as a ratio of the whole text width as follows. 
+
+\begin{figure}
+\centering
+\includegraphics[width=0.5\linewidth]{Figures/Ch1/fig2.jpg}
+\caption{Half Text Width Figure Example}
+\label{fig_fig2label}
+\end{figure}
+
+Also, you can add a figure with sub-figures as follows. 
+
+\begin{figure}
+\centering
+    \begin{subfigure}{0.3\textwidth}
+    \centering    
+    \includegraphics[width=\linewidth]{Figures/Ch1/fig2.jpg}
+    \caption{Sub-Figure 1 Caption}
+    \label{subfig_subfig1label} 
+    \end{subfigure}
+\hspace{0.5in}%horizontal space between figures
+    \begin{subfigure}{0.3\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{Figures/Ch1/fig2.jpg}
+    \caption{Sub-Figure 2 Caption}
+    \label{subfig_subfig2label}
+    \end{subfigure}
+\caption{Figure With two Sub-Figures Example}
+\label{fig_fig3label}
+\end{figure}
+
+you can refer to the figure as a whole (Fig. \ref{fig_fig3label}) and you can refer to each sub figure (Fig. \ref{subfig_subfig1label} and Fig. \ref{subfig_subfig2label}).
+
+You can make a rotated figure as follows:
+\begin{sidewaysfigure}
+\centering
+\includegraphics[width=\textwidth]{Figures/Ch1/fig1.jpg}
+\caption{Rotated Figure Example}
+\label{fig_rotatedfiglabel}
+\end{sidewaysfigure}
+
+You can make a list as follows:
+
+\begin{itemize}
+	\item Item 1
+	\item Item 2
+	\item Item 3
+\end{itemize}
+
+Also, you can make a numbered list as follows:
+
+\begin{compactenum}
+	\item Item 1
+	\item Item 2
+	\item Item 3
+\end{compactenum}
+
+You can write an equation and refer to it as Eq. \ref{eq_eq1label} as follows:
+\begin{equation}\label{eq_eq1label}
+    X=Y_1 \times Y_{23} \frac{num}{den} \times \alpha \omega
+\end{equation}
+
+You can make inline mathematical expressions as follows: $C_s = C_{total}/N$.
+
+You can create tables as Table \ref{table_table1label}:
+
+\begin{table}
+\caption{Table Example}
+\label{table_table1label}
+\centering
+%% Some packages, such as MDW tools, offer better commands for making tables
+%% than the plain LaTeX2e tabular which is used here.
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{c || c | c | c}
+\hline
+\hline
+A & B & C & D\\
+\hline
+\hline
+A & B & C & D\\
+\hline
+A & B & C & D\\
+\hline
+A & B & C & D\\
+\hline
+A & B & C & D\\
+\hline
+\multicolumn{4}{c}{Multi Column option }\\
+\hline
+A & B & \multicolumn{2}{c}{Multi Column option }\\
+\hline
+\end{tabular}
+\end{table}
+
+Also you can create a rotated table for comparison, for example, as shown in Table \ref{tabel_comprotated} in Sec. \ref{sec_conc}.
+
+You can cite references anywhere in your thesis using \cite{kopka1995guide} command. You can cite multiple references at once \cite{kopka1995guide,lamport1994latex}.
+
+You references will appear in the references list at the end of your thesis by their citation order.
