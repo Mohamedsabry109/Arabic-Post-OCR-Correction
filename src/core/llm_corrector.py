@@ -198,8 +198,9 @@ class TransformersCorrector(BaseLLMCorrector):
     """
 
     # Guard against OOM on unexpectedly long inputs.
-    # Line-level OCR data is typically 10–80 words, well within this limit.
-    MAX_INPUT_TOKENS: int = 1024
+    # Qwen3-4B supports 32K context; 4096 gives ample headroom for all phases
+    # (including RAG, few-shot, and combined prompts with injected context).
+    MAX_INPUT_TOKENS: int = 4096
 
     def __init__(self, config: dict) -> None:
         """Load model and tokenizer from config.

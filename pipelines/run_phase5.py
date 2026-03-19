@@ -424,11 +424,13 @@ def run_error_change_analysis(
 
             s1 = _Stub()
             s1.sample_id = cs.sample.sample_id
+            s1.dataset   = cs.sample.dataset
             s1.gt_text   = gt
             s1.ocr_text  = ocr
 
             s2 = _Stub()
             s2.sample_id = cs.sample.sample_id
+            s2.dataset   = cs.sample.dataset
             s2.gt_text   = gt
             s2.ocr_text  = corrected
 

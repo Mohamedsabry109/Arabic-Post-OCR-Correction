@@ -394,11 +394,13 @@ def run_error_change_analysis(
                 pass
             s1 = _Stub()
             s1.sample_id = cs.sample.sample_id   # type: ignore[attr-defined]
+            s1.dataset   = cs.sample.dataset      # type: ignore[attr-defined]
             s1.gt_text   = cs.sample.gt_text      # type: ignore[attr-defined]
             s1.ocr_text  = cs.sample.ocr_text     # type: ignore[attr-defined]
 
             s2 = _Stub()
             s2.sample_id = cs.sample.sample_id   # type: ignore[attr-defined]
+            s2.dataset   = cs.sample.dataset      # type: ignore[attr-defined]
             s2.gt_text   = cs.sample.gt_text      # type: ignore[attr-defined]
             s2.ocr_text  = cs.corrected_text      # type: ignore[attr-defined]
 

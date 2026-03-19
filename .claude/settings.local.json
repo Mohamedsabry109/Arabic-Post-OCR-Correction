@@ -24,7 +24,11 @@
       "Bash(cd \"D:\\\\Masters\\\\Arabic-Post-OCR-Correction\" && rm -f results/phase4a/inference_input.jsonl && python pipelines/run_phase4.py --sub-phase 4a --mode export 2>&1)",
       "Bash(pip install:*)",
       "Bash(grep:*)",
-      "Bash(do:*)"
+      "Bash(do:*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(''''Fonts:'''', list\\(d[''''splits''''].keys\\(\\)\\)\\); print\\(''''Akhbar train count:'''', len\\(d[''''splits''''][''''Akhbar''''][''''train'''']\\)\\); print\\(''''Akhbar val count:'''', len\\(d[''''splits''''][''''Akhbar''''][''''validation'''']\\)\\); print\\(''''First 3 train:'''', d[''''splits''''][''''Akhbar''''][''''train''''][:3]\\); print\\(''''First 3 val:'''', d[''''splits''''][''''Akhbar''''][''''validation''''][:3]\\)\")",
+      "Bash(venv/Scripts/python pipelines/run_phase1.py --datasets PATS-A01-Akhbar-train PATS-A01-Akhbar-val --no-camel)",
+      "Bash(venv/Scripts/python pipelines/run_phase2.py --datasets PATS-A01-Akhbar-train --limit 200 --mode analyze)",
+      "Bash(venv/Scripts/python pipelines/run_phase2.py --datasets PATS-A01-Akhbar-train --mode analyze --force)"
     ]
   }
 }
