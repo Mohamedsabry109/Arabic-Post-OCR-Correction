@@ -646,11 +646,15 @@ def run_export(
     results_dir: Path,
     limit: Optional[int],
     force: bool,
+    explicit_datasets: bool = False,
 ) -> None:
-    """Build inference_input.jsonl for Phase 4D (val splits only).
+    """Build inference_input.jsonl for Phase 4D (val splits only by default).
 
     Loads PATS-A01 and KHATT insights, formats them as Arabic text, and builds
     a self-reflective prompt per OCR sample.
+
+    When explicit_datasets=True (--datasets passed on CLI), the val-only filter
+    is skipped so any dataset (including train) can be exported for smoke tests.
     """
     output_path = results_dir / "inference_input.jsonl"
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -718,14 +722,18 @@ def run_export(
         len(pats_context), len(khatt_context),
     )
 
-    # Only process val-split datasets
-    val_datasets = [ds for ds in active_datasets if is_val_split(ds)]
-    if not val_datasets:
-        logger.warning(
-            "No validation-split datasets in active set. "
-            "Phase 4D only exports val splits. Active: %s", active_datasets,
-        )
-        return
+    # By default only process val-split datasets; if --datasets was explicitly
+    # passed on the CLI, respect that and export whatever was requested.
+    if explicit_datasets:
+        export_datasets = active_datasets
+    else:
+        export_datasets = [ds for ds in active_datasets if is_val_split(ds)]
+        if not export_datasets:
+            logger.warning(
+                "No validation-split datasets in active set. "
+                "Phase 4D only exports val splits by default. Active: %s", active_datasets,
+            )
+            return
 
     already_exported = _load_exported_datasets(output_path) if not force else set()
     loader_data = DataLoader(config)
@@ -733,7 +741,7 @@ def run_export(
     total_written = 0
 
     with open(output_path, "a", encoding="utf-8") as f:
-        for ds_key in val_datasets:
+        for ds_key in export_datasets:
             if ds_key in already_exported:
                 logger.info(
                     "[%s] Already exported -- skipping (use --force to re-export).",
@@ -1162,6 +1170,7 @@ def main() -> None:
             results_dir=args.results_dir,
             limit=args.limit,
             force=args.force,
+            explicit_datasets=args.datasets is not None,
         )
 
     elif args.mode == "analyze":
