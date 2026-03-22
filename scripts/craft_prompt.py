@@ -132,6 +132,13 @@ def parse_args() -> argparse.Namespace:
         help="Dataset keys to process (default: validation datasets for export).",
     )
     p.add_argument(
+        "--sample-list",
+        type=Path,
+        default=None,
+        dest="sample_list",
+        help="Path to test_samples.json to filter samples (export mode).",
+    )
+    p.add_argument(
         "--include-khatt",
         action="store_true",
         dest="include_khatt",
@@ -754,8 +761,18 @@ def run_export(args: argparse.Namespace, config: dict) -> None:
 
     loader = DataLoader(config)
 
-    # Determine datasets (validation by default for clean evaluation)
-    if args.datasets:
+    # Load sample list if provided (overrides --datasets)
+    sample_ids: Optional[set[str]] = None
+    if args.sample_list:
+        with open(args.sample_list, encoding="utf-8") as f:
+            sl_data = json.load(f)
+        sample_ids = set(sl_data["sample_ids"])
+        dataset_keys = list(sl_data.get("meta", {}).get("by_dataset", {}).keys())
+        logger.info(
+            "Sample list loaded: %d sample IDs from %s",
+            len(sample_ids), args.sample_list,
+        )
+    elif args.datasets:
         dataset_keys = args.datasets
     else:
         dataset_keys = _get_val_datasets(config)
@@ -770,7 +787,9 @@ def run_export(args: argparse.Namespace, config: dict) -> None:
     with open(output_path, "w", encoding="utf-8") as f:
         for ds_key in dataset_keys:
             try:
-                samples = list(loader.iter_samples(ds_key, limit=args.limit))
+                samples = list(loader.iter_samples(
+                    ds_key, limit=args.limit, sample_ids=sample_ids,
+                ))
             except DataError as exc:
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue

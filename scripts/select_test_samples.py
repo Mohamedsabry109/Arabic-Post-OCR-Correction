@@ -1,18 +1,25 @@
 #!/usr/bin/env python3
-"""Select test samples (mix of hard and easy) for research iteration.
+"""Select stratified test samples for research evaluation.
 
 Scans all PATS-A01 train fonts + KHATT-train, computes per-sample CER
-(no-diacritics), and outputs a JSON file with a configurable mix of
-hard (highest CER) and easy (lowest CER) samples.
+(no-diacritics), buckets by difficulty (correct / easy / medium / hard),
+and randomly selects from each bucket with font diversity.
+
+CER boundaries (same as craft_prompt.py):
+    correct:  CER = 0.0
+    easy:     0 < CER <= 0.05
+    medium:   0.05 < CER <= 0.25
+    hard:     CER > 0.25
 
 Usage:
-    python scripts/select_test_samples.py --n 250 --output data/test_samples.json
-    python scripts/select_test_samples.py --n 250 --hard-ratio 0.8 --easy-ratio 0.2
     python scripts/select_test_samples.py --n 250 --include-khatt
+    python scripts/select_test_samples.py --n-correct 20 --n-easy 30 --n-medium 100 --n-hard 100
+    python scripts/select_test_samples.py --seed 123
 """
 
 import argparse
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -25,72 +32,130 @@ from src.data.data_loader import DataLoader, DataError
 from src.analysis.metrics import calculate_cer
 from src.data.text_utils import normalise_arabic
 
+# CER boundaries for stratified sampling (shared with craft_prompt.py)
+_CER_EASY_MAX = 0.05
+_CER_MEDIUM_MAX = 0.25
+
+# Default bucket sizes (total = 250)
+_N_CORRECT = 25
+_N_EASY = 25
+_N_MEDIUM = 100
+_N_HARD = 100
+
+_SEED = 42
+
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Select test samples (hard + easy) by CER.")
+    p = argparse.ArgumentParser(
+        description="Select stratified test samples by CER difficulty."
+    )
     p.add_argument("--config", type=Path, default=_PROJECT_ROOT / "configs" / "config.yaml")
-    p.add_argument("--n", type=int, default=250, help="Total number of test samples to select")
     p.add_argument("--output", type=Path, default=_PROJECT_ROOT / "data" / "test_samples.json")
     p.add_argument(
-        "--hard-ratio", type=float, default=0.75,
-        help="Fraction of samples from the hard (high CER) end (default: 0.75)",
+        "--n", type=int, default=None,
+        help=(
+            "Total number of test samples. When provided, distributes across "
+            "buckets proportionally (10%% correct, 10%% easy, 40%% medium, "
+            "40%% hard). Overrides individual --n-* flags."
+        ),
     )
+    p.add_argument("--n-correct", type=int, default=_N_CORRECT, dest="n_correct",
+                    help=f"Correct samples (CER = 0.0, default: {_N_CORRECT})")
+    p.add_argument("--n-easy", type=int, default=_N_EASY, dest="n_easy",
+                    help=f"Easy samples (CER <= 0.05, default: {_N_EASY})")
+    p.add_argument("--n-medium", type=int, default=_N_MEDIUM, dest="n_medium",
+                    help=f"Medium samples (0.05 < CER <= 0.25, default: {_N_MEDIUM})")
+    p.add_argument("--n-hard", type=int, default=_N_HARD, dest="n_hard",
+                    help=f"Hard samples (CER > 0.25, default: {_N_HARD})")
     p.add_argument(
-        "--easy-ratio", type=float, default=0.25,
-        help="Fraction of samples from the easy (low CER) end (default: 0.25)",
-    )
-    p.add_argument(
-        "--min-gt-chars", type=int, default=5,
+        "--min-gt-chars", type=int, default=5, dest="min_gt_chars",
         help="Minimum GT characters (skip near-empty samples)",
     )
     p.add_argument(
-        "--max-runaway-ratio", type=float, default=5.0,
+        "--max-runaway-ratio", type=float, default=5.0, dest="max_runaway_ratio",
         help="Skip samples where OCR length > ratio * GT length (Qaari repetition bug)",
     )
     p.add_argument(
-        "--min-cer", type=float, default=0.01,
-        help="Minimum CER to be considered (skip perfect/near-perfect)",
-    )
-    p.add_argument(
-        "--include-khatt", action="store_true",
+        "--include-khatt", action="store_true", dest="include_khatt",
         help="Include KHATT-train samples (handwritten)",
     )
+    p.add_argument("--seed", type=int, default=_SEED, help=f"Random seed (default: {_SEED})")
     return p.parse_args()
 
 
-def _print_selection_stats(label: str, samples: list[dict]) -> None:
-    """Print summary stats for a selection of samples."""
+def _select_with_font_diversity(
+    pool: list[dict],
+    target_n: int,
+    rng: random.Random,
+) -> list[dict]:
+    """Pick up to target_n samples from pool with font diversity.
+
+    First pass: one random sample per font/dataset.
+    Second pass: fill remaining slots from the rest.
+    """
+    if not pool:
+        return []
+
+    rng.shuffle(pool)
+    picked: list[dict] = []
+    seen_fonts: set[str] = set()
+
+    # First pass: one sample per font for diversity
+    for entry in pool:
+        if len(picked) >= target_n:
+            break
+        font = entry.get("font") or entry.get("dataset")
+        if font not in seen_fonts:
+            picked.append(entry)
+            seen_fonts.add(font)
+
+    # Second pass: fill remaining slots
+    for entry in pool:
+        if len(picked) >= target_n:
+            break
+        if entry not in picked:
+            picked.append(entry)
+
+    return picked
+
+
+def _print_bucket_stats(label: str, samples: list[dict]) -> None:
+    """Print summary stats for a bucket of samples."""
     if not samples:
         print(f"  {label}: 0 samples")
         return
     avg_cer = sum(s["cer"] for s in samples) / len(samples)
     min_cer = min(s["cer"] for s in samples)
     max_cer = max(s["cer"] for s in samples)
+    fonts = len({s.get("font") or s.get("dataset") for s in samples})
     print(f"  {label}: {len(samples)} samples, "
-          f"CER range: {min_cer:.4f} - {max_cer:.4f} (avg {avg_cer:.4f})")
+          f"CER range: {min_cer:.4f} - {max_cer:.4f} (avg {avg_cer:.4f}), "
+          f"{fonts} fonts")
 
 
 def main() -> None:
     args = parse_args()
 
-    # Validate ratios
-    total_ratio = args.hard_ratio + args.easy_ratio
-    if abs(total_ratio - 1.0) > 1e-6:
-        print(f"Error: --hard-ratio ({args.hard_ratio}) + --easy-ratio ({args.easy_ratio}) "
-              f"= {total_ratio}, must sum to 1.0")
-        sys.exit(1)
+    # If --n is provided, distribute proportionally across buckets
+    if args.n is not None:
+        args.n_correct = round(args.n * 0.10)
+        args.n_easy = round(args.n * 0.10)
+        args.n_medium = round(args.n * 0.40)
+        args.n_hard = args.n - args.n_correct - args.n_easy - args.n_medium
 
-    n_hard = round(args.n * args.hard_ratio)
-    n_easy = args.n - n_hard  # Use remainder to avoid rounding issues
+    total_target = args.n_correct + args.n_easy + args.n_medium + args.n_hard
 
-    print(f"Selection plan: {args.n} total = {n_hard} hard ({args.hard_ratio:.0%}) "
-          f"+ {n_easy} easy ({args.easy_ratio:.0%})")
+    print(f"Selection plan: {total_target} total = "
+          f"{args.n_correct} correct + {args.n_easy} easy + "
+          f"{args.n_medium} medium + {args.n_hard} hard")
+    print(f"Seed: {args.seed}")
 
     import yaml
     with open(args.config, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     loader = DataLoader(config)
+    rng = random.Random(args.seed)
 
     # Collect train datasets: all PATS fonts + optionally KHATT
     datasets_cfg = config.get("datasets", [])
@@ -105,8 +170,13 @@ def main() -> None:
 
     print(f"Scanning {len(train_datasets)} datasets: {train_datasets}")
 
-    # Score every sample
-    all_scored: list[dict] = []
+    # Score every sample into buckets
+    buckets: dict[str, list[dict]] = {
+        "correct": [],
+        "easy": [],
+        "medium": [],
+        "hard": [],
+    }
 
     for ds_key in train_datasets:
         try:
@@ -116,6 +186,8 @@ def main() -> None:
             continue
 
         n_skipped = 0
+        ds_counts = {"correct": 0, "easy": 0, "medium": 0, "hard": 0}
+
         for s in samples:
             gt_norm = normalise_arabic(s.gt_text, remove_diacritics=True)
             ocr_norm = normalise_arabic(s.ocr_text, remove_diacritics=True)
@@ -132,43 +204,62 @@ def main() -> None:
 
             cer = calculate_cer(s.gt_text, s.ocr_text, strip_diacritics=True)
 
-            # Skip perfect/near-perfect
-            if cer < args.min_cer:
-                continue
-
-            all_scored.append({
+            entry = {
                 "sample_id": s.sample_id,
                 "dataset": ds_key,
                 "font": s.font,
                 "cer": round(cer, 6),
                 "gt_chars": len(gt_norm),
                 "ocr_chars": len(ocr_norm),
-            })
+            }
 
+            if cer == 0.0:
+                buckets["correct"].append(entry)
+                ds_counts["correct"] += 1
+            elif cer <= _CER_EASY_MAX:
+                buckets["easy"].append(entry)
+                ds_counts["easy"] += 1
+            elif cer <= _CER_MEDIUM_MAX:
+                buckets["medium"].append(entry)
+                ds_counts["medium"] += 1
+            else:
+                buckets["hard"].append(entry)
+                ds_counts["hard"] += 1
+
+        scored = sum(ds_counts.values())
         print(f"  {ds_key}: {len(samples)} total, {n_skipped} skipped, "
-              f"{len([x for x in all_scored if x['dataset'] == ds_key])} scored")
+              f"{scored} scored "
+              f"(C:{ds_counts['correct']} E:{ds_counts['easy']} "
+              f"M:{ds_counts['medium']} H:{ds_counts['hard']})")
 
-    if not all_scored:
+    print(f"\nPool sizes: correct={len(buckets['correct'])}, "
+          f"easy={len(buckets['easy'])}, medium={len(buckets['medium'])}, "
+          f"hard={len(buckets['hard'])}")
+
+    # Stratified selection with font diversity
+    targets = {
+        "correct": args.n_correct,
+        "easy": args.n_easy,
+        "medium": args.n_medium,
+        "hard": args.n_hard,
+    }
+
+    selected_by_bucket: dict[str, list[dict]] = {}
+    for bucket_name, target_n in targets.items():
+        selected_by_bucket[bucket_name] = _select_with_font_diversity(
+            buckets[bucket_name], target_n, rng,
+        )
+
+    # Combine all buckets, tag each sample with its category
+    selected: list[dict] = []
+    for bucket_name in ("correct", "easy", "medium", "hard"):
+        for s in selected_by_bucket[bucket_name]:
+            s["category"] = bucket_name
+            selected.append(s)
+
+    if not selected:
         print("No samples matched the criteria!")
         sys.exit(1)
-
-    # Sort by CER descending (hardest first)
-    all_scored.sort(key=lambda x: x["cer"], reverse=True)
-
-    # Select hard samples (highest CER) from the top
-    hard_samples = all_scored[:n_hard]
-
-    # Select easy samples (lowest CER) from the bottom, avoiding overlap
-    remaining = all_scored[n_hard:]
-    easy_samples = remaining[-n_easy:] if n_easy > 0 else []
-
-    # Combine: hard first, then easy
-    selected = hard_samples + easy_samples
-
-    # Tag each sample with its category
-    hard_ids = {s["sample_id"] for s in hard_samples}
-    for s in selected:
-        s["category"] = "hard" if s["sample_id"] in hard_ids else "easy"
 
     # Summary stats
     datasets_in_selection: dict[str, int] = {}
@@ -176,35 +267,43 @@ def main() -> None:
         ds = s["dataset"]
         datasets_in_selection[ds] = datasets_in_selection.get(ds, 0) + 1
 
-    avg_cer = sum(s["cer"] for s in selected) / len(selected)
-    min_cer = min(s["cer"] for s in selected)
-    max_cer = max(s["cer"] for s in selected)
+    all_cers = [s["cer"] for s in selected]
+    avg_cer = sum(all_cers) / len(all_cers)
+    min_cer = min(all_cers)
+    max_cer = max(all_cers)
 
     print(f"\nSelected {len(selected)} test samples:")
     print(f"  Overall CER range: {min_cer:.4f} - {max_cer:.4f} (avg {avg_cer:.4f})")
-    _print_selection_stats("Hard", hard_samples)
-    _print_selection_stats("Easy", easy_samples)
+    for bucket_name in ("correct", "easy", "medium", "hard"):
+        label = bucket_name.capitalize()
+        _print_bucket_stats(label, selected_by_bucket[bucket_name])
     print(f"  By dataset:")
     for ds, count in sorted(datasets_in_selection.items()):
         print(f"    {ds}: {count}")
 
     # Build output
+    bucket_counts = {
+        name: len(samples) for name, samples in selected_by_bucket.items()
+    }
     output = {
         "meta": {
             "description": (
-                f"Test samples: {n_hard} hard ({args.hard_ratio:.0%}) + "
-                f"{n_easy} easy ({args.easy_ratio:.0%}) by CER (no-diacritics)"
+                f"Stratified test samples: {bucket_counts['correct']} correct + "
+                f"{bucket_counts['easy']} easy + {bucket_counts['medium']} medium + "
+                f"{bucket_counts['hard']} hard (by CER, no-diacritics)"
             ),
             "total_selected": len(selected),
-            "n_hard": len(hard_samples),
-            "n_easy": len(easy_samples),
-            "hard_ratio": args.hard_ratio,
-            "easy_ratio": args.easy_ratio,
+            "by_category": bucket_counts,
+            "cer_boundaries": {
+                "correct": 0.0,
+                "easy_max": _CER_EASY_MAX,
+                "medium_max": _CER_MEDIUM_MAX,
+            },
             "selection_criteria": {
                 "min_gt_chars": args.min_gt_chars,
                 "max_runaway_ratio": args.max_runaway_ratio,
-                "min_cer": args.min_cer,
                 "include_khatt": args.include_khatt,
+                "seed": args.seed,
             },
             "cer_range": {"min": min_cer, "max": max_cer, "avg": round(avg_cer, 6)},
             "by_dataset": datasets_in_selection,
