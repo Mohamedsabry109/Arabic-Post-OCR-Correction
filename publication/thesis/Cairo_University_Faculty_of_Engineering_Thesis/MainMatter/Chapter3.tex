@@ -1,4 +1,946 @@
-\setstretch{1}
-\setlength{\parskip}{\baselineskip}
+\setstretch{1.5}
+\setlength{\parskip}{0.5\baselineskip}
 
-Chapter 3 content goes here.
+This chapter describes the complete experimental infrastructure underlying the study.
+The goal is to provide sufficient detail for full reproducibility: a reader should be
+able to reconstruct the pipeline, datasets, preprocessing steps, and software modules
+from this chapter alone.
+Section~\ref{sec:arch} introduces the three-stage pipeline architecture.
+Section~\ref{sec:datasets} describes the corpora used.
+Section~\ref{sec:eval} covers preprocessing and evaluation.
+Section~\ref{sec:kb} describes the knowledge base components used across phases.
+Section~\ref{sec:llm_module} documents the LLM correction module.
+Section~\ref{sec:promptbuilder} presents the \texttt{PromptBuilder} and all prompt
+variants.
+
+% ============================================================
+\section{Overall Architecture}
+\label{sec:arch}
+% ============================================================
+
+The primary constraint shaping system design is the absence of local GPU access.
+The research workstation can load and process text data efficiently but cannot
+run a 4-billion-parameter language model at useful inference speed.
+At the same time, cloud GPU platforms such as Kaggle and Google Colab provide
+free access to NVIDIA T4 GPUs that are well-suited for this model size.
+The architecture is designed to exploit this resource split cleanly.
+
+\subsection{Three-Stage Pipeline}
+\label{subsec:pipeline}
+
+The pipeline is divided into three stages that communicate through a single
+intermediary file in JSON Lines format (JSONL).
+Fig.~\ref{fig:pipeline} illustrates the flow.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  box/.style={rectangle, draw, rounded corners=4pt, minimum width=3.2cm,
+              minimum height=1.1cm, align=center, font=\small},
+  arrow/.style={-{Stealth[length=7pt]}, thick},
+  lbl/.style={font=\scriptsize\itshape, text width=3cm, align=center}
+]
+  \node[box, fill=blue!10]   (export)  at (0,0)  {Export Stage\\{\footnotesize (local machine)}};
+  \node[box, fill=green!10]  (infer)   at (5.5,0) {Inference Stage\\{\footnotesize (Kaggle / Colab GPU)}};
+  \node[box, fill=orange!10] (analyze) at (11,0)  {Analyze Stage\\{\footnotesize (local machine)}};
+
+  \draw[arrow] (export)  -- node[above,font=\scriptsize]{\texttt{inference\_input.jsonl}} (infer);
+  \draw[arrow] (infer)   -- node[above,font=\scriptsize]{\texttt{corrections.jsonl}}      (analyze);
+
+  \node[lbl, below=0.6cm of export]  {Load OCR + GT\\Build prompts\\Write JSONL};
+  \node[lbl, below=0.6cm of infer]   {Load model\\Run prompts\\Append corrections};
+  \node[lbl, below=0.6cm of analyze] {Read corrections\\Compute CER/WER\\Write reports};
+\end{tikzpicture}
+\caption{Three-stage pipeline architecture. Stages communicate via JSONL files on disk,
+         enabling inference to run on any cloud GPU without requiring direct access to
+         local data files.}
+\label{fig:pipeline}
+\end{figure}
+
+\textbf{Stage 1 --- Export} runs on the local machine.
+Each phase pipeline (e.g.\ \texttt{pipelines/run\_phase2.py}) loads the dataset,
+pairs each OCR prediction with its ground-truth text, builds the phase-specific
+prompt for each sample using \texttt{PromptBuilder}, and writes one JSON object
+per sample to \texttt{inference\_input.jsonl}.
+The file is stored under a phase- and dataset-specific results directory and is
+transferred to the cloud environment by cloning the repository directly.
+
+\textbf{Stage 2 --- Inference} runs on a Kaggle kernel or Google Colab notebook.
+The script \texttt{scripts/infer.py} is the unified inference entry point for all
+phases.
+It loads the model and tokenizer once at startup, then reads
+\texttt{inference\_input.jsonl} line by line, generates a correction for each
+prompt, and appends the result to \texttt{corrections.jsonl}.
+A resume mechanism reads the output file on startup and skips any sample whose
+\texttt{sample\_id} already appears in it, making the inference step fully
+restartable after an interruption without duplicating work.
+
+\textbf{Stage 3 --- Analyze} runs on the local machine after inference completes.
+The phase pipeline reads \texttt{corrections.jsonl}, computes CER and WER for each
+sample by comparing the corrected text against the ground truth, aggregates
+statistics across the dataset, and writes structured JSON reports and a
+human-readable Markdown summary.
+
+\subsection{JSONL Record Format}
+\label{subsec:jsonl}
+
+Each line in both JSONL files is a self-contained JSON object.
+Table~\ref{tab:jsonl} lists all fields and their purpose.
+
+\begin{table}[ht]
+\caption{Fields in the inference JSONL files. All fields from the export stage are
+         preserved through inference; the \texttt{correction} and status fields are
+         appended by the inference script.}
+\label{tab:jsonl}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lll}
+\toprule
+\textbf{Field} & \textbf{Stage added} & \textbf{Description} \\
+\midrule
+\texttt{sample\_id}      & Export    & Unique identifier: \texttt{dataset:file\_stem} \\
+\texttt{dataset}         & Export    & Dataset key, e.g.\ \texttt{PATS-A01-Akhbar-train} \\
+\texttt{ocr\_text}       & Export    & Raw Qaari prediction string \\
+\texttt{gt\_text}        & Export    & Ground-truth text (for analysis stage only) \\
+\texttt{prompt}          & Export    & Serialised chat messages list (JSON array) \\
+\texttt{prompt\_version} & Export    & Version tag, e.g.\ \texttt{p2v2}, \texttt{p3v1} \\
+\texttt{correction}      & Inference & LLM output text \\
+\texttt{success}         & Inference & \texttt{true} if generation succeeded; else fallback used \\
+\texttt{latency\_s}      & Inference & Wall-clock generation time in seconds \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+This design has several practical advantages.
+The inference machine needs no file-system access beyond the JSONL input file:
+all ground-truth text, phase-specific context, and metadata are embedded in each
+record at export time.
+Adding a new phase requires only implementing a new \texttt{PromptBuilder} method
+and a new pipeline script; the inference script and analysis logic are unchanged.
+Finally, the JSONL format is human-readable and can be inspected with any text
+editor or streamed through standard command-line tools for quick sanity checks.
+
+\subsection{Resume and Force-Rerun Behaviour}
+\label{subsec:resume}
+
+All three stages implement resumable execution.
+The export stage checks whether the target \texttt{inference\_input.jsonl} already
+contains a record for a given dataset key before processing it, enabling partial
+re-runs after adding new datasets.
+The inference stage reads the output file on startup and populates a set of
+completed \texttt{sample\_id} values; any sample already in the set is skipped.
+The analyze stage checks whether the primary output file
+(\texttt{results/<phase>/<dataset>/metrics.json}) already exists before
+recomputing metrics.
+All stages accept a \texttt{--force} flag to override resume behaviour and
+reprocess everything from scratch.
+This design prevents accidental data loss while keeping re-runs cheap when only
+a subset of datasets changes.
+
+% ============================================================
+\section{Datasets}
+\label{sec:datasets}
+% ============================================================
+
+Two Arabic text datasets are included in the study.
+All quantitative experiments reported in this thesis use a single dataset:
+PATS-A01, Akhbar font, training split, 200 samples.
+The KHATT dataset is included in the data loading infrastructure but its
+evaluation is deferred to future work.
+
+\subsection{PATS-A01 --- Printed Arabic Text Set}
+\label{subsec:pats}
+
+PATS-A01 is a publicly available Arabic typewritten text recognition dataset.
+It contains page images of Arabic text typeset in eight distinct fonts, together
+with line-level and page-level ground truth.
+
+\subsubsection{Fonts and Coverage}
+
+The eight fonts included in PATS-A01 are:
+Akhbar, Andalus, Arial, DecoType Naskh, Simplified Arabic, Tahoma, Thuluth,
+and Traditional Arabic.
+These fonts span a wide range of visual styles from the clean modern sans-serif
+Tahoma to the decorative classical Thuluth, providing diversity in glyph shape
+and rendering complexity that elicits different OCR error patterns across fonts.
+All experiments in this thesis use the Akhbar font, which is a common newspaper
+display font representative of modern typewritten Arabic.
+
+\subsubsection{Ground-Truth Encoding}
+
+Ground-truth files are encoded in Windows Arabic Code Page 1256 (CP-1256), a
+legacy single-byte encoding used widely in Arabic software on Windows systems.
+The DataLoader (\texttt{src/data/data\_loader.py}) converts all ground-truth text
+to UTF-8 at load time before any downstream processing.
+The Traditional font uses a differently named ground-truth file
+(\texttt{TraditionalText.txt}) instead of the naming convention followed by the
+other seven fonts (\texttt{A01-\{font\}Text.txt}); the DataLoader handles this
+as a special case.
+
+\subsubsection{Train/Validation Split}
+
+PATS-A01 does not provide an official train/validation split.
+An 80/20 random split was generated using the script
+\texttt{scripts/generate\_pats\_splits.py} with a fixed random seed (42) for
+reproducibility.
+The resulting split is stored as a JSON file at
+\texttt{data/ocr-raw-data/PATS\_A01\_Dataset/pats\_splits.json}
+and records sample identifiers assigned to either the training or validation
+partition.
+Each font yields 2,213 training samples and 553 validation samples
+(2,766 total per font).
+Each dataset configuration entry uses the field
+\texttt{pats\_split: "train"} or \texttt{pats\_split: "validation"}
+to select the appropriate partition at load time, ensuring that experiments
+that evaluate on training data are never accidentally contaminated with
+validation samples.
+
+\subsubsection{Scope of This Thesis}
+
+All quantitative experiments use the Akhbar font training split.
+A random sample of 200 items is drawn from this split for all phase comparisons,
+providing a practical compute budget (each of the 200 samples requires one model
+inference call) while remaining large enough for meaningful statistical analysis.
+Phase~4D additionally uses the validation split to analyse error patterns on
+held-out data, as described in Chapter~4.
+
+\subsection{KHATT --- Khatt Arabic Handwritten Text}
+\label{subsec:khatt}
+
+KHATT is an Arabic handwritten text dataset \cite{mahmoud2014khatt}.
+It contains text written by multiple writers in unconstrained natural handwriting,
+representing realistic variation in stroke style, baseline angle, character
+connectivity, and ink characteristics.
+The dataset provides separate training and validation splits.
+Within this project, Qaari results for KHATT are stored under
+\texttt{data/ocr-results/qaari-results/khatt-data/\{split\}/\{Training|Validation\}/}
+and the DataLoader supports them using the keys \texttt{KHATT-train} and
+\texttt{KHATT-validation}.
+Quantitative evaluation on KHATT is deferred to future work because the primary
+research question --- whether prompt augmentation improves correction on
+high-quality typewritten Arabic --- is best studied on a controlled, homogeneous
+dataset first.
+KHATT is expected to present a more challenging OCR baseline due to unconstrained
+handwriting, and it is plausible that knowledge augmentation strategies would
+behave differently in that setting.
+
+\subsection{Dataset Statistics}
+\label{subsec:dataset_stats}
+
+Table~\ref{tab:datasets} summarises all datasets included in the system.
+
+\begin{table}[ht]
+\caption{Dataset summary. ``Evaluated'' is the number of samples used in experiments
+         reported in this thesis. ``---'' indicates that statistics depend on
+         writer count and session structure not yet fully catalogued.}
+\label{tab:datasets}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{lllrrl}
+\toprule
+\textbf{Dataset Key} & \textbf{Type} & \textbf{Split} & \textbf{Total} & \textbf{Evaluated} & \textbf{Notes} \\
+\midrule
+PATS-A01-Akhbar-train      & Typewritten & Train      & 2,213 & 200 & Primary evaluation \\
+PATS-A01-Akhbar-val        & Typewritten & Validation & 553   & 200 & Phase~4D only \\
+PATS-A01-Andalus-\{train|val\} & Typewritten & Both   & 2,766 & 0   & Future work \\
+PATS-A01-Arial-\{train|val\}   & Typewritten & Both   & 2,766 & 0   & Future work \\
+PATS-A01-Naskh-\{train|val\}   & Typewritten & Both   & 2,766 & 0   & Future work \\
+PATS-A01-Simplified-\{train|val\} & Typewritten & Both & 2,766 & 0  & Future work \\
+PATS-A01-Tahoma-\{train|val\}  & Typewritten & Both   & 2,766 & 0   & Future work \\
+PATS-A01-Thuluth-\{train|val\} & Typewritten & Both   & 2,766 & 0   & Future work \\
+PATS-A01-Traditional-\{train|val\} & Typewritten & Both & 2,766 & 0 & Future work \\
+KHATT-train                & Handwritten & Train      & ---   & 0   & Future work \\
+KHATT-validation           & Handwritten & Validation & ---   & 0   & Future work \\
+\midrule
+\multicolumn{4}{l}{\footnotesize Total PATS-A01 font-split combinations: 16 (8 fonts $\times$ 2 splits)} & & \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{OCR Results Format}
+\label{subsec:ocr_format}
+
+Qaari produces one plain-text \texttt{.txt} file per input image.
+Each file contains the recognised text for that document page.
+OCR results are stored under \texttt{data/ocr-results/qaari-results/} with
+sub-directories organised by dataset type:
+\begin{itemize}
+  \item PATS-A01: \texttt{qaari-results/pats-a01-data/A01-\{font\}/}
+  \item KHATT:    \texttt{qaari-results/khatt-data/\{split\}/\{Training|Validation\}/}
+\end{itemize}
+
+\noindent
+The DataLoader pairs each OCR file with its corresponding ground-truth entry by
+matching the file stem.
+The OCR engine is configurable: the configuration field \texttt{data.ocr\_model}
+names the sub-directory within \texttt{data/ocr-results/} that holds all results
+for that engine.
+Changing this field switches the entire pipeline to a different OCR engine's output
+directory without any code modification.
+This design anticipates future comparative studies across multiple Arabic OCR engines.
+
+% ============================================================
+\section{Preprocessing and Evaluation}
+\label{sec:eval}
+% ============================================================
+
+\subsection{Text Normalisation}
+\label{subsec:norm}
+
+Text normalisation is applied identically to both the hypothesis (OCR output or
+LLM correction) and the reference (ground truth) before any metric is computed.
+The following transformations are applied:
+
+\begin{enumerate}
+  \item \textbf{Diacritic stripping.}
+        Arabic short vowel marks (harakat/tashkeel) occupy Unicode code points
+        U+064B through U+065F and related ranges (U+0610--U+061A for extended
+        marks, U+0670 for the superscript alef).
+        These characters are removed from both texts before computing CER and WER.
+        The rationale is that diacritics are stylistically optional in most
+        modern Arabic text; their presence or absence does not change lexical
+        identity.
+        Penalising a corrector for changing a diacritised form to the same word
+        without diacritics, or for failing to add diacritics that were absent in
+        the OCR input, would conflate orthographic convention with correction
+        quality.
+        Both the raw metric (with diacritics) and the normalised metric (without
+        diacritics) are computed and stored in all result files;
+        the diacritic-stripped variant is reported as primary throughout this thesis.
+
+  \item \textbf{Tatweel removal.}
+        The Arabic elongation character tatweel (kashida, U+0640) is a decorative
+        stroke that extends word shapes without changing lexical identity.
+        It is removed from both texts before metric computation.
+
+  \item \textbf{No letter normalisation.}
+        Alef variants, hamza forms, and the alef maqsura / ya distinction are
+        \emph{not} normalised before evaluation.
+        Collapsing these distinctions (e.g.\ mapping all alef variants to a
+        bare alef) would mask a class of errors that the study specifically
+        aims to measure.
+        The confusion matrix and error taxonomy both depend on the uncollapsed
+        character set.
+\end{enumerate}
+
+\noindent
+Normalisation is implemented in \texttt{src/data/text\_utils.py::normalise\_arabic()}.
+
+\subsection{CER and WER Computation}
+\label{subsec:metrics}
+
+\subsubsection{Definitions}
+
+Character Error Rate (CER) measures the minimum edit distance between the hypothesis
+string $h$ and the reference string $r$ at the character level, normalised by the
+length of the reference:
+\begin{equation}\label{eq:cer}
+  \mathrm{CER} = \frac{S_c + D_c + I_c}{N_c}
+\end{equation}
+where $S_c$, $D_c$, and $I_c$ are the number of character-level substitutions,
+deletions, and insertions in the minimum-edit alignment, and $N_c$ is the total
+number of characters in the reference.
+Word Error Rate (WER) applies the same formula at the word level, treating
+whitespace-delimited tokens as the atomic unit:
+\begin{equation}\label{eq:wer}
+  \mathrm{WER} = \frac{S_w + D_w + I_w}{N_w}
+\end{equation}
+CER is the primary metric throughout this thesis.
+Arabic morphology makes word-level metrics more sensitive to tokenisation choices;
+character-level errors more directly capture the visual confusion phenomena (dot
+placement, shape similarity) that are the dominant error type in Arabic OCR.
+
+\subsubsection{Implementation}
+
+CER is computed using the \texttt{editdistance} library, which provides an
+efficient implementation of the Levenshtein distance.
+WER is computed using the \texttt{jiwer} library.
+Both are computed \emph{per sample first}, then aggregated:
+\begin{equation}\label{eq:sample_cer}
+  \mathrm{CER}_i = \frac{\mathrm{editdistance}(h_i,\, r_i)}{\max(|r_i|, 1)}
+\end{equation}
+where $|r_i|$ is the reference character count for sample $i$.
+Using per-sample CER (rather than pooling all characters across the corpus) ensures
+that every sample contributes equally to the aggregate mean regardless of its length.
+This prevents the few long documents in the dataset from dominating the statistic.
+
+Aggregate statistics reported for each dataset-phase combination are:
+mean CER ($\mu$), standard deviation ($\sigma$), median, and 95th percentile (p95).
+The standard deviation quantifies variability across samples; the p95 captures
+worst-case performance and is particularly useful for identifying the impact of
+catastrophic OCR failures such as the repetition artifact described in Chapter~5.
+
+\subsection{Error Taxonomy Construction}
+\label{subsec:taxonomy}
+
+Phase~1 classifies each substitution error into one of seven categories based on
+the character pair (ground-truth character, OCR character) found in the minimum-edit
+alignment between ground-truth and OCR text.
+Table~\ref{tab:taxonomy} defines each category and its detection criterion.
+Categories are applied in order; a substitution that matches an earlier category
+is not re-counted in a later one.
+
+\begin{table}[ht]
+\caption{Error taxonomy used in Phase~1 baseline analysis. Categories are ordered
+         from most specific (dot confusion) to most general (other substitution).}
+\label{tab:taxonomy}
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabularx}{\linewidth}{lX}
+\toprule
+\textbf{Category} & \textbf{Detection criterion} \\
+\midrule
+Dot confusion
+  & Substitution between characters that share the same base glyph and differ
+    only in the number or position of diacritical dots:
+    \{ba, ta, tha, nun, ya\},
+    \{qaf, fa\},
+    \{jim, ha, kha\},
+    \{dal, dhal\}. \\
+Hamza errors
+  & Substitution among alef variants or between hamza forms:
+    alef, alef with hamza above, alef with hamza below, alef madda,
+    hamza alone, hamza on waw seat, hamza on ya seat. \\
+Taa marbuta
+  & Substitution between taa marbuta (feminine ending) and ha,
+    which share the same base shape and differ only by two dots. \\
+Alef maqsura
+  & Substitution between alef maqsura (word-final /a/ written with a
+    ya-shaped letter without dots) and ya (with dots). \\
+Similar shapes
+  & Substitution between characters sharing the same skeleton but differing
+    in secondary visual features:
+    \{ra, zay\}, \{dal, dhal\}, \{ta marbuta, ha\},
+    \{ta with extended tail (ط), dha (ظ)\}. \\
+Merged words
+  & Fewer words in the OCR output than in the ground truth;
+    a word boundary is missing. \\
+Split words
+  & More words in the OCR output than in the ground truth;
+    a spurious word boundary is inserted. \\
+Insertion / Deletion / Other
+  & All remaining edit operations: character insertions, character deletions,
+    and substitutions not classified by any of the above categories. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ============================================================
+\section{Knowledge Base Components}
+\label{sec:kb}
+% ============================================================
+
+Phases~3 through~5 (and Phase~6) each inject a different type of external knowledge
+into the LLM prompt.
+All knowledge loaders are implemented in \texttt{src/data/knowledge\_base.py}
+and share a common interface: a \texttt{load()} method that reads source data
+and a \texttt{format\_for\_prompt()} method that returns a plain Arabic string
+ready for insertion into a system prompt.
+
+\subsection{Confusion Matrix Loader}
+\label{subsec:kb_confusion}
+
+\texttt{ConfusionMatrixLoader} reads the \texttt{confusion\_matrix.json} file
+produced by Phase~1.
+The confusion matrix records, for every ground-truth character, the frequency
+with which Qaari substituted each other character in its place.
+
+The loader supports two code paths.
+If the Phase~1 output contains a pre-computed \texttt{top\_20} sorted list, it is
+used directly for efficiency.
+Otherwise, the full confusion dictionary is flattened and sorted by substitution
+count.
+The \texttt{format\_for\_prompt()} method selects the top-$N$ confusion pairs
+(default $N = 10$, configured via \texttt{phase3.top\_n} in
+\texttt{configs/config.yaml}) and formats them as an Arabic-language bullet list,
+where each item identifies a source character and its most common Qaari substitute.
+
+A dataset with fewer than 200 total substitutions (threshold configurable as
+\texttt{phase3.min\_substitutions}) falls back to a pooled confusion matrix
+aggregated across all datasets of the same type (e.g.\ all PATS-A01 training
+datasets).
+This prevents noise-dominated confusion matrices from individual small datasets
+from distorting the injection content.
+
+\subsection{Rules Loader}
+\label{subsec:kb_rules}
+
+\texttt{RulesLoader} loads Arabic orthographic rules from the directory
+\texttt{data/rules/}, which contains JSONL files (one rule object per line) with
+fields for the rule text, its category, and example words illustrating the rule.
+The loader selects rules across three files: orthography, morphology, and syntax.
+The \texttt{format\_for\_prompt()} method formats the selected rules as a
+numbered instruction list in Arabic.
+
+Table~\ref{tab:rules} lists the primary orthographic rule categories injected in
+Phase~4A.
+These categories were chosen because they correspond to the error types most
+likely to appear in Arabic typewritten OCR output, as confirmed by the Phase~1
+confusion matrix and error taxonomy.
+
+\begin{table}[ht]
+\caption{Arabic orthographic rule categories used in Phase~4A. Each category
+         targets a specific phenomenon that both human writers and OCR engines
+         commonly mishandle.}
+\label{tab:rules}
+\centering
+\renewcommand{\arraystretch}{1.35}
+\begin{tabularx}{\linewidth}{lX}
+\toprule
+\textbf{Rule category} & \textbf{Description and OCR relevance} \\
+\midrule
+Hamza al-qat' (cutting hamza)
+  & Hamza written visibly above or below the alef in all positions.
+    OCR frequently drops the hamza diacritic and outputs a bare alef. \\
+Hamza al-wasl (conjunctive hamza)
+  & An alef at the start of certain verb forms and nouns whose hamza is
+    elided in connected speech and not written.
+    Distinguishing these two types governs the spelling of the definite
+    article (\textit{al-}), some verbal nouns, and Arabic proper nouns. \\
+Taa marbuta vs.\ ha
+  & The feminine ending taa marbuta and the letter ha share the same base
+    shape; OCR dot-placement errors cause frequent confusion between them. \\
+Alef maqsura vs.\ ya
+  & Word-final /a/ written as alef maqsura (a ya-shaped letter without dots)
+    is frequently confused with ya (with two dots below) by OCR. \\
+Tanwin (nunation)
+  & Double-diacritic marking for indefinite nouns; the accusative tanwin
+    al-fath is written as a doubled fatha above an alef, which OCR may
+    misread or drop. \\
+Definite article assimilation
+  & Sun letters assimilate the lam of the definite article (\textit{al-});
+    moon letters do not.
+    This governs whether the written lam appears explicitly in the word. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{QALB Loader and Filtering}
+\label{subsec:kb_qalb}
+
+\texttt{QALBLoader} reads the Qatar Arabic Language Bank (QALB) corpus from
+\texttt{data/QALB-0.9.1-Dec03-2021-SharedTasks/}.
+QALB contains human-authored Arabic sentences paired with manually corrected
+versions, annotating grammatical, spelling, and punctuation errors.
+The 2014 training split is used in this study.
+
+After loading, the following filters are applied in sequence:
+
+\begin{enumerate}
+  \item \textbf{Length filter.}
+        Pairs with source sentences shorter than 10 characters or longer than
+        300 characters are discarded.
+        The upper bound of 300 characters was determined empirically:
+        QALB sentences average between 161 and 594 characters, so a stricter
+        original default of 100 characters eliminated the entire corpus.
+
+  \item \textbf{Word-change filter.}
+        Pairs where the correction modifies more than 15 words are discarded.
+        Heavily-edited sentences are unsuitable as demonstrations because they
+        may signal to the model that aggressive rewriting is expected.
+
+  \item \textbf{OCR-relevance filter.}
+        A pair is retained only if its error type overlaps with known OCR error
+        patterns: dot-group substitutions, alef/hamza variants, taa marbuta / ha
+        swaps, or similar-shape confusions.
+        Pairs that correct purely grammatical or agreement errors without any
+        spelling-level change are discarded, as they could teach the model to
+        make rewrites that OCR would never introduce.
+\end{enumerate}
+
+\noindent
+After all three filters, 528 OCR-relevant pairs are available.
+At inference time, Phase~4B selects 5 pairs using a diversity-maximising strategy
+(\texttt{selection: "diverse"}) that ensures the selected examples span multiple
+error categories rather than repeating the same phenomenon.
+
+\subsection{OpenITI Corpus and RAG Index}
+\label{subsec:kb_openiti}
+
+\texttt{OpenITILoader} extracts clean Arabic sentences from the Open Islamicate
+Texts Initiative (OpenITI) corpus at \texttt{data/OpenITI/}.
+OpenITI is a large-scale digitised collection of Islamicate texts spanning
+classical Arabic, Persian, and other languages of the Islamic scholarly tradition,
+containing hundreds of millions of words of Arabic text.
+It was chosen for RAG because of its size, which allows construction of a large
+and varied retrieval index.
+
+\subsubsection{Corpus Processing}
+
+The loader reads an inventory CSV file that records the local path and metadata
+of each OpenITI text file.
+Each text file is split into candidate sentences at punctuation boundaries
+(full stop, question mark, exclamation mark, and the Arabic semicolon U+061B).
+Sentences shorter than 30 characters or longer than 300 characters are discarded.
+Up to 200,000 sentences are sampled from primary-status texts (those with
+\texttt{status: "pri"} in OpenITI metadata), using a fixed random seed (42).
+
+\subsubsection{FAISS Retrieval Index}
+
+The filtered sentences are embedded using the multilingual sentence encoder
+\texttt{sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2},
+an efficient 12-layer model covering over 50 languages including Arabic.
+Embeddings are computed in batches of 256 and indexed in a FAISS flat
+inner-product index (\texttt{FlatIP}).
+The index is built once locally by running
+\texttt{python pipelines/run\_phase5.py --mode build} and saved to disk.
+
+At inference time, each OCR input text is embedded as a query and the top-3
+most similar sentences are retrieved by inner-product similarity.
+These sentences are formatted as a numbered Arabic list and injected into the
+system prompt as grounding context.
+An important caveat on domain match is discussed in Chapter~5: OpenITI contains
+classical and historical Arabic, while the PATS-A01 Akhbar dataset contains modern
+newspaper text.
+The semantic overlap between these domains is low, which affects the quality of
+retrieved passages.
+
+\subsection{CAMeL Tools Integration}
+\label{subsec:kb_camel}
+
+CAMeL Tools is an open-source Arabic NLP toolkit developed at the Computational
+Approaches to Modeling Language (CAMeL) Lab, NYU Abu Dhabi \cite{obeid2020camel}.
+This study uses its morphological analysis component, backed by the Modern Standard
+Arabic database \texttt{calima-msa-r13}.
+
+\subsubsection{MorphAnalyzer}
+
+\texttt{src/linguistic/morphology.py::MorphAnalyzer} wraps the CAMeL Tools
+\texttt{MorphologicalAnalyzer} with two extensions:
+
+\begin{itemize}
+  \item \textbf{LRU cache.}
+        The morphological analyser is computationally expensive per lookup.
+        Repeated queries for the same token are served from a Least-Recently-Used
+        cache of size 10,000, avoiding redundant analyser calls for frequently
+        occurring words.
+
+  \item \textbf{Graceful degradation.}
+        If \texttt{camel\_tools} is not installed or the morphology database has
+        not been downloaded, \texttt{MorphAnalyzer.analyse()} returns \texttt{None}
+        rather than raising an exception.
+        Downstream code that checks for \texttt{None} can continue in a degraded
+        mode without CAMeL-based functionality.
+\end{itemize}
+
+\subsubsection{WordValidator and the Revert Strategy}
+
+\texttt{src/linguistic/validator.py::WordValidator} implements the Phase~4C
+post-processing logic.
+For each word token in the LLM-corrected output, it applies the following
+decision rule:
+
+\begin{quote}
+If the LLM correction for a word \emph{fails} morphological analysis (zero valid
+analyses) \emph{and} the corresponding OCR word \emph{passes} morphological
+analysis (at least one valid analysis), revert to the OCR word.
+\end{quote}
+
+\noindent
+The strategy is deliberately conservative.
+It can only revert a word to the OCR original; it cannot introduce a new word
+that neither the OCR nor the LLM produced.
+Consequently, the revert strategy has no downside risk on any word it touches,
+but its upside is limited to cases where the LLM introduces a morphologically
+invalid Arabic form while the OCR had a morphologically valid one.
+The validator records summary statistics for each text: total Arabic tokens
+compared, reverted count, and revert rate.
+
+\subsection{LLM Insights Loader}
+\label{subsec:kb_insights}
+
+\texttt{LLMInsightsLoader} reads JSON files from
+\texttt{results/phase4d/insights/}, which are produced during Phase~4D's
+training-split analysis step.
+Each file records, for each error category, two statistics derived from comparing
+Phase~2 LLM corrections against ground truth on the training split:
+\begin{itemize}
+  \item \texttt{fix\_rate}: the fraction of OCR errors of that category that
+        the LLM correctly fixed (higher is better).
+  \item \texttt{introduction\_rate}: the fraction of ground-truth tokens of that
+        category that the LLM \emph{incorrectly} changed (lower is better).
+\end{itemize}
+The loader converts these statistics into Arabic-language diagnostic sentences
+using the following logic:
+error types with \texttt{fix\_rate} $> 0.6$ are reported as strengths;
+those with \texttt{fix\_rate} $< 0.4$ are reported as weaknesses;
+those with \texttt{introduction\_rate} $> 0.05$ are flagged as over-correction
+risks.
+Statistics are aggregated at the dataset-type level (PATS-A01 vs.\ KHATT) to
+smooth per-sample noise.
+Up to three weaknesses and two over-correction warnings are injected into the
+Phase~4D system prompt (configurable thresholds in \texttt{phase4d.insights}).
+
+% ============================================================
+\section{The LLM Correction Module}
+\label{sec:llm_module}
+% ============================================================
+
+\subsection{Class Hierarchy}
+\label{subsec:corrector_arch}
+
+All LLM backend implementations share a common abstract interface defined in
+\texttt{src/core/llm\_corrector.py}.
+Fig.~\ref{fig:corrector} shows the class hierarchy.
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[
+  cls/.style={rectangle, draw, rounded corners=3pt, minimum width=4.5cm,
+              minimum height=0.9cm, align=center, font=\small},
+  inh/.style={-{open triangle 60}, thick}
+]
+  \node[cls, fill=gray!15] (base) at (0,0) {\texttt{BaseLLMCorrector} (abstract)};
+  \node[cls, fill=blue!10] (tc)  at (-4,-2.5) {\texttt{TransformersCorrector}};
+  \node[cls, fill=green!10](mock) at (0,-2.5) {\texttt{MockCorrector}};
+  \node[cls, fill=orange!10](api) at (4,-2.5)  {\texttt{APICorrector}};
+
+  \draw[inh] (tc.north)   -- ++(0,0.7) -| (base.south);
+  \draw[inh] (mock.north) -- (base.south);
+  \draw[inh] (api.north)  -- ++(0,0.7) -| (base.south);
+\end{tikzpicture}
+\caption{LLM corrector class hierarchy. All pipeline code depends only on the
+         \texttt{BaseLLMCorrector} interface; the concrete backend is selected
+         at runtime by \texttt{get\_corrector(config)}.}
+\label{fig:corrector}
+\end{figure}
+
+\textbf{\texttt{BaseLLMCorrector}} is an abstract base class that defines two
+abstract methods: \texttt{correct()} and \texttt{model\_name}.
+Implementations must satisfy the contract that \texttt{correct()} never raises
+an exception and always returns a \texttt{CorrectionResult} with a non-empty
+\texttt{corrected\_text} field.
+On any failure, \texttt{corrected\_text} is set to the original
+\texttt{ocr\_text} (a safe fallback that does not inflate error rates beyond
+the OCR baseline).
+
+\textbf{\texttt{TransformersCorrector}} is the production backend.
+It loads the model and tokenizer via HuggingFace Transformers once at startup
+and reuses them for all subsequent inference calls.
+It is designed to run on Kaggle or Colab GPU kernels.
+Optional 4-bit quantization via \texttt{bitsandbytes} is available for GPUs
+with less than 8~GB of VRAM, but was not used in the experiments reported here
+(the Kaggle T4 GPU has 16~GB).
+
+\textbf{\texttt{MockCorrector}} returns the OCR text unchanged.
+It requires no model, no GPU, and no internet access.
+It is activated by setting \texttt{model.backend: "mock"} and is used for
+local pipeline validation: a full export--infer--analyze cycle completes
+instantaneously with mock, producing valid JSON outputs with CER equal to the
+OCR baseline (since no correction is performed).
+
+\textbf{\texttt{APICorrector}} provides an OpenAI-compatible REST interface for
+potential future use with hosted models.
+It is not used in the experiments of this thesis.
+
+\subsection{Generation Configuration}
+\label{subsec:gen_config}
+
+Table~\ref{tab:gen_config} documents the exact generation parameters used in all
+phases of this study.
+All phases use identical generation settings; only the prompt content changes
+between phases.
+
+\begin{table}[ht]
+\caption{Generation parameters for \texttt{TransformersCorrector}.}
+\label{tab:gen_config}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Value} & \textbf{Rationale} \\
+\midrule
+Model ID             & \texttt{Qwen/Qwen3-4B-Instruct-2507} & Primary study model \\
+\texttt{max\_new\_tokens} & 1024        & Sufficient headroom for all prompt types \\
+\texttt{do\_sample}       & \texttt{True}  & Stochastic sampling \\
+\texttt{temperature}      & 0.1         & Near-deterministic; suppresses high-entropy output \\
+\texttt{enable\_thinking} & \texttt{False} & Suppresses Qwen3 chain-of-thought scratchpad \\
+\texttt{MAX\_INPUT\_TOKENS} & 4,096    & Out-of-memory guard on unexpectedly long prompts \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+Temperature 0.1 is chosen to make outputs nearly deterministic across runs while
+avoiding the degenerate behaviour that pure greedy decoding can produce.
+At this temperature the output distribution is heavily peaked at the
+most-probable token at each step, but a small amount of stochasticity is retained
+to prevent the model from entering repetitive loops when correcting ambiguous text.
+
+The \texttt{enable\_thinking} flag is Qwen3-specific.
+When enabled, Qwen3 prepends a chain-of-thought scratchpad enclosed in
+\texttt{<think>...</think>} tokens before generating the final answer.
+For Arabic post-OCR correction, a one-pass text-to-text transformation task,
+the scratchpad adds latency and output tokens without improving the correction
+output.
+More critically, the scratchpad contents are sometimes included in the decoded
+output, breaking the response extraction step that expects only the corrected
+text.
+Setting \texttt{enable\_thinking=False} in \texttt{apply\_chat\_template()}
+prevents this.
+
+\subsection{Response Extraction}
+\label{subsec:extraction}
+
+The model is instructed to return \emph{only} the corrected text, with no
+explanation or commentary.
+Despite this instruction, decoded outputs occasionally contain preamble or
+non-Arabic content.
+The method \texttt{\_extract\_corrected\_text()} applies the following steps:
+
+\begin{enumerate}
+  \item Strip leading and trailing whitespace and newlines.
+  \item If the result is empty, log a warning and return the original OCR text.
+  \item If the result contains no Arabic characters (Unicode block U+0600--U+06FF),
+        the model has likely replied in English or refused the request; log a
+        warning and return the original OCR text.
+  \item Otherwise, return the cleaned string as the correction.
+\end{enumerate}
+
+\noindent
+Steps~2 and~3 are safety checks that prevent model refusals or empty generations
+from propagating as corrections.
+Without them, a refusal would produce a CER of approximately 1.0 for that sample,
+artificially degrading aggregate performance.
+By falling back to the OCR text on failure, the method ensures that failed samples
+do not inflate aggregate CER above the OCR baseline.
+If \texttt{max\_retries} additional attempts all fail, the fallback is applied and
+the \texttt{success} flag in the JSONL record is set to \texttt{false}.
+
+% ============================================================
+\section{PromptBuilder}
+\label{sec:promptbuilder}
+% ============================================================
+
+\texttt{src/core/prompt\_builder.py::PromptBuilder} is the single point of contact
+for all prompt construction in the study.
+Each experimental phase has exactly one corresponding \texttt{build\_*} method.
+All methods return a list of dictionaries in OpenAI chat format --- a system
+message followed by a user message --- which is directly accepted by the HuggingFace
+\texttt{apply\_chat\_template()} API.
+
+\subsection{Prompt Design Philosophy}
+\label{subsec:prompt_design}
+
+All prompts in this study are written entirely in Arabic.
+The decision to use Arabic rather than English for system messages was motivated
+by two considerations.
+First, the correction task is inherently Arabic-specific; using the target language
+avoids any cross-lingual ambiguity in instruction following.
+Second, Qwen3, as a multilingual model, was trained on Arabic instructions and
+responds more reliably when the instruction language matches the text language.
+
+All phase prompts share a \emph{conservative instruction}: the system message
+tells the model that the input text may already be correct, that it should return
+the text unchanged if it finds no clear errors, and that it must not change what
+is already correct.
+This instruction counteracts a known failure mode of instruction-following LLMs:
+they tend to interpret any correction directive as a mandate to rewrite, even when
+the input is already accurate.
+The conservative constraint is particularly important in the PATS-A01 Akhbar
+setting, where the OCR baseline CER on normal samples is only 1.37\% and the
+vast majority of tokens require no change.
+The conservative v2 zero-shot prompt was adopted after pilot runs showed that the
+original aggressive v1 prompt (``correct this text'') led to unacceptably high
+error rates on clean samples.
+
+\subsection{Prompt Variants}
+\label{subsec:prompt_variants}
+
+Table~\ref{tab:prompts} provides a complete registry of all prompt variants.
+
+\begin{table}[ht]
+\caption{Prompt variant registry. Each phase uses exactly one variant.
+         All prompts are in Arabic. Full prompt text is given in Appendix~A.}
+\label{tab:prompts}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{llXl}
+\toprule
+\textbf{Method} & \textbf{Tag} & \textbf{Injected context} & \textbf{Phase} \\
+\midrule
+\texttt{build\_zero\_shot()}       & p2v2  & None (instruction only)              & 2  \\
+\texttt{build\_ocr\_aware()}       & p3v1  & Top-10 Qaari character confusion pairs & 3  \\
+\texttt{build\_rule\_augmented()}  & p4av1 & Arabic orthographic rules            & 4A \\
+\texttt{build\_few\_shot()}        & p4bv1 & 5 QALB error-correction examples     & 4B \\
+\texttt{build\_self\_reflective()} & p4dv1 & LLM error statistics from training split & 4D \\
+\texttt{build\_rag()}              & p5v1  & Top-3 retrieved OpenITI sentences    & 5  \\
+\texttt{build\_combined()}         & p6v1  & Any subset of the above contexts     & 6  \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsubsection{Zero-Shot Prompt (p2v2)}
+
+The zero-shot prompt consists of an Arabic system message and the raw OCR text
+as the user message.
+The system message establishes the model as an Arabic text proofreader and
+explicitly states the conservative instruction: the OCR output may be fully
+correct; the model should return it exactly if no clear error is found; it must
+not change what is already correct; it should return only the text with no
+explanation.
+There is no injected external knowledge; the model's only guidance comes from
+its own training and from the instruction framing.
+
+\subsubsection{OCR-Aware Prompt (p3v1)}
+
+The OCR-aware prompt extends the zero-shot system message with an injected
+Arabic bullet list of confusion pairs from \texttt{ConfusionMatrixLoader}.
+Each bullet item names a ground-truth character and the character Qaari commonly
+substitutes for it.
+The system message instructs the model to pay particular attention to these
+character pairs when correcting.
+If no confusion context is available, \texttt{build\_ocr\_aware()} falls back
+transparently to the zero-shot prompt.
+
+\subsubsection{Rule-Augmented Prompt (p4av1)}
+
+The rule-augmented prompt replaces the confusion list with a numbered list of
+Arabic orthographic rules from \texttt{RulesLoader}.
+The system message instructs the model to observe these rules during correction.
+The rules address the same phenomena targeted by the confusion matrix ---
+dot-group characters, hamza, taa marbuta, alef maqsura --- but frame them as
+prescriptive grammar rules rather than as statistical error patterns.
+
+\subsubsection{Few-Shot Prompt (p4bv1)}
+
+The few-shot prompt inserts five input--output demonstration pairs from the QALB
+corpus into the system message.
+Each pair is formatted as:
+``Input: [erroneous sentence] / Correction: [corrected sentence]'' in Arabic.
+The system message instructs the model to correct the new text following the same
+approach as the examples.
+The examples are selected by \texttt{QALBLoader} using the diversity strategy
+to span multiple error types.
+
+\subsubsection{Self-Reflective Prompt (p4dv1)}
+
+The self-reflective prompt injects Arabic diagnostic sentences derived from the
+model's own training-split error statistics.
+The system message frames the diagnostics as performance feedback:
+the model is informed which error categories it handles well, which it tends to
+miss, and for which categories it tends to over-correct previously correct tokens.
+This is a lightweight, pre-computed form of meta-cognitive guidance that avoids
+the latency cost of asking the model to self-critique at inference time.
+
+\subsubsection{RAG Prompt (p5v1)}
+
+The RAG prompt injects three sentences retrieved from the OpenITI FAISS index.
+The retrieved sentences are presented as reference Arabic text that the model
+should use as grounding context.
+The system message states that these reference sentences are correct Arabic text
+similar to the input and that the model should consult them when deciding how to
+correct the input.
+
+\subsubsection{Combined Prompt (p6v1)}
+
+\texttt{build\_combined()} accepts any subset of the five context types and
+assembles them into a single system message using a fixed section ordering
+numbered with Arabic ordinals (``First:\ confusions, Second:\ rules,
+Third:\ examples, Fourth:\ retrieved passages, Fifth:\ performance notes'').
+Only non-empty context strings are included; the closing conservative instruction
+is always appended.
+If all context strings are empty, the method falls back to the zero-shot prompt.
+This design makes Phase~6 combination experiments straightforward to specify and
+fully reproducible from the combination identifier alone.

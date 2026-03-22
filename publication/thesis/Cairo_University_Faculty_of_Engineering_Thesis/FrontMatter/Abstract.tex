@@ -1,3 +1,45 @@
-\setstretch{1}
-\setlength{\parskip}{\baselineskip}
-Write Your Thesis Abstract Here.
+\setstretch{1.5}
+
+Arabic optical character recognition (OCR) engines produce systematic errors
+rooted in the visual properties of the Arabic script: dot-group character
+confusions, morphologically valid but contextually wrong substitutions, and
+occasional catastrophic repetition artefacts. Open-source engines such as
+Qaari fall short of closed-source alternatives, motivating the question of
+whether post-OCR correction via a large language model (LLM) can close this
+gap without modifying the recognition engine.
+
+This thesis presents a systematic evaluation of prompt-engineering strategies
+for Arabic post-OCR correction using Qwen3-4B-Instruct-2507, an open-source
+4-billion-parameter instruction-tuned model. Six knowledge augmentation
+conditions are evaluated in isolation on 200 samples of the PATS-A01 Akhbar
+typewritten corpus, each changing exactly one variable relative to a zero-shot
+baseline: (1) character confusion matrix injection (Phase~3); (2) Arabic
+orthographic rule augmentation (Phase~4A); (3) few-shot examples from the
+QALB corpus (Phase~4B); (4) CAMeL Tools morphological post-processing
+(Phase~4C); (5) self-reflective prompting from training-split error statistics
+(Phase~4D); and (6) retrieval-augmented generation with the OpenITI classical
+corpus (Phase~5). A combination and ablation study (Phase~6) tests twelve
+pre-selected multi-component systems.
+
+The Qaari baseline achieves 1.37\% character error rate (CER) on normal
+samples and 17.01\% overall, with the discrepancy caused by a repetition
+artefact in 0.5\% of samples. Zero-shot LLM correction (Phase~2) reduces
+aggregate CER to 5.77\% (66\% relative reduction) by collapsing repetition
+artefacts, but raises CER on normal samples from 1.37\% to 5.77\%, revealing
+a systematic over-correction problem: the model modifies correct tokens at a
+25.06\% error introduction rate. Every knowledge augmentation strategy
+tested degrades performance relative to the zero-shot baseline, with
+degradations ranging from 75\% (Phase~4B few-shot) to 283\% (Phase~5 RAG).
+CAMeL post-processing has no effect, as all OCR errors and LLM corrections
+are morphologically valid Arabic forms and the revert condition is never
+triggered.
+
+The central finding is that, on high-quality typewritten Arabic input, more
+prompt information consistently worsens correction because each additional
+knowledge element activates the model's intervention tendency, increasing
+the rate at which correct tokens are corrupted. The simplest strategy ---
+zero-shot correction applied selectively to high-error samples --- is both
+the most effective and the most practical recommendation. Future work should
+evaluate on handwritten text (KHATT), replace QALB with OCR-native few-shot
+pairs, and build domain-matched retrieval corpora to test whether these
+findings generalise to higher-error-rate and domain-aligned settings.

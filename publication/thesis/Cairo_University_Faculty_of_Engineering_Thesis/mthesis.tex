@@ -15,7 +15,7 @@
 \usepackage{float}
 \usepackage[center,font=small]{caption}
 \usepackage{tikz}
-\usetikzlibrary{fit,shapes.geometric}
+\usetikzlibrary{fit,shapes.geometric,arrows.meta,positioning,calc}
 \usetikzlibrary{plotmarks}
 \usepackage{mathdots}
 \usepackage{etex}
@@ -50,14 +50,15 @@ citestyle=numeric-comp]{biblatex}
 \addbibresource{thesis.bib}
 
 \usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}   % UTF-8 input for Arabic text in verbatim/listings
 \usepackage{lmodern}
 \usepackage{array}
 \usepackage{paralist}
 \usepackage{mathrsfs}
 \def\Laplace#1{\mathscr{L}^{-1}}
 \usepackage{titlesec}
-\titleformat{\chapter}[display]   
-{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}   
+\titleformat{\chapter}[display]
+{\normalfont\huge\bfseries}{\chaptertitlename\ \thechapter}{20pt}{\Huge}
 \titlespacing*{\chapter}{0pt}{0pt}{40pt}
 
 \renewcommand{\baselinestretch}{1}
@@ -65,9 +66,34 @@ citestyle=numeric-comp]{biblatex}
 \usepackage[normalem]{ulem}
 \usepackage{color,soul}
 
+% Additional packages for thesis content
+\usepackage{booktabs}          % Professional-quality tables (\toprule, \midrule, \bottomrule)
+\usepackage{tabularx}          % Tables with auto-width columns
+\usepackage{xcolor}            % Extended color support
+\usepackage{listings}          % Code/prompt listings
+\usepackage{verbatim}          % Verbatim environments for prompt templates
+\usepackage{amsmath}           % Math environments (for CER/WER formulae)
+\usepackage{amssymb}           % Math symbols
+\usepackage{siunitx}           % Consistent number/percent formatting
+\usepackage{microtype}         % Better text justification
+\usepackage{csquotes}          % Smart quotes (required by biblatex)
+
+% Listings style for Arabic prompt templates (displayed as-is, UTF-8)
+\lstset{
+  basicstyle=\small\ttfamily,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  inputencoding=utf8,
+  extendedchars=true,
+  literate={ا}{{\ا}}1 % fallback; Arabic shown via verbatim or PDF-embedded text
+}
+
 % TikZ solution
 \newcommand\circletext[1]
-{\tikz[baseline=(char.base)]{\node[shape=circle,draw,inner sep=1.2pt] (char) {#1};}} 
+{\tikz[baseline=(char.base)]{\node[shape=circle,draw,inner sep=1.2pt] (char) {#1};}}
 
 
 %-------------------------Personal Information---------------------------
@@ -94,11 +120,22 @@ citestyle=numeric-comp]{biblatex}
 
 \ExternalExaminer{Dr./Prof. Dr. Ext. Examiner}{Affiliation}{Faculty}{University}
 \InternalExaminer{Dr./Prof. Dr. Int. Examiner}
-\ThesisTitle{Thesis Title}
+\ThesisTitle{Knowledge-Augmented Large Language Models for Arabic Post-OCR Error Correction}
 
-\ThesisKeywords{Thesis Key Words separated by ;}
+\ThesisKeywords{Arabic OCR; Post-OCR Correction; Large Language Models; Prompt Engineering; Retrieval-Augmented Generation; Qwen3; PATS-A01; Error Taxonomy}
 
-\ThesisSummary{Thesis Summary}
+\ThesisSummary{This thesis investigates whether a lightweight open-source instruction-tuned large
+language model can correct errors produced by the Qaari Arabic OCR engine through prompt
+engineering alone, and whether injecting linguistic or retrieval-based knowledge into the
+prompt improves correction quality. Six isolated knowledge-augmentation strategies are
+evaluated on the PATS-A01 Akhbar typewritten dataset and compared against a zero-shot
+baseline. Results show that zero-shot correction reduces character error rate by 66\%
+relative to the OCR baseline when accounting for catastrophic repetition artifacts, but
+increases error rate on clean text due to over-correction. All knowledge-augmentation
+strategies degrade performance relative to zero-shot, with RAG producing the worst result
+(CER 22.10\%) and few-shot producing the least degradation (CER 10.09\%). The dominant
+failure mode is over-correction: the model changes tokens that the OCR rendered correctly
+at a rate that exceeds errors fixed.}
 
 
 
@@ -127,10 +164,10 @@ citestyle=numeric-comp]{biblatex}
 % to comply with thesis guidelines
 % each chapter starts on the right (odd numbered page)
 \Chapter{Introduction}{MainMatter/Chapter1}\label{ch_intro}
-\Chapter{Chapter 2 Title}{MainMatter/Chapter2}\label{ch2label}
-\Chapter{Chapter 3 Title}{MainMatter/Chapter3}\label{ch3label}
-\Chapter{Chapter 4 Title}{MainMatter/Chapter4}\label{ch4label}
-\Chapter{Chapter 5 Title}{MainMatter/Chapter5}\label{ch5label}
+\Chapter{Background and Literature Review}{MainMatter/Chapter2}\label{ch_background}
+\Chapter{System Design and Datasets}{MainMatter/Chapter3}\label{ch_system}
+\Chapter{Experimental Methodology}{MainMatter/Chapter4}\label{ch_methodology}
+\Chapter{Results and Analysis}{MainMatter/Chapter5}\label{ch_results}
 \Chapter{Discussion and Conclusion}{MainMatter/Chapter6}\label{ch_conc}
 
 % References
@@ -140,8 +177,10 @@ citestyle=numeric-comp]{biblatex}
 
 % Back Matter
 \begin{appendices}
-\Appendix{Appendix A Title}{BackMatter/AppendixA}
-\Appendix{Appendix B Title}{BackMatter/AppendixB}
+\Appendix{Full Prompt Templates}{BackMatter/AppendixA}
+\Appendix{Phase 4D Self-Reflective Insights}{BackMatter/AppendixB}
+\Appendix{Configuration Files}{BackMatter/AppendixC}
+\Appendix{PATS-A01 Error Examples}{BackMatter/AppendixD}
 \end{appendices}
 
 % Arabic covers template is uploaded to this project as word file

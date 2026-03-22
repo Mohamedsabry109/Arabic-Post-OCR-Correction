@@ -1,0 +1,85 @@
+\setstretch{1.5}
+
+This appendix presents 20 representative character-level OCR error examples
+from the Phase~1 evaluation on PATS-A01 Akhbar training split (200 samples).
+Each row shows the sample identifier, the three-character context window
+centred on the error (with the error position in the middle), the ground-truth
+character (GT), the OCR-output character (OCR), the error category, and the
+position of the error within its word.
+
+The context field uses Arabic text displayed right-to-left; a space character
+in the context indicates a word boundary. Where the OCR character is absent
+(deletions), the OCR column shows $\emptyset$. Where a character is spuriously
+inserted (insertions), the GT column shows $\emptyset$.
+
+Table~\ref{tab:appd_examples} is drawn from the \texttt{error\_examples.json}
+output of \texttt{run\_phase1.py} and covers all non-zero error categories
+identified in the Phase~1 taxonomy.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Representative OCR error examples from Phase~1, PATS-A01 Akhbar
+           training split. Context is a three-character window around the
+           error. GT = ground truth; OCR = OCR output.}
+  \label{tab:appd_examples}
+  \begin{tabularx}{\textwidth}{lXXXXl}
+    \toprule
+    \textbf{Sample} & \textbf{Context} & \textbf{GT}
+      & \textbf{OCR} & \textbf{Category} & \textbf{Position} \\
+    \midrule
+    % Dot confusion examples (5)
+    Akhbar\_22 & \RL{ فل} & \RL{ف} & \RL{ق} & Dot confusion & word-start \\
+    Akhbar\_29 & \RL{ طه} & \RL{ط} & \RL{ظ} & Dot confusion & word-start \\
+    Akhbar\_57 & \RL{لطه} & \RL{ط} & \RL{ظ} & Dot confusion & word-middle \\
+    Akhbar\_70 & \RL{بزا} & \RL{ز} & \RL{ر} & Dot confusion & word-middle \\
+    Akhbar\_78 & \RL{برز} & \RL{ر} & \RL{ز} & Dot confusion & word-middle \\
+    \midrule
+    % Alef maqsura examples (3)
+    Akhbar\_3  & \RL{بى } & \RL{ى} & \RL{ي} & Alef maqsura & word-end \\
+    Akhbar\_4  & \RL{بى}  & \RL{ى} & \RL{ي} & Alef maqsura & word-end \\
+    Akhbar\_88 & \RL{في } & \RL{ي} & \RL{ى} & Alef maqsura & word-end \\
+    \midrule
+    % Similar shape (1)
+    Akhbar\_7  & \RL{لا}  & \RL{ل} & \RL{ا} & Similar shape & word-start \\
+    \midrule
+    % Deletion examples (5)
+    Akhbar\_2  & \RL{جنة} & \RL{ن} & $\emptyset$ & Deletion & word-middle \\
+    Akhbar\_9  & \RL{فا}  & \RL{ف} & $\emptyset$ & Deletion & word-start \\
+    Akhbar\_20 & \RL{ال}  & \RL{ا} & $\emptyset$ & Deletion & word-start \\
+    Akhbar\_31 & \RL{وا}  & \RL{و} & $\emptyset$ & Deletion & word-start \\
+    Akhbar\_56 & \RL{لاة} & \RL{ا} & $\emptyset$ & Deletion & word-middle \\
+    \midrule
+    % Insertion examples (5 -- from the runaway sample)
+    Akhbar\_4  & \RL{ص ف} & $\emptyset$ & \RL{ر} & Insertion & --- \\
+    Akhbar\_4  & \RL{غ ل} & $\emptyset$ & \RL{َ} & Insertion & --- \\
+    Akhbar\_4  & \RL{لاض} & $\emptyset$ & \RL{ِ} & Insertion & --- \\
+    Akhbar\_4  & \RL{اض } & $\emptyset$ & \RL{ِ} & Insertion & --- \\
+    Akhbar\_4  & \RL{ يج} & $\emptyset$ & \RL{ي} & Insertion & --- \\
+    \midrule
+    % Other substitution (1 additional)
+    Akhbar\_1  & \RL{غط } & \RL{ط} & \RL{ت} & Other subst. & word-middle \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection*{Observations from Examples}
+
+The dot-confusion examples in rows 1--5 illustrate the two primary visual
+confusion pairs identified in the Phase~1 confusion matrix: \RL{ط}/\RL{ظ}
+(both emphatic consonants with near-identical skeletons, probability 0.89)
+and the bidirectional \RL{ر}/\RL{ز} confusion (differ by a single diagonal
+mark). The alef maqsura examples (rows 6--8) confirm the bidirectional
+\RL{ى}/\RL{ي} confusion: both directions appear in the data, reflecting
+the absence of distinguishing dots in the Akhbar font rendering.
+
+The five deletion examples (rows 10--14) show character deletions at
+word-initial and word-medial positions; the deleted characters include
+common letters (\RL{ا}, \RL{ن}, \RL{و}) whose absence changes the word
+identity while leaving a valid Arabic form. This validates the Phase~1
+morphological finding that 100\% of OCR errors are valid-but-wrong.
+
+The five insertion examples (rows 15--19) are all from sample
+\texttt{Akhbar\_4}, which is the runaway repetition artefact sample.
+The inserted characters include diacritics (\RL{َ}, \RL{ِ}) that inflate
+the CER count substantially; these are the errors that the Phase~2 LLM
+corrector resolves with a 97.35\% fix rate (Section~\ref{sec:res_phase1}).

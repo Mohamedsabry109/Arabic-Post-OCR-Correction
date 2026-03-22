@@ -1,4 +1,683 @@
-\setstretch{1}
-\setlength{\parskip}{\baselineskip}
+\setstretch{1.5}
 
-Chapter 5 content goes here.
+This chapter reports the numerical results for all executed experimental phases
+(Phases 1 through 5), answers each research question stated in
+Chapter~\ref{ch_intro}, and provides analysis of both expected and
+unexpected findings. Phase~6 results are deferred to future work as the
+combination experiments had not completed execution at the time of writing.
+Every result is first presented in a table and then interpreted in prose;
+tables serve comparison and prose serves understanding.
+
+%────────────────────────────────────────────────────────────────────────────
+\section{Phase 1 Results --- OCR Error Characterisation}
+\label{sec:res_phase1}
+%────────────────────────────────────────────────────────────────────────────
+
+\subsection{Aggregate Error Rates}
+\label{subsec:res_p1_aggregate}
+
+Table~\ref{tab:p1_metrics} reports the CER and WER computed over the
+200-sample PATS-A01 Akhbar training evaluation. Two views are given: the
+\emph{all-samples} view includes every sample in the 200-sample set;
+the \emph{normal-samples} view excludes the single runaway sample.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~1 OCR baseline metrics on PATS-A01 Akhbar (200 samples).}
+  \label{tab:p1_metrics}
+  \begin{tabularx}{\textwidth}{lXXXXX}
+    \toprule
+    \textbf{Sample Set} & \textbf{$n$} & \textbf{CER} & \textbf{WER}
+      & \textbf{CER Std} & \textbf{CER Median} \\
+    \midrule
+    All samples      & 200 & 17.01\% & 20.14\% & 2.21 & 0.00\% \\
+    Normal samples   & 199 & 1.37\%  & 5.04\%  & 0.02 & 0.00\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The striking discrepancy between the two rows --- 17.01\% versus 1.37\% CER
+--- is caused by a single sample that exhibits Qaari's \emph{repetition
+artefact}: the OCR engine enters an infinite repetition loop on a particular
+text segment, generating thousands of copies of a short phrase. That one
+sample (0.5\% of the set) contributes 1,964 of the 2,063 total character
+errors. Including it maintains \emph{ecological validity}: the repetition bug
+is real-world behaviour of the engine and appears in any large-scale
+deployment. All subsequent phases are therefore evaluated on the full
+200-sample set so that the ability of the LLM to collapse these repetitions
+is captured.
+
+The all-samples CER standard deviation of 2.21 and a median of 0.00\% reveal
+a heavily skewed distribution. Over half of the 200 samples have zero OCR
+errors; the mean is pulled upward by the single runaway and by a small number
+of difficult samples. On normal samples the picture is very different: the
+standard deviation drops to 0.02 and the CER of 1.37\% reflects the genuine
+character-level accuracy of Qaari on clean typewritten Akhbar text.
+
+\subsection{Error Type Distribution}
+\label{subsec:res_p1_taxonomy}
+
+Table~\ref{tab:p1_taxonomy} breaks down the 2,063 character errors by the
+eight-category taxonomy defined in Section~\ref{subsec:sys_taxonomy}.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~1 error taxonomy on PATS-A01 Akhbar (all 200 samples,
+           2,063 total character errors).}
+  \label{tab:p1_taxonomy}
+  \begin{tabularx}{\textwidth}{lXX}
+    \toprule
+    \textbf{Error Type} & \textbf{Count} & \textbf{Percentage} \\
+    \midrule
+    Insertion           & 1,964 & 95.20\% \\
+    Other substitution  &    49 &  2.38\% \\
+    Deletion            &    32 &  1.55\% \\
+    Dot confusion       &    14 &  0.68\% \\
+    Alef maqsura        &     3 &  0.15\% \\
+    Similar shape       &     1 &  0.05\% \\
+    Taa marbuta         &     0 &  0.00\% \\
+    Hamza               &     0 &  0.00\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Insertions dominate at 95.2\% because they are overwhelmingly produced by the
+single runaway sample. When that sample is set aside and only the 199 normal
+samples are considered, the error profile shifts substantially. Substitution
+errors (dot confusion, alef maqsura, other substitution) become the
+dominant category, representing the genuine confusion patterns of the OCR
+engine on typewritten Arabic. Deletions (1.55\% overall) represent characters
+present in the ground truth but absent from the OCR output; these tend to
+cluster in closely spaced character groups where segmentation fails.
+
+The absence of hamza and taa marbuta errors is notable. These phenomena
+account for a significant fraction of human spelling errors in Arabic but are
+well-handled by Qaari's recognition model on the Akhbar font, which has
+unambiguous glyph renderings for these characters.
+
+\subsection{Confusion Matrix Analysis}
+\label{subsec:res_p1_confusion}
+
+The confusion matrix records every (ground-truth character, OCR character)
+substitution pair observed across the 200 samples. Table~\ref{tab:p1_confusion}
+presents all nine unique confusion pairs identified, ordered by frequency.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Character-level confusion pairs from Phase~1 (all 9 unique pairs;
+           out of 61 total substitutions).}
+  \label{tab:p1_confusion}
+  \begin{tabularx}{\textwidth}{XXXXl}
+    \toprule
+    \textbf{GT Char} & \textbf{OCR Char} & \textbf{Count}
+      & \textbf{Probability} & \textbf{Category} \\
+    \midrule
+    \RL{ط} & \RL{ظ} & 8 & 0.89 & Dot confusion \\
+    \RL{ي} & \RL{ب} & 3 & 0.50 & Dot confusion \\
+    \RL{ب} & \RL{ي} & 3 & 0.75 & Dot confusion \\
+    \RL{ى} & \RL{ي} & 2 & 0.67 & Alef maqsura \\
+    \RL{ا} & \RL{ِ} & 2 & 0.67 & Other substitution \\
+    \RL{ي} & \RL{ح} & 2 & 0.33 & Similar shape \\
+    \RL{ف} & \RL{ق} & 2 & 0.50 & Dot confusion \\
+    \RL{ئ} & \RL{ث} & 2 & 0.40 & Dot confusion \\
+    \RL{م} & \RL{ل} & 2 & 0.40 & Similar shape \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The dominant confusion, \RL{ط}~$\to$~\RL{ظ}, accounts for 8 of the 61
+total substitutions (probability 0.89). Both characters are emphatic
+consonants sharing a similar skeletal shape; the only distinguishing feature
+is a small diacritic-like mark that can be rendered ambiguously at low
+resolution. The bidirectional ba/ya confusion (\RL{ي}~$\leftrightarrow$~\RL{ب})
+reflects the identical base shapes of these two letters and their reliance on
+dot placement --- below the baseline for \RL{ب} and above the baseline for
+\RL{ي}; a slight ink irregularity shifts the engine's decision. The alef
+maqsura confusion (\RL{ى}~$\to$~\RL{ي}) is structurally identical to the
+classical NLP challenge described in Section~\ref{subsec:lang_script}: both
+characters are written without dots in many fonts and differ only in their
+Unicode code point.
+
+The fen/qaf confusion (\RL{ف}~$\to$~\RL{ق}) illustrates the dot-count
+ambiguity: \RL{ف} has one dot above, \RL{ق} has two dots above; the
+difference is a single ink dot. Collectively, dot-related confusions
+(\RL{ط}/\RL{ظ}, \RL{ي}/\RL{ب}, \RL{ى}/\RL{ي}, \RL{ف}/\RL{ق}, \RL{ئ}/\RL{ث})
+account for 18 of the 61 substitutions (29.5\%), confirming that dot
+ambiguity is the primary substitution driver in the Akhbar font.
+
+\subsection{Morphological Validity Analysis}
+\label{subsec:res_p1_morph}
+
+CAMeL Tools MSA morphological analysis was applied to every token in the
+200-sample set. The results are unambiguous: \emph{100\% of OCR errors are
+valid-but-wrong}. The confusion matrix shows zero non-word errors --- every
+substituted or deleted character produces a token that is itself a valid Arabic
+word, merely the wrong one. The OCR word validity rate is 100\%: all 2,801
+OCR tokens are morphologically valid Arabic forms.
+
+This finding has a profound implication for Phase~4C (morphological
+post-processing). A revert strategy that identifies LLM-introduced
+morphological invalids and reverts them to the (valid) OCR original cannot
+operate in this regime: the OCR errors are already valid words, so simple
+dictionary lookup or morphological validity checks provide no discriminative
+signal. Correcting valid-but-wrong substitutions requires context, not just
+lexical validity.
+
+\textbf{Answer to RQ1:} Qaari produces systematic errors on the Akhbar
+typewritten corpus. The dominant failure mode is a catastrophic repetition
+artefact (0.5\% of samples, responsible for 95.2\% of all character errors)
+which inflates aggregate CER to 17.01\%. On the remaining 199 normal samples,
+the CER is 1.37\%, indicating high-quality recognition on clean typewritten
+text. The dominant substitution error type is dot confusion (29.5\% of
+substitutions), driven by near-identical letter shapes. All OCR errors produce
+morphologically valid Arabic forms, precluding detection by dictionary lookup.
+
+%────────────────────────────────────────────────────────────────────────────
+\section{Phase 2 Results --- Zero-Shot LLM Baseline}
+\label{sec:res_phase2}
+%────────────────────────────────────────────────────────────────────────────
+
+\subsection{Aggregate Performance}
+\label{subsec:res_p2_aggregate}
+
+Table~\ref{tab:p2_metrics} reports the Phase~2 results. After zero-shot LLM
+correction with Qwen3-4B-Instruct-2507, the aggregate CER falls from 17.01\%
+to 5.77\% and WER from 20.14\% to 10.60\%.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~2 zero-shot LLM correction metrics on PATS-A01 Akhbar
+           (200 samples). Phase~1 all-samples figures are shown for reference.}
+  \label{tab:p2_metrics}
+  \begin{tabularx}{\textwidth}{lXXXXX}
+    \toprule
+    \textbf{Phase} & \textbf{CER} & \textbf{WER} & \textbf{CER Std}
+      & \textbf{CER Median} & \textbf{CER P95} \\
+    \midrule
+    1 (all samples)   & 17.01\% & 20.14\% & 2.21 & 0.00\% & 6.45\% \\
+    2 (zero-shot LLM) &  5.77\% & 10.60\% & 0.12 & 3.28\% & 19.57\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Comparison to Phase 1}
+\label{subsec:res_p2_vs_p1}
+
+The transition from Phase~1 to Phase~2 must be interpreted from two different
+reference points.
+
+\paragraph{Relative to all-samples OCR (CER 17.01\%).}
+The LLM achieves a 66\% relative CER reduction, falling from 17.01\% to
+5.77\%. This improvement is substantially driven by the repetition artefact
+sample. The LLM collapses the thousands of repeated characters into a
+coherent corrected text, drastically reducing the edit distance to the ground
+truth. This is the expected strength of a language model: it recognises the
+output as degenerate and reconstructs the probable source sentence. The Phase
+4D training-split analysis (Section~\ref{subsec:res_p4d}) later quantifies
+this precisely: the LLM fixes 97.35\% of insertion errors, corroborating its
+near-perfect handling of the repetition artefact.
+
+\paragraph{Relative to normal-samples OCR (CER 1.37\%).}
+The LLM \emph{increases} CER from 1.37\% to 5.77\% on the 199 normal
+samples --- a 321\% relative increase. This is the \emph{over-correction
+problem} stated numerically. On text that Qaari rendered correctly, the LLM
+introduces errors at a rate that exceeds the errors it fixes. The model
+changes tokens that are already correct, and each unsolicited change has a
+high probability of being wrong (since the token was already right). This
+finding recurs throughout Chapters~5 and~6 as the central obstacle to
+knowledge-augmented correction on high-quality typewritten input.
+
+\subsection{Per-Sample Analysis}
+\label{subsec:res_p2_per_sample}
+
+The Phase~2 CER standard deviation (0.12) is 21 times the mean (0.058),
+indicating a highly skewed distribution. The CER median is 3.28\%, lower than
+the mean, confirming that the majority of samples cluster at low CER while a
+tail of high-CER samples pulls the mean upward. The 95th-percentile CER of
+19.57\% shows that the worst 10 samples (5\%) incur substantial error rates,
+likely including the repetition sample and cases where the LLM rewrote
+extensive portions of correct text.
+
+The shift in the median from 0.00\% (Phase~1 all-samples) to 3.28\%
+(Phase~2) reveals the over-correction problem at the sample level: the modal
+sample was error-free in the OCR output but is no longer error-free after LLM
+correction. Phase~2 produces a worse median outcome than the original OCR on
+normal samples, even though it produces a better aggregate CER by eliminating
+the catastrophic repetition artefact.
+
+\textbf{Answer to RQ2:} A zero-shot instruction-tuned LLM can substantially
+reduce aggregate CER (66\% relative reduction) by collapsing OCR repetition
+artefacts. However, on high-quality typewritten input where the baseline CER
+is 1.37\%, the LLM introduces more errors than it fixes, raising the CER to
+5.77\% on normal samples. This over-correction effect defines the ceiling for
+all subsequent augmentation phases: no augmentation strategy can succeed if
+the LLM is already introducing more errors than exist in the input.
+
+%────────────────────────────────────────────────────────────────────────────
+\section{Phases 3--5 Results --- Knowledge Augmentation Evaluation}
+\label{sec:res_phases35}
+%────────────────────────────────────────────────────────────────────────────
+
+Table~\ref{tab:main_comparison} presents the complete comparison across all
+executed phases. This is the principal result table of the thesis. All
+phases run on the same 200-sample PATS-A01 Akhbar training split. The
+relative CER change column reports the percentage change versus the Phase~2
+baseline; positive values indicate degradation.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Main results: CER and WER for Phases 1--5 on PATS-A01 Akhbar
+           (200 samples). Relative change vs. Phase~2 zero-shot baseline.}
+  \label{tab:main_comparison}
+  \begin{tabularx}{\textwidth}{llXXXXX}
+    \toprule
+    \textbf{Phase} & \textbf{Method} & \textbf{CER} & \textbf{WER}
+      & \textbf{Std} & \textbf{Median} & \textbf{$\Delta$CER vs P2} \\
+    \midrule
+    1 (all)  & OCR Baseline      & 17.01\% & 20.14\% & 2.21 & 0.00\% & --- \\
+    1 (norm) & OCR Baseline      &  1.37\% &  5.04\% & 0.02 & 0.00\% & --- \\
+    2        & Zero-Shot LLM     &  5.77\% & 10.60\% & 0.12 & 3.28\% & baseline \\
+    3        & Confusion Matrix  & 19.62\% & 24.35\% & 2.19 & 1.67\% & +240\% \\
+    4A       & Rule-Augmented    & 11.03\% & 17.70\% & 0.19 & 6.40\% & +91\% \\
+    4B       & Few-Shot (QALB)   & 10.09\% & 15.64\% & 0.18 & 6.45\% & +75\% \\
+    4C       & CAMeL Post-Proc.  &  5.77\% & 10.60\% & 0.12 & 3.28\% & 0\% \\
+    4D       & Self-Reflective   & 10.48\% & 16.12\% & 0.24 & 6.45\% & +82\% \\
+    5        & RAG (OpenITI)     & 22.10\% & 26.93\% & 1.99 & 5.04\% & +283\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The central finding is clear: \emph{no knowledge augmentation strategy
+improves upon the zero-shot baseline on this dataset}. Every active
+augmentation (Phases 3, 4A, 4B, 4D, and 5) increases CER relative to Phase~2.
+The magnitudes range from +75\% (Phase~4B, the best augmented result) to
++283\% (Phase~5, the worst). Phase~4C has no effect because its revert
+condition is never triggered. Each phase's result is now analysed in detail.
+
+\subsection{Phase 3 --- Confusion Matrix Injection}
+\label{subsec:res_p3}
+
+Phase~3 achieves a CER of 19.62\% and WER of 24.35\%, representing a 240\%
+relative CER increase over Phase~2. This is the second-worst outcome across
+all augmentation conditions.
+
+The confusion list injected into the prompt contains the top-10 character
+confusion pairs derived from the Phase~1 training data (Section~\ref{subsec:sys_confusion}).
+On a corpus where dot confusions account for only 0.68\% of all errors and
+29.5\% of substitutions (Table~\ref{tab:p1_taxonomy}), this injection creates
+a signal-to-noise problem. The model receives a list of characters it should
+scrutinise --- \RL{ط}/\RL{ظ}, \RL{ي}/\RL{ب}, and so on --- and interprets
+this as evidence that the text is broadly unreliable in all dot-group
+positions. In response, it substitutes characters at dot-ambiguous positions
+that it would otherwise leave untouched.
+
+The CER standard deviation of 2.19 (compared to 0.12 for Phase~2) confirms
+that the confusion injection does not uniformly degrade all samples. Most
+samples remain similar to Phase~2, but a small fraction of samples are
+catastrophically rewritten. This bimodal effect suggests the model latches
+onto the confusion information selectively: when it encounters an ambiguous
+passage where multiple characters match the warned pairs, it aggressively
+substitutes; when the passage is unambiguous, the confusion list has no
+effect. The Phase~1 CER standard deviation of 2.21 is almost identical to
+Phase~3's 2.19 --- the confusion injection has restored the same runaway-like
+variance that the repetition artefact caused in Phase~1, but through LLM
+over-correction rather than OCR failure.
+
+\textbf{Answer to RQ3:} Injecting OCR-specific confusion information does not
+improve correction and produces the second-largest degradation (+240\% CER
+relative to Phase~2). The confusion list amplifies over-correction on
+dot-ambiguous characters rather than directing the model's attention
+productively.
+
+\subsection{Phase 4A --- Rule-Augmented Prompting}
+\label{subsec:res_p4a}
+
+Phase~4A achieves a CER of 11.03\% and WER of 17.70\%, representing a 91\%
+relative CER increase over Phase~2. This is the third-worst outcome.
+
+The Arabic orthographic rules injected into the prompt (Section~\ref{subsec:sys_rules})
+cover phenomena that occur broadly throughout Arabic text: hamza al-qat',
+hamza al-wasl, taa marbuta, alef maqsura, and related forms. Unlike the
+confusion matrix (which targets a narrow set of substitution pairs), the
+rules are \emph{prescriptive for all text}. The model applies them even to
+tokens that were already correct, over-normalising forms that are contextually
+appropriate. For example, a rule about the appropriate form of hamza may cause
+the model to rewrite a correctly rendered hamza form because the rule's surface
+specification matches a token that is correct in context.
+
+The CER standard deviation of 0.19 (higher than Phase~2's 0.12 but far below
+Phase~3's 2.19) indicates more uniform degradation: the rules affect all
+samples rather than selectively catastrophising a few. This is consistent with
+the nature of the augmentation: prescriptive rules apply broadly, whereas
+confusion pairs apply selectively.
+
+The median CER rises from 3.28\% (Phase~2) to 6.40\% (Phase~4A), confirming
+that the modal sample is worse, not just the tail. The typical Akhbar sentence
+contains characters subject to the orthographic rules, so most samples incur
+additional errors.
+
+\textbf{Answer to RQ4:} Explicit Arabic orthographic rules do not improve
+correction (+91\% CER relative to Phase~2). Their broad applicability causes
+the model to over-normalise correct tokens at a higher rate than it corrects
+genuine OCR errors.
+
+\subsection{Phase 4B --- Few-Shot Examples}
+\label{subsec:res_p4b}
+
+Phase~4B achieves a CER of 10.09\% and WER of 15.64\%, representing a 75\%
+relative CER increase over Phase~2. This is the \emph{best result among all
+augmentation conditions}, though it still degrades relative to the zero-shot
+baseline.
+
+The few-shot examples from the QALB corpus constrain the model's behaviour
+more precisely than abstract rules or character lists, because they demonstrate
+specific input--output transformations rather than general principles. The model
+can infer from the examples what magnitude of change is expected (minor lexical
+corrections, not full rewrites), which partially moderates the over-correction
+tendency. The CER standard deviation (0.18) and median (6.45\%) are comparable
+to Phase~4A, but the aggregate CER is lower because the example-based
+constraint is more effective at preventing gratuitous rewrites.
+
+The QALB transfer gap discussed in Section~\ref{subsec:meth_p4b} is visible
+in the residual degradation. QALB examples are drawn from human typing errors,
+which follow a phonological-spelling distribution. OCR errors follow a
+visual-confusion distribution. The few-shot examples do not teach the model
+specifically to collapse repetition artefacts or to avoid dot-position changes;
+they teach it to correct the kinds of errors humans make when typing, which
+partially overlaps with but does not match the OCR error distribution.
+
+\textbf{Answer to RQ5:} Few-shot examples from QALB improve correction
+relative to other augmentation conditions but still degrade performance by
+75\% CER relative to Phase~2. The transfer gap between QALB human typing
+errors and Qaari OCR visual-confusion errors limits the benefit of the
+QALB-derived demonstrations.
+
+\subsection{Phase 4C --- CAMeL Morphological Post-Processing}
+\label{subsec:res_p4c}
+
+Phase~4C achieves a CER of 5.77\% and WER of 10.60\% --- \emph{identical to
+Phase~2 in every metric}, including CER standard deviation (0.12) and median
+(3.28\%). The revert strategy (Section~\ref{subsec:meth_p4c}) was triggered
+zero times across all 200 samples.
+
+The zero-revert outcome follows directly from the morphological analysis of
+Phase~1 (Section~\ref{subsec:res_p1_morph}): 100\% of OCR errors are
+valid-but-wrong substitutions. The LLM's corrections are also morphologically
+valid Arabic forms, because Qwen3 is a fluent Arabic language model that
+rarely produces non-words. The revert condition --- LLM word invalid AND OCR
+word valid --- is therefore never satisfied.
+
+Two interpretations of this result are possible. The first is that the CAMeL
+revert strategy is simply unnecessary for high-quality typewritten OCR: when
+the OCR errors are all valid words and the LLM corrections are all valid words,
+morphological validity provides no discriminative signal. The second
+interpretation is that Phase~4C's revert strategy addresses the wrong failure
+mode: it is designed to catch LLM hallucinations that produce non-word outputs,
+but the LLM on this dataset hallucinates \emph{valid} alternative words, not
+non-words. Context-aware correction (requiring a language-modelling component,
+not just a morphological oracle) would be needed to address this class of error.
+
+The practical implication for Phase~6 is that adding CAMeL post-processing to
+any combination system is unlikely to produce improvement unless the combined
+prompt elicits a higher rate of morphological invalids from the LLM.
+
+\textbf{Answer to RQ6:} CAMeL Tools morphological post-processing has no
+effect on correction quality in this experimental setting (0\% CER change
+relative to Phase~2, zero reverts). OCR errors and LLM corrections are both
+morphologically valid Arabic forms; the revert condition is never satisfied.
+
+\subsection{Phase 4D --- Self-Reflective Prompting}
+\label{subsec:res_p4d}
+
+Phase~4D achieves a CER of 10.48\% and WER of 16.12\%, representing an 82\%
+relative CER increase over Phase~2. The training-split error analysis
+(Section~\ref{subsec:meth_p4d}) produced accurate and interpretable statistics,
+reproduced here for reference:
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~4D self-reflective insights derived from the PATS-A01
+           Akhbar training split. Fix rate: fraction of OCR errors of this
+           type corrected by the LLM. Introduction rate: fraction of correct
+           tokens of this type incorrectly modified by the LLM.}
+  \label{tab:p4d_insights}
+  \begin{tabularx}{\textwidth}{lXX}
+    \toprule
+    \textbf{Error Type} & \textbf{Fix Rate} & \textbf{Introduction Rate} \\
+    \midrule
+    Insertion (repetition artefact) & 97.35\% & 18.13\% \\
+    Deletion                        &  3.12\% & 212.50\% \\
+    Other substitution              & 16.33\% & 163.27\% \\
+    \midrule
+    Overall                         & 93.26\% & 25.06\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The training-split analysis reveals accurate and informative statistics. The
+LLM is exceptionally effective at correcting insertion errors (97.35\% fix
+rate), which is consistent with the Phase~2 result for the repetition artefact.
+However, it is nearly unable to correct deletion errors (3.12\% fix rate):
+reconstructing a missing character requires generating content that was not in
+the input, which the LLM rarely does correctly for single-character deletions
+in Arabic. The substitution fix rate of 16.33\% is similarly low.
+
+The error \emph{introduction} rates are alarming. A 25.06\% overall
+introduction rate means that for every four tokens that were correct in the
+OCR output, the LLM incorrectly modifies one of them. For deletion errors
+(212.50\%) and other substitutions (163.27\%), the introduction rate exceeds
+100\%: the LLM introduces more new errors of these types than there were in
+the original OCR output.
+
+These statistics were converted into Arabic-language diagnostic sentences and
+injected into the Phase~4D prompt using \texttt{build\_self\_reflective()}.
+The intent was to cause the model to apply corrections more cautiously in the
+domains where it performs poorly. The result shows this does not work: the
+CER increases by 82\% relative to Phase~2.
+
+The most likely explanation is that the diagnostic information carries a
+counter-productive framing. The injected text tells the model, in effect:
+``You tend to introduce errors in substitution and deletion categories.'' The
+model's instruction-following training interprets this as additional licence
+to intervene carefully --- increasing, rather than decreasing, the number of
+positions it scrutinises. Paradoxically, the diagnostic warning that says
+``you over-correct'' causes the model to over-correct more, not less.
+
+The elevated CER standard deviation (0.24) and median (6.45\%) confirm that
+self-reflective prompting causes more uniform degradation across the sample
+distribution than Phase~3 or Phase~5, consistent with the broad applicability
+of the diagnostic warnings.
+
+\textbf{Answer to RQ7:} Self-reflective prompting --- injecting the model's
+own diagnosed failure statistics into the prompt --- does not improve
+correction. The 82\% relative CER increase is consistent with the hypothesis
+that diagnostic warnings activate rather than suppress the model's
+intervention tendency.
+
+\subsection{Phase 5 --- Retrieval-Augmented Generation}
+\label{subsec:res_p5}
+
+Phase~5 achieves a CER of 22.10\% and WER of 26.93\%, representing a 283\%
+relative CER increase over Phase~2. This is the \emph{worst result} across
+all experimental conditions and exceeds even the all-samples Phase~1 OCR
+baseline (17.01\% CER).
+
+The retrieval analysis reports an average top-1 cosine similarity of 0.805
+between OCR queries and retrieved OpenITI passages. This high similarity score
+is an artefact of how inner-product similarity operates on sentence embeddings:
+short Arabic queries from a newspaper corpus and short passages from a
+classical religious corpus share surface-level morphological and lexical
+patterns (common Arabic words, definite article al-) that inflate embedding
+similarity without reflecting semantic or topical relatedness. The retrieved
+passages are not semantically relevant to the news sentences being corrected.
+
+The model receives these classical Arabic passages as contextual grounding and
+uses them as stylistic templates. In doing so, it imports vocabulary,
+syntactic constructions, and even entire phrases from the retrieved classical
+text into the correction output, replacing modern newspaper vocabulary with
+archaic forms. This is the domain mismatch problem described in
+Section~\ref{subsec:meth_p5}: OpenITI classical texts and PATS-A01 Akhbar
+news text are different registers of Arabic with substantially non-overlapping
+lexicons.
+
+The CER standard deviation of 1.99 (second only to Phase~3's 2.19) confirms
+inconsistent, highly variable behaviour. When a retrieved passage happens to
+contain vocabulary similar to the input sentence, the model's intervention is
+particularly disruptive because the surface similarity masks the semantic
+gap. Some samples receive almost no retrieval-driven modification (low CER),
+while others are heavily rewritten (high CER).
+
+\textbf{Answer to RQ8:} RAG grounded in the OpenITI classical Arabic corpus
+does not improve correction and produces the worst result (+283\% CER relative
+to Phase~2). Domain mismatch between classical OpenITI text and modern
+newspaper content causes the model to import irrelevant vocabulary from
+retrieved passages. High embedding similarity scores (avg. 0.805) are
+misleading, reflecting surface-level lexical overlap rather than semantic
+relevance.
+
+%────────────────────────────────────────────────────────────────────────────
+\section{Phase 6 Results --- Combinations and Ablation}
+\label{sec:res_phase6}
+%────────────────────────────────────────────────────────────────────────────
+
+Phase~6 tests 12 pre-selected combinations of knowledge augmentation strategies
+(Section~\ref{sec:meth_p6}) and performs component-level ablation on the
+full combined system. At the time of writing, Phase~6 inference has not yet
+been executed; this section reports the experimental design and defers
+quantitative results to future work.
+
+The combinations to be evaluated are listed in Table~\ref{tab:p6_design}.
+Each row identifies the combination by a short code built from the component
+initials: C (confusion matrix), R (rules), E (examples/few-shot), S
+(self-reflective), G (RAG/retrieval), and M (CAMeL post-processing). The
+selection rationale was described in Section~\ref{sec:meth_p6}: pairs were
+selected to combine complementary knowledge types; triples extend the
+best-performing pair; the full system combines all applicable components.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~6 combination designs. Results pending execution.}
+  \label{tab:p6_design}
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    \textbf{ID} & \textbf{Code} & \textbf{Components} \\
+    \midrule
+    6-01 & C+E   & Confusion matrix + few-shot examples \\
+    6-02 & R+E   & Rules + few-shot examples \\
+    6-03 & C+R   & Confusion matrix + rules \\
+    6-04 & E+S   & Few-shot + self-reflective \\
+    6-05 & C+E+R & Confusion matrix + few-shot + rules \\
+    6-06 & C+E+S & Confusion matrix + few-shot + self-reflective \\
+    6-07 & R+E+S & Rules + few-shot + self-reflective \\
+    6-08 & C+R+E+S & All prompt augmentations (no RAG) \\
+    6-09 & C+R+E+S+G & Full prompt augmentation + RAG \\
+    6-10 & C+E+M & Confusion matrix + few-shot + CAMeL \\
+    6-11 & R+E+M & Rules + few-shot + CAMeL \\
+    6-12 & C+R+E+S+G+M & Full system \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The ablation design (Section~\ref{sec:meth_p6}) will report CER change when
+each component is removed from the full system (combination 6-12). A positive
+CER change upon component removal indicates that the component contributed
+positively to the combined system; a negative change indicates the component
+was harmful.
+
+Based on the isolated phase results (Table~\ref{tab:main_comparison}), several
+predictions can be stated ahead of execution. First, Phase~4C (CAMeL) is
+unlikely to produce improvement in any combination, since the revert condition
+was never triggered in isolation and the combined system is unlikely to produce
+more non-word outputs. Second, Phase~5 (RAG) is likely to remain harmful in
+combination, since the domain mismatch between OpenITI and Akhbar is a
+structural problem not resolved by combining with other strategies. Third,
+Phase~4B (few-shot, best isolated result) is the most promising component;
+combinations that include it are the most likely to approach or exceed the
+Phase~2 baseline.
+
+\textbf{RQ9} will be answered when Phase~6 results become available.
+
+%────────────────────────────────────────────────────────────────────────────
+\section{Summary and Ranking}
+\label{sec:res_summary}
+%────────────────────────────────────────────────────────────────────────────
+
+Table~\ref{tab:final_ranking} ranks all executed experimental conditions by
+CER, from best to worst.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Final ranking of all executed experimental conditions by CER.
+           Lower CER is better. Phase~6 results pending.}
+  \label{tab:final_ranking}
+  \begin{tabularx}{\textwidth}{rllXX}
+    \toprule
+    \textbf{Rank} & \textbf{Phase} & \textbf{Method}
+      & \textbf{CER} & \textbf{WER} \\
+    \midrule
+    1 & 1 (normal) & OCR Baseline (no LLM)   &  1.37\% &  5.04\% \\
+    2 & 2 / 4C     & Zero-Shot LLM / CAMeL   &  5.77\% & 10.60\% \\
+    3 & 4B         & Few-Shot (QALB)          & 10.09\% & 15.64\% \\
+    4 & 4D         & Self-Reflective          & 10.48\% & 16.12\% \\
+    5 & 4A         & Rule-Augmented           & 11.03\% & 17.70\% \\
+    6 & 1 (all)    & OCR Baseline (all)       & 17.01\% & 20.14\% \\
+    7 & 3          & Confusion Matrix         & 19.62\% & 24.35\% \\
+    8 & 5          & RAG (OpenITI)            & 22.10\% & 26.93\% \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The ranking reveals the core finding of this study: the \emph{best result
+achievable with an LLM} (Phase~2, CER 5.77\%) is still more than four times
+worse than the \emph{best result achievable without an LLM} (Phase~1 normal,
+CER 1.37\%). On high-quality typewritten Arabic text, the OCR engine is more
+accurate than the LLM corrector, and every knowledge augmentation strategy
+tested makes the corrector worse than the zero-shot baseline.
+
+Table~\ref{tab:rq_answers} summarises the answers to the nine research
+questions based on the results reported in this chapter.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Summary of research question answers.}
+  \label{tab:rq_answers}
+  \begin{tabularx}{\textwidth}{lXl}
+    \toprule
+    \textbf{RQ} & \textbf{Finding} & \textbf{Verdict} \\
+    \midrule
+    RQ1 & Qaari errors are systematic; dominated by repetition artefact
+          (95.2\%) and dot confusion on normal samples; all errors are
+          valid-but-wrong. & Characterised \\
+    RQ2 & Zero-shot LLM reduces aggregate CER by 66\% by eliminating the
+          repetition artefact, but increases CER on normal samples
+          by 321\%. & Partial \\
+    RQ3 & Confusion matrix injection worsens CER by 240\%.
+        & Negative \\
+    RQ4 & Rule augmentation worsens CER by 91\%.
+        & Negative \\
+    RQ5 & Few-shot examples (QALB) worsens CER by 75\%;
+          best augmented result.
+        & Negative \\
+    RQ6 & CAMeL post-processing has zero effect; revert condition never
+          triggered.
+        & Neutral \\
+    RQ7 & Self-reflective prompting worsens CER by 82\%.
+        & Negative \\
+    RQ8 & RAG with OpenITI worsens CER by 283\%; worst result overall.
+        & Negative \\
+    RQ9 & Phase 6 results pending.
+        & Pending \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The pattern of results is consistent and interpretable: every form of
+additional knowledge injected into the prompt increases the model's
+propensity to intervene on the input text, and on an input text that is
+already 98.63\% accurate (normal-samples CER 1.37\%), intervention almost
+always introduces errors. The over-correction problem, quantified at a
+25.06\% error introduction rate in Phase~4D, is not a failure of any
+individual augmentation strategy --- it is a property of the LLM's
+instruction-following behaviour on high-quality input. Chapter~\ref{ch_conc}
+analyses this finding in depth and considers the conditions under which
+knowledge augmentation would produce a different outcome.

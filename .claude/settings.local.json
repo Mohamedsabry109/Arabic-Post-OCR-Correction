@@ -35,7 +35,14 @@
       "Bash(done)",
       "Bash(echo \"FAIL: $f\")",
       "Bash(python -c \":*)",
-      "Bash(.venv/Scripts/python.exe scripts/craft_prompt.py --help)"
+      "Bash(.venv/Scripts/python.exe scripts/craft_prompt.py --help)",
+      "Bash(pdflatex -interaction=nonstopmode conference_101719.tex)",
+      "Read(//c//**)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/moham/AppData/Local/Programs/MiKTeX/**)",
+      "Bash(\"/c/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe\" -interaction=nonstopmode conference_101719.tex)",
+      "Bash(source .venv/Scripts/activate)",
+      "Bash(source venv/Scripts/activate)"
     ]
   }
 }
