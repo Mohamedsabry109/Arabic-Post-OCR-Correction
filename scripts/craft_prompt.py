@@ -877,12 +877,25 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
     print("=" * 70)
 
     all_results: dict[str, dict] = {}
+    # Per-sample detail for error analysis
+    all_sample_details: list[dict] = []
 
     for ds_key, records in sorted(by_dataset.items()):
+        cer_ocr_values: list[float] = []
+        wer_ocr_values: list[float] = []
         cer_values: list[float] = []
         wer_values: list[float] = []
-        regressions = 0
         n_total = len(records)
+
+        # Error analysis counters
+        n_improved = 0
+        n_regressed = 0
+        n_unchanged = 0
+
+        # Severity buckets for improvements and regressions
+        cer_delta_buckets = {"large_improve": 0, "small_improve": 0, "small_regress": 0, "large_regress": 0}
+
+        sample_details: list[dict] = []
 
         for r in records:
             gt = r.get("gt_text", "")
@@ -892,31 +905,85 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
                 continue
 
             cer_ocr = calculate_cer(gt, ocr, strip_diacritics=True)
+            wer_ocr = calculate_wer(gt, ocr, strip_diacritics=True)
             cer_llm = calculate_cer(gt, corrected, strip_diacritics=True)
             wer_llm = calculate_wer(gt, corrected, strip_diacritics=True)
 
+            cer_ocr_values.append(cer_ocr)
+            wer_ocr_values.append(wer_ocr)
             cer_values.append(cer_llm)
             wer_values.append(wer_llm)
-            if cer_llm > cer_ocr:
-                regressions += 1
+
+            cer_delta = cer_ocr - cer_llm  # positive = improvement
+
+            if cer_delta > 1e-6:
+                n_improved += 1
+                if cer_delta >= 0.1:
+                    cer_delta_buckets["large_improve"] += 1
+                else:
+                    cer_delta_buckets["small_improve"] += 1
+            elif cer_delta < -1e-6:
+                n_regressed += 1
+                if abs(cer_delta) >= 0.1:
+                    cer_delta_buckets["large_regress"] += 1
+                else:
+                    cer_delta_buckets["small_regress"] += 1
+            else:
+                n_unchanged += 1
+
+            detail = {
+                "sample_id": r.get("sample_id", ""),
+                "dataset": ds_key,
+                "cer_ocr": round(cer_ocr, 6),
+                "cer_llm": round(cer_llm, 6),
+                "cer_delta": round(cer_delta, 6),
+                "wer_ocr": round(wer_ocr, 6),
+                "wer_llm": round(wer_llm, 6),
+                "outcome": (
+                    "improved" if cer_delta > 1e-6
+                    else "regressed" if cer_delta < -1e-6
+                    else "unchanged"
+                ),
+            }
+            sample_details.append(detail)
+            all_sample_details.append(detail)
 
         if not cer_values:
             continue
 
+        avg_cer_ocr = sum(cer_ocr_values) / len(cer_ocr_values)
+        avg_wer_ocr = sum(wer_ocr_values) / len(wer_ocr_values)
         avg_cer = sum(cer_values) / len(cer_values)
         avg_wer = sum(wer_values) / len(wer_values)
-        reg_rate = regressions / len(cer_values) * 100
+        reg_rate = n_regressed / len(cer_values) * 100
+        imp_rate = n_improved / len(cer_values) * 100
+        cer_delta_overall = avg_cer_ocr - avg_cer  # positive = improvement
 
         result: dict = {
             "dataset": ds_key,
             "n_samples": n_total,
+            # Before correction (OCR) metrics
+            "ocr_cer": round(avg_cer_ocr, 6),
+            "ocr_wer": round(avg_wer_ocr, 6),
+            # After correction (LLM) metrics
             "cer": round(avg_cer, 6),
             "wer": round(avg_wer, 6),
+            # Delta (positive = improvement)
+            "cer_delta": round(cer_delta_overall, 6),
+            "cer_rel_improvement_pct": (
+                round(cer_delta_overall / avg_cer_ocr * 100, 2)
+                if avg_cer_ocr > 0 else 0.0
+            ),
+            # Error analysis
+            "n_improved": n_improved,
+            "n_regressed": n_regressed,
+            "n_unchanged": n_unchanged,
+            "improvement_rate": round(imp_rate, 2),
             "regression_rate": round(reg_rate, 2),
-            "regressions": regressions,
+            "cer_delta_buckets": cer_delta_buckets,
         }
 
-        # Phase 1 comparison
+        # Phase 1 comparison (aggregate baseline)
         p1_data = (
             phase1_metrics.get("results_normal_only_no_diacritics", {}).get(ds_key)
             or phase1_metrics.get("results_all_samples_no_diacritics", {}).get(ds_key)
@@ -947,20 +1014,33 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
 
         # Print per-dataset results
         print(f"\n--- {ds_key} ({n_total} samples) ---")
+        print(f"  Before correction (OCR):  CER={avg_cer_ocr:.4f}  WER={avg_wer_ocr:.4f}")
+        cer_dir = "better" if cer_delta_overall > 0 else "worse" if cer_delta_overall < 0 else "same"
         print(
-            f"  CER: {avg_cer:.4f}  |  WER: {avg_wer:.4f}  "
-            f"|  Regressions: {regressions}/{len(cer_values)} ({reg_rate:.1f}%)"
+            f"  After  correction (LLM):  CER={avg_cer:.4f}  WER={avg_wer:.4f}  "
+            f"[{cer_dir}, {result['cer_rel_improvement_pct']:+.1f}%]"
+        )
+        print(
+            f"  Sample outcomes: improved={n_improved} ({imp_rate:.1f}%)  "
+            f"regressed={n_regressed} ({reg_rate:.1f}%)  unchanged={n_unchanged}"
+        )
+        print(
+            f"  CER delta buckets: "
+            f"large_improve={cer_delta_buckets['large_improve']}  "
+            f"small_improve={cer_delta_buckets['small_improve']}  "
+            f"small_regress={cer_delta_buckets['small_regress']}  "
+            f"large_regress={cer_delta_buckets['large_regress']}"
         )
         if "p1_cer" in result:
             direction = "better" if result["vs_p1_cer_delta"] > 0 else "worse"
             print(
-                f"  vs Phase 1 (OCR):       CER {result['p1_cer']:.4f} -> {avg_cer:.4f} "
+                f"  vs Phase 1 (OCR):         CER {result['p1_cer']:.4f} -> {avg_cer:.4f} "
                 f"({direction}, {abs(result['vs_p1_cer_rel']):.1f}%)"
             )
         if "p2_cer" in result:
             direction = "better" if result["vs_p2_cer_delta"] > 0 else "worse"
             print(
-                f"  vs Phase 2 (zero-shot): CER {result['p2_cer']:.4f} -> {avg_cer:.4f} "
+                f"  vs Phase 2 (zero-shot):   CER {result['p2_cer']:.4f} -> {avg_cer:.4f} "
                 f"({direction}, {abs(result['vs_p2_cer_rel']):.1f}%)"
             )
 
@@ -970,16 +1050,84 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
         json.dump(all_results, f, ensure_ascii=False, indent=2)
     logger.info("Saved metrics to %s", metrics_path)
 
+    # Save detailed error analysis
+    if all_sample_details:
+        # Worst regressions (for inspection)
+        worst_regressions = sorted(
+            [d for d in all_sample_details if d["outcome"] == "regressed"],
+            key=lambda x: x["cer_delta"],  # most negative first
+        )[:20]
+        # Best improvements
+        best_improvements = sorted(
+            [d for d in all_sample_details if d["outcome"] == "improved"],
+            key=lambda x: x["cer_delta"],
+            reverse=True,
+        )[:20]
+
+        n_total_all = len(all_sample_details)
+        n_imp_all = sum(1 for d in all_sample_details if d["outcome"] == "improved")
+        n_reg_all = sum(1 for d in all_sample_details if d["outcome"] == "regressed")
+        n_unch_all = sum(1 for d in all_sample_details if d["outcome"] == "unchanged")
+        avg_cer_ocr_all = sum(d["cer_ocr"] for d in all_sample_details) / n_total_all
+        avg_cer_llm_all = sum(d["cer_llm"] for d in all_sample_details) / n_total_all
+
+        error_analysis = {
+            "summary": {
+                "n_total": n_total_all,
+                "n_improved": n_imp_all,
+                "n_regressed": n_reg_all,
+                "n_unchanged": n_unch_all,
+                "improvement_rate_pct": round(n_imp_all / n_total_all * 100, 2),
+                "regression_rate_pct": round(n_reg_all / n_total_all * 100, 2),
+                "avg_cer_ocr": round(avg_cer_ocr_all, 6),
+                "avg_cer_llm": round(avg_cer_llm_all, 6),
+                "avg_cer_delta": round(avg_cer_ocr_all - avg_cer_llm_all, 6),
+            },
+            "worst_regressions": worst_regressions,
+            "best_improvements": best_improvements,
+            "per_dataset": {
+                ds_key: {
+                    "n_improved": r["n_improved"],
+                    "n_regressed": r["n_regressed"],
+                    "n_unchanged": r["n_unchanged"],
+                    "improvement_rate_pct": r["improvement_rate"],
+                    "regression_rate_pct": r["regression_rate"],
+                    "ocr_cer": r["ocr_cer"],
+                    "llm_cer": r["cer"],
+                    "cer_delta": r["cer_delta"],
+                    "cer_rel_improvement_pct": r["cer_rel_improvement_pct"],
+                    "cer_delta_buckets": r["cer_delta_buckets"],
+                }
+                for ds_key, r in all_results.items()
+            },
+        }
+        error_analysis_path = output_dir / "error_analysis.json"
+        with open(error_analysis_path, "w", encoding="utf-8") as f:
+            json.dump(error_analysis, f, ensure_ascii=False, indent=2)
+        logger.info("Saved error analysis to %s", error_analysis_path)
+
     # Overall summary
     if all_results:
         avg_cer_all = sum(r["cer"] for r in all_results.values()) / len(all_results)
+        avg_cer_ocr_all_ds = sum(r["ocr_cer"] for r in all_results.values()) / len(all_results)
         avg_reg_all = sum(r["regression_rate"] for r in all_results.values()) / len(
             all_results
         )
+        avg_imp_all = sum(r["improvement_rate"] for r in all_results.values()) / len(
+            all_results
+        )
         print("\n" + "=" * 70)
+        print("OVERALL SUMMARY")
+        print(f"  Before correction (OCR): avg CER = {avg_cer_ocr_all_ds:.4f}")
+        overall_delta = avg_cer_ocr_all_ds - avg_cer_all
+        overall_dir = "better" if overall_delta > 0 else "worse"
+        overall_rel = (overall_delta / avg_cer_ocr_all_ds * 100) if avg_cer_ocr_all_ds > 0 else 0.0
         print(
-            f"Overall: avg CER = {avg_cer_all:.4f}, "
-            f"avg regression rate = {avg_reg_all:.1f}%"
+            f"  After  correction (LLM): avg CER = {avg_cer_all:.4f} "
+            f"({overall_dir}, {overall_rel:+.1f}%)"
+        )
+        print(
+            f"  Sample outcomes: improved={avg_imp_all:.1f}%  regressed={avg_reg_all:.1f}%"
         )
         p2_deltas = [
             r["vs_p2_cer_delta"]
@@ -989,8 +1137,10 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
         if p2_deltas:
             avg_p2_delta = sum(p2_deltas) / len(p2_deltas)
             direction = "better" if avg_p2_delta > 0 else "worse"
-            print(f"vs Phase 2: avg CER change = {avg_p2_delta:+.4f} ({direction})")
+            print(f"  vs Phase 2 (zero-shot): avg CER change = {avg_p2_delta:+.4f} ({direction})")
         print("=" * 70)
+        if all_sample_details:
+            print(f"  Detailed error analysis saved to: {error_analysis_path}")
 
 
 # ---------------------------------------------------------------------------
