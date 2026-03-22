@@ -93,6 +93,7 @@ from src.core.rag_retriever import RAGRetriever
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual, calculate_cer
+from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.analysis.stats_tester import StatsTester
 from src.linguistic.morphology import MorphAnalyzer
@@ -2253,6 +2254,11 @@ def main() -> None:
                 combo_id, all_corrected, all_comparisons, config, combo_dir, limit
             )
             print_combo_summary(combo_id, all_corrected, all_comparisons)
+            write_corrections_report(
+                corrections_path=combo_dir,
+                output_path=combo_dir / "sample_report.txt",
+                title=f"Phase 6 -- {combo_id}",
+            )
             logger.info("[%s] complete. Results in: %s", combo_id, combo_dir)
 
         # ------------------------------------------------------------------

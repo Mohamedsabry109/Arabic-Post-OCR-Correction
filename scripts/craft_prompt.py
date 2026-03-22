@@ -47,6 +47,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
 from src.analysis.metrics import calculate_cer, calculate_wer
+from src.analysis.report_formatter import write_corrections_report
 from src.data.text_utils import normalise_arabic
 
 logging.basicConfig(
@@ -1141,6 +1142,16 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
         print("=" * 70)
         if all_sample_details:
             print(f"  Detailed error analysis saved to: {error_analysis_path}")
+
+    # ------------------------------------------------------------------
+    # Sample report with categorised OCR / LLM / GT blocks
+    # ------------------------------------------------------------------
+    if corrections_path.exists():
+        write_corrections_report(
+            corrections_path=corrections_path,
+            output_path=output_dir / "sample_report.txt",
+            title="Crafted Prompt Evaluation",
+        )
 
 
 # ---------------------------------------------------------------------------

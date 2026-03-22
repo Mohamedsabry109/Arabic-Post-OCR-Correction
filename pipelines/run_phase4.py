@@ -66,6 +66,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.data.data_loader import DataLoader, DataError, OCRSample
 from src.data.knowledge_base import RulesLoader, ArabicRule, QALBLoader, QALBPair
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
+from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import (
@@ -1912,6 +1913,11 @@ def main() -> None:
             all_corrected, all_comparisons, phase_label, phase_title, results_dir, config
         )
         print_summary(all_corrected, all_comparisons, phase_label)
+        write_corrections_report(
+            corrections_path=results_dir,
+            output_path=results_dir / "sample_report.txt",
+            title="Phase 4A -- Rule-Augmented Prompting",
+        )
         logger.info("Phase 4A complete. Results in: %s", results_dir)
 
     # ------------------------------------------------------------------
@@ -1966,6 +1972,11 @@ def main() -> None:
             all_corrected, all_comparisons, phase_label, phase_title, results_dir, config
         )
         print_summary(all_corrected, all_comparisons, phase_label)
+        write_corrections_report(
+            corrections_path=results_dir,
+            output_path=results_dir / "sample_report.txt",
+            title="Phase 4B -- Few-Shot Prompting (QALB)",
+        )
         logger.info("Phase 4B complete. Results in: %s", results_dir)
 
     # ------------------------------------------------------------------
@@ -1999,6 +2010,11 @@ def main() -> None:
             all_corrected, all_comparisons, phase_label, phase_title, results_dir, config
         )
         print_summary(all_corrected, all_comparisons, phase_label)
+        write_corrections_report(
+            corrections_path=results_dir,
+            output_path=results_dir / "sample_report.txt",
+            title="Phase 4C -- CAMeL Validation",
+        )
         logger.info("Phase 4C complete. Results in: %s", results_dir)
 
 

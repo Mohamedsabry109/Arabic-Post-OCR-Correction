@@ -50,6 +50,7 @@ from src.analysis.metrics import (
     calculate_metrics_dual,
     compare_metrics,
 )
+from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, SampleError
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import (
@@ -1203,6 +1204,11 @@ def main() -> None:
     generate_report(all_corrected, all_comparisons, model_name, results_dir)
     print_summary(all_corrected, all_comparisons)
 
+    write_corrections_report(
+        corrections_path=results_dir,
+        output_path=results_dir / "sample_report.txt",
+        title="Phase 2 -- Zero-Shot Correction",
+    )
     logger.info("Phase 2 complete. Results in: %s", results_dir)
 
 

@@ -49,7 +49,16 @@
       "Bash(sed -n '870,895p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
       "Bash(sed -n '1110,1120p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
       "Bash(sed -n '1898,1910p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
-      "Bash(sed -n '1952,1962p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)"
+      "Bash(sed -n '1952,1962p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(python3:*)",
+      "Bash(sed -n '1090,1150p' D:/Masters/Arabic-Post-OCR-Correction/scripts/craft_prompt.py)",
+      "Bash(sed -n '1200,1260p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4d.py)",
+      "Bash(sed -n '2225,2275p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase6.py)",
+      "Bash(sed -n '1528,1540p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase5.py)",
+      "Bash(sed -n '1108,1122p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4d.py)",
+      "Bash(sed -n '1908,1920p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(sed -n '1960,1975p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(sed -n '1992,2008p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)"
     ]
   }
 }

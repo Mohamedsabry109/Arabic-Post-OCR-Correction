@@ -54,6 +54,7 @@ from src.core.rag_retriever import RAGRetriever
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
+from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from pipelines._utils import resolve_datasets, load_sample_list
 
@@ -1532,6 +1533,11 @@ def main() -> None:
     aggregate_comparisons(all_comparisons, config, results_dir, limit)
     generate_report(all_corrected, all_comparisons, results_dir, config, top_k)
     print_summary(all_corrected, all_comparisons)
+    write_corrections_report(
+        corrections_path=results_dir,
+        output_path=results_dir / "sample_report.txt",
+        title="Phase 5 -- RAG (OpenITI)",
+    )
     logger.info("Phase 5 complete. Results in: %s", results_dir)
 
 

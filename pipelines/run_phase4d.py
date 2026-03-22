@@ -70,6 +70,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.data.data_loader import DataLoader, DataError
 from src.data.knowledge_base import LLMInsightsLoader
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
+from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.analysis.llm_error_analyzer import LLMErrorAnalyzer
 from src.core.prompt_builder import PromptBuilder
@@ -1118,6 +1119,12 @@ def run_analyze(
         agg_cer * 100, agg_wer * 100, len(all_corrected),
     )
     logger.info("=" * 60)
+
+    write_corrections_report(
+        corrections_path=results_dir,
+        output_path=results_dir / "sample_report.txt",
+        title="Phase 4D -- Self-Reflective Prompting",
+    )
 
 
 def _write_paper_tables(

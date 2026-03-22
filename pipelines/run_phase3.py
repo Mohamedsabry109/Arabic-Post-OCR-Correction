@@ -55,6 +55,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.data.data_loader import DataLoader, DataError, OCRSample
 from src.data.knowledge_base import ConfusionMatrixLoader, ConfusionPair
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual, compare_metrics
+from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import (
@@ -1679,6 +1680,11 @@ def main() -> None:
     generate_report(all_corrected, all_comparisons, model_name, top_n, format_style, results_dir)
     print_summary(all_corrected, all_comparisons, top_n)
 
+    write_corrections_report(
+        corrections_path=results_dir,
+        output_path=results_dir / "sample_report.txt",
+        title="Phase 3 -- OCR-Aware Prompting",
+    )
     logger.info("Phase 3 complete. Results in: %s", results_dir)
 
 

@@ -237,7 +237,7 @@ phase4d:
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:
-  prompt_version: "v2"         # "v1" (aggressive correction) | "v2" (conservative: preserve correct text)
+  prompt_version: "p2v2"       # "p2v2" = crafted base prompt (current) | "v1"/"v2" = legacy zero-shot (old runs)
   analyze_errors: true          # run error_changes.json (adds ~10% runtime)
   max_retries: 2                # LLM retry count on empty or failed output
 
