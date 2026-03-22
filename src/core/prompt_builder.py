@@ -46,7 +46,7 @@ class PromptBuilder:
 
     # Default path to the crafted system prompt (relative to project root).
     DEFAULT_CRAFTED_PROMPT_PATH: str = (
-        "data/crafted_system_prompt.txt"
+        "configs/crafted_system_prompt.txt"
     )
 
     # -----------------------------------------------------------------------

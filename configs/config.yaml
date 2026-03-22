@@ -261,7 +261,7 @@ evaluation:
 # ---------------------------------------------------------------------------
 prompt_craft:
   results_dir: "results/prompt_craft"
-  crafted_prompt_path: "data/crafted_system_prompt.txt"
+  crafted_prompt_path: "configs/crafted_system_prompt.txt"
   # Samples per CER stratum in the meta-prompt
   n_correct: 5               # CER = 0 (correct samples to teach conservation)
   n_easy: 5                  # CER < 0.05
