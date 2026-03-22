@@ -154,6 +154,13 @@ def parse_args() -> argparse.Namespace:
         help="Max samples per dataset for testing (passed through to each pipeline).",
     )
     parser.add_argument(
+        "--sample-list",
+        type=Path,
+        default=None,
+        dest="sample_list",
+        help="Path to test_samples.json to filter samples (passed through to each pipeline).",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         help="Force re-run ignoring cached results (passed through to each pipeline).",
@@ -187,6 +194,9 @@ def _build_cmd(
 
     if args.datasets:
         cmd += ["--datasets"] + args.datasets
+
+    if args.sample_list is not None:
+        cmd += ["--sample-list", str(args.sample_list)]
 
     if args.limit is not None:
         cmd += ["--limit", str(args.limit)]

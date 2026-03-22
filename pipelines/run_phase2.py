@@ -47,6 +47,7 @@ from src.data.data_loader import DataLoader, DataError, OCRSample
 from src.analysis.metrics import (
     MetricResult,
     calculate_metrics,
+    calculate_metrics_dual,
     compare_metrics,
 )
 from src.analysis.error_analyzer import ErrorAnalyzer, SampleError
@@ -57,7 +58,7 @@ from src.core.llm_corrector import (
     CorrectedSample,
     get_corrector,
 )
-from pipelines._utils import resolve_datasets
+from pipelines._utils import resolve_datasets, load_sample_list
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +100,13 @@ def parse_args() -> argparse.Namespace:
             "(e.g. KHATT-train PATS-A01-Akhbar). "
             "Defaults to all datasets from config."
         ),
+    )
+    parser.add_argument(
+        "--sample-list",
+        type=Path,
+        default=None,
+        dest="sample_list",
+        help="Path to test_samples.json to filter samples (overrides --datasets with relevant datasets).",
     )
     parser.add_argument(
         "--force",
@@ -268,6 +276,7 @@ def run_export(
     results_dir: Path,
     limit: Optional[int],
     force: bool,
+    sample_ids: Optional[set[str]] = None,
 ) -> None:
     """Export OCR texts to inference_input.jsonl for upload to Kaggle/Colab.
 
@@ -296,17 +305,19 @@ def run_export(
                 continue
 
             try:
-                samples = list(loader.iter_samples(ds_key, limit=limit))
+                samples = list(loader.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
             except DataError as exc:
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue
 
+            prompt_version = config.get("phase2", {}).get("prompt_version", "v1")
             for sample in samples:
                 record = {
                     "sample_id": sample.sample_id,
                     "dataset":   ds_key,
                     "ocr_text":  sample.ocr_text,
                     "gt_text":   sample.gt_text,
+                    "prompt_version": prompt_version,
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 total_written += 1
@@ -602,7 +613,7 @@ def process_dataset_analyze(
     # Step 1: CER/WER on corrected texts
     # ------------------------------------------------------------------
     logger.info("[%s] Calculating corrected CER/WER ...", dataset_key)
-    corrected_result = calculate_metrics(
+    corrected_result, corrected_result_nd = calculate_metrics_dual(
         corrected_samples,
         dataset_name=dataset_key,
         text_field="corrected_text",
@@ -620,6 +631,7 @@ def process_dataset_analyze(
             },
         ),
         "corrected": corrected_result.to_dict(),
+        "corrected_no_diacritics": corrected_result_nd.to_dict(),
     }
     save_json(metrics_json, out_dir / "metrics.json")
 
@@ -647,6 +659,34 @@ def process_dataset_analyze(
             cer_rel = (cer_delta_abs / p1_cer * 100) if p1_cer > 0 else 0.0
             wer_rel = (wer_delta_abs / p1_wer * 100) if p1_wer > 0 else 0.0
 
+            # No-diacritics comparison
+            p1_normal_nd = phase1_metrics.get("results_normal_only_no_diacritics", {}).get(dataset_key)
+            p1_all_nd = phase1_metrics.get("results_all_samples_no_diacritics", {}).get(dataset_key)
+            p1_data_nd = p1_normal_nd or p1_all_nd
+            delta_nd = {}
+            if p1_data_nd:
+                p1_cer_nd = p1_data_nd.get("cer", 0.0)
+                p1_wer_nd = p1_data_nd.get("wer", 0.0)
+                cer_d_nd = p1_cer_nd - corrected_result_nd.cer
+                wer_d_nd = p1_wer_nd - corrected_result_nd.wer
+                cer_r_nd = (cer_d_nd / p1_cer_nd * 100) if p1_cer_nd > 0 else 0.0
+                wer_r_nd = (wer_d_nd / p1_wer_nd * 100) if p1_wer_nd > 0 else 0.0
+                delta_nd = {
+                    "phase1_ocr_no_diacritics": {
+                        "cer": round(p1_cer_nd, 6), "wer": round(p1_wer_nd, 6),
+                    },
+                    "phase2_corrected_no_diacritics": {
+                        "cer": round(corrected_result_nd.cer, 6),
+                        "wer": round(corrected_result_nd.wer, 6),
+                    },
+                    "delta_no_diacritics": {
+                        "cer_absolute": round(cer_d_nd, 6),
+                        "wer_absolute": round(wer_d_nd, 6),
+                        "cer_relative_pct": round(cer_r_nd, 2),
+                        "wer_relative_pct": round(wer_r_nd, 2),
+                    },
+                }
+
             comparison = {
                 "meta": make_meta(dataset_key, n, config, limit),
                 "phase1_ocr": {
@@ -664,6 +704,7 @@ def process_dataset_analyze(
                     "cer_relative_pct":   round(cer_rel, 2),
                     "wer_relative_pct":   round(wer_rel, 2),
                 },
+                **delta_nd,
                 "interpretation": (
                     f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
                     f"{abs(cer_rel):.1f}% "
@@ -751,7 +792,8 @@ def process_dataset_full(
 
     with open(corrections_path, "a", encoding="utf-8") as out_f:
         for sample in tqdm(pending, desc=f"  Correcting {dataset_key}", unit="sample"):
-            messages = builder.build_zero_shot(sample.ocr_text)
+            prompt_version = config.get("phase2", {}).get("prompt_version", "v1")
+            messages = builder.build_zero_shot(sample.ocr_text, version=prompt_version)
             result: CorrectionResult = corrector.correct(
                 sample_id=sample.sample_id,
                 ocr_text=sample.ocr_text,
@@ -1003,13 +1045,19 @@ def main() -> None:
 
     # Determine which datasets to run (CLI --datasets overrides config list)
     active_datasets = resolve_datasets(config, args.datasets)
+    sample_ids: Optional[set[str]] = None
+    if args.sample_list:
+        sample_ids, sl_datasets = load_sample_list(args.sample_list)
+        if not args.datasets:
+            active_datasets = sl_datasets
+        logger.info("Sample list loaded: %d sample IDs from %s", len(sample_ids), args.sample_list)
     logger.info("Datasets to process: %s", active_datasets)
 
     # ------------------------------------------------------------------
     # EXPORT mode
     # ------------------------------------------------------------------
     if args.mode == "export":
-        run_export(config, active_datasets, results_dir, limit, force=args.force)
+        run_export(config, active_datasets, results_dir, limit, force=args.force, sample_ids=sample_ids)
         return
 
     # ------------------------------------------------------------------
@@ -1109,7 +1157,7 @@ def main() -> None:
 
             else:  # full
                 loader = DataLoader(config)
-                samples = list(loader.iter_samples(ds_key, limit=limit))
+                samples = list(loader.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
                 if not samples:
                     logger.warning("No samples loaded for %s — skipping.", ds_key)
                     continue

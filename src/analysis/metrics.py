@@ -60,7 +60,11 @@ class MetricResult:
 # ---------------------------------------------------------------------------
 
 
-def calculate_cer(reference: str, hypothesis: str) -> float:
+def calculate_cer(
+    reference: str,
+    hypothesis: str,
+    strip_diacritics: bool = False,
+) -> float:
     """Calculate Character Error Rate using Levenshtein edit distance.
 
     Formula:
@@ -74,6 +78,7 @@ def calculate_cer(reference: str, hypothesis: str) -> float:
     Args:
         reference: Ground truth text.
         hypothesis: OCR prediction text.
+        strip_diacritics: If True, remove Arabic diacritics before comparison.
 
     Returns:
         CER value ≥ 0.0. Can exceed 1.0 if hypothesis is much longer.
@@ -85,8 +90,8 @@ def calculate_cer(reference: str, hypothesis: str) -> float:
         >>> calculate_cer("", "أي شيء")
         0.0
     """
-    ref = normalise_arabic(reference)
-    hyp = normalise_arabic(hypothesis)
+    ref = normalise_arabic(reference, remove_diacritics=strip_diacritics)
+    hyp = normalise_arabic(hypothesis, remove_diacritics=strip_diacritics)
 
     if len(ref) == 0:
         return 0.0
@@ -95,7 +100,11 @@ def calculate_cer(reference: str, hypothesis: str) -> float:
     return distance / len(ref)
 
 
-def calculate_wer(reference: str, hypothesis: str) -> float:
+def calculate_wer(
+    reference: str,
+    hypothesis: str,
+    strip_diacritics: bool = False,
+) -> float:
     """Calculate Word Error Rate using word-level Levenshtein edit distance.
 
     Tokenises both strings with tokenise_arabic() before comparison.
@@ -103,6 +112,7 @@ def calculate_wer(reference: str, hypothesis: str) -> float:
     Args:
         reference: Ground truth text.
         hypothesis: OCR prediction text.
+        strip_diacritics: If True, remove Arabic diacritics before comparison.
 
     Returns:
         WER value ≥ 0.0. Returns 0.0 if reference has no words.
@@ -111,8 +121,8 @@ def calculate_wer(reference: str, hypothesis: str) -> float:
         >>> calculate_wer("الكتاب على الطاولة", "الكتب على الطاولة")
         0.333...
     """
-    ref_words = tokenise_arabic(normalise_arabic(reference))
-    hyp_words = tokenise_arabic(normalise_arabic(hypothesis))
+    ref_words = tokenise_arabic(normalise_arabic(reference, remove_diacritics=strip_diacritics))
+    hyp_words = tokenise_arabic(normalise_arabic(hypothesis, remove_diacritics=strip_diacritics))
 
     if len(ref_words) == 0:
         return 0.0
@@ -126,6 +136,7 @@ def calculate_metrics(
     dataset_name: str,
     text_field: str = "ocr_text",
     normalise: bool = True,
+    strip_diacritics: bool = False,
 ) -> MetricResult:
     """Calculate CER and WER over a list of OCRSample or CorrectedSample objects.
 
@@ -141,6 +152,7 @@ def calculate_metrics(
             ``sample.sample`` (OCRSample) if not found directly on the object.
         normalise: If True, apply normalise_arabic() before scoring.
                    Should always be True; exposed for testing only.
+        strip_diacritics: If True, remove Arabic diacritics before comparison.
 
     Returns:
         Aggregated MetricResult. Returns zero MetricResult if samples is empty.
@@ -185,12 +197,12 @@ def calculate_metrics(
                 f"Valid values: 'ocr_text', 'corrected_text'."
             )
 
-        ref = normalise_arabic(gt_text) if normalise else gt_text
+        ref = normalise_arabic(gt_text, remove_diacritics=strip_diacritics) if normalise else gt_text
         total_chars += len(ref)
         total_words += len(tokenise_arabic(ref))
 
-        per_cer.append(calculate_cer(gt_text, hyp_text))
-        per_wer.append(calculate_wer(gt_text, hyp_text))
+        per_cer.append(calculate_cer(gt_text, hyp_text, strip_diacritics=strip_diacritics))
+        per_wer.append(calculate_wer(gt_text, hyp_text, strip_diacritics=strip_diacritics))
 
     return MetricResult(
         dataset=dataset_name,
@@ -212,6 +224,7 @@ def calculate_metrics_split(
     samples: list["OCRSample"],
     dataset_name: str,
     runaway_ratio_threshold: float = 5.0,
+    strip_diacritics: bool = False,
 ) -> tuple["MetricResult", "MetricResult", dict]:
     """Calculate metrics for all samples AND for non-runaway samples only.
 
@@ -223,6 +236,7 @@ def calculate_metrics_split(
         dataset_name: Dataset label.
         runaway_ratio_threshold: OCR/GT length ratio above which a sample is
             classified as runaway.
+        strip_diacritics: If True, remove Arabic diacritics before comparison.
 
     Returns:
         Tuple of:
@@ -241,8 +255,8 @@ def calculate_metrics_split(
         else:
             normal_samples.append(s)
 
-    all_metrics = calculate_metrics(samples, dataset_name)
-    normal_metrics = calculate_metrics(normal_samples, f"{dataset_name}-normal")
+    all_metrics = calculate_metrics(samples, dataset_name, strip_diacritics=strip_diacritics)
+    normal_metrics = calculate_metrics(normal_samples, f"{dataset_name}-normal", strip_diacritics=strip_diacritics)
 
     data_quality = {
         "total_samples": len(samples),
@@ -289,6 +303,45 @@ def compare_metrics(baseline: MetricResult, improved: MetricResult) -> dict:
         "wer_baseline": round(baseline.wer, 6),
         "wer_improved": round(improved.wer, 6),
     }
+
+
+# ---------------------------------------------------------------------------
+# Dual-mode helpers (with + without diacritics)
+# ---------------------------------------------------------------------------
+
+
+def calculate_metrics_dual(
+    samples: list,
+    dataset_name: str,
+    text_field: str = "ocr_text",
+) -> tuple[MetricResult, MetricResult]:
+    """Calculate metrics both with and without diacritics.
+
+    Returns:
+        Tuple of (with_diacritics, without_diacritics) MetricResult.
+    """
+    with_diac = calculate_metrics(samples, dataset_name, text_field, strip_diacritics=False)
+    no_diac = calculate_metrics(samples, dataset_name, text_field, strip_diacritics=True)
+    return with_diac, no_diac
+
+
+def calculate_metrics_split_dual(
+    samples: list["OCRSample"],
+    dataset_name: str,
+    runaway_ratio_threshold: float = 5.0,
+) -> tuple[MetricResult, MetricResult, MetricResult, MetricResult, dict]:
+    """Calculate split metrics both with and without diacritics.
+
+    Returns:
+        Tuple of (all_with, normal_with, all_no, normal_no, data_quality).
+    """
+    all_w, normal_w, dq = calculate_metrics_split(
+        samples, dataset_name, runaway_ratio_threshold, strip_diacritics=False,
+    )
+    all_nd, normal_nd, _ = calculate_metrics_split(
+        samples, dataset_name, runaway_ratio_threshold, strip_diacritics=True,
+    )
+    return all_w, normal_w, all_nd, normal_nd, dq
 
 
 # ---------------------------------------------------------------------------

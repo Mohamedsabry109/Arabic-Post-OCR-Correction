@@ -65,7 +65,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
 from src.data.knowledge_base import RulesLoader, ArabicRule, QALBLoader, QALBPair
-from src.analysis.metrics import MetricResult, calculate_metrics
+from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import (
@@ -76,7 +76,7 @@ from src.core.llm_corrector import (
 )
 from src.linguistic.morphology import MorphAnalyzer
 from src.linguistic.validator import WordValidator, TextCorrectionResult
-from pipelines._utils import resolve_datasets
+from pipelines._utils import resolve_datasets, load_sample_list
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +188,13 @@ def parse_args() -> argparse.Namespace:
             "(e.g. KHATT-train PATS-A01-Akhbar-train). "
             "Defaults to all datasets from config."
         ),
+    )
+    parser.add_argument(
+        "--sample-list",
+        type=Path,
+        default=None,
+        dest="sample_list",
+        help="Path to test_samples.json to filter samples (overrides --datasets with relevant datasets).",
     )
     parser.add_argument(
         "--force",
@@ -540,6 +547,26 @@ def load_phase2_dataset_metrics(phase2_dir: Path, dataset_key: str) -> Optional[
         return None
 
 
+def _nd_comparison_block(p2_nd: dict, corrected_nd: "MetricResult", phase_label: str) -> dict:
+    """Build no-diacritics comparison sub-dict for JSON output."""
+    if not p2_nd:
+        return {}
+    p2_cer_nd = float(p2_nd.get("cer", 0.0))
+    p2_wer_nd = float(p2_nd.get("wer", 0.0))
+    cer_d = p2_cer_nd - corrected_nd.cer
+    wer_d = p2_wer_nd - corrected_nd.wer
+    cer_r = (cer_d / p2_cer_nd * 100) if p2_cer_nd > 0 else 0.0
+    wer_r = (wer_d / p2_wer_nd * 100) if p2_wer_nd > 0 else 0.0
+    return {
+        "phase2_baseline_no_diacritics": {"cer": round(p2_cer_nd, 6), "wer": round(p2_wer_nd, 6)},
+        f"{phase_label}_corrected_no_diacritics": {"cer": round(corrected_nd.cer, 6), "wer": round(corrected_nd.wer, 6)},
+        "delta_no_diacritics": {
+            "cer_absolute": round(cer_d, 6), "wer_absolute": round(wer_d, 6),
+            "cer_relative_pct": round(cer_r, 2), "wer_relative_pct": round(wer_r, 2),
+        },
+    }
+
+
 # ---------------------------------------------------------------------------
 # Generic analyze step (shared by 4A and 4B)
 # ---------------------------------------------------------------------------
@@ -596,7 +623,7 @@ def process_dataset_analyze(
     # Step 1: CER/WER on corrected texts
     # ------------------------------------------------------------------
     logger.info("[%s] Calculating corrected CER/WER ...", dataset_key)
-    corrected_result = calculate_metrics(
+    corrected_result, corrected_result_nd = calculate_metrics_dual(
         corrected_samples,
         dataset_name=dataset_key,
         text_field="corrected_text",
@@ -617,6 +644,7 @@ def process_dataset_analyze(
     metrics_json = {
         "meta": make_meta(phase_label, dataset_key, n, config, limit, extra=metrics_extra),
         "corrected": corrected_result.to_dict(),
+        "corrected_no_diacritics": corrected_result_nd.to_dict(),
     }
     save_json(metrics_json, out_dir / "metrics.json")
 
@@ -639,6 +667,13 @@ def process_dataset_analyze(
         cer_rel = (cer_delta_abs / p2_cer * 100) if p2_cer > 0 else 0.0
         wer_rel = (wer_delta_abs / p2_wer * 100) if p2_wer > 0 else 0.0
 
+        # Load no-diacritics Phase 2 baseline
+        p2_path_full = phase2_dir / dataset_key / "metrics.json"
+        p2_nd = {}
+        if p2_path_full.exists():
+            with open(p2_path_full, encoding="utf-8") as _f:
+                p2_nd = json.load(_f).get("corrected_no_diacritics", {})
+
         comparison = {
             "meta": make_meta(
                 phase_label, dataset_key, n, config, limit,
@@ -659,6 +694,7 @@ def process_dataset_analyze(
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
+            **(_nd_comparison_block(p2_nd, corrected_result_nd, phase_label)),
             "interpretation": (
                 f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
@@ -747,6 +783,7 @@ def run_export_4a(
     n_rules: Optional[int],
     limit: Optional[int],
     force: bool,
+    sample_ids: Optional[set[str]] = None,
 ) -> None:
     """Export OCR texts with rules context to inference_input.jsonl (Phase 4A).
 
@@ -782,7 +819,7 @@ def run_export_4a(
                 continue
 
             try:
-                samples = list(loader_data.iter_samples(ds_key, limit=limit))
+                samples = list(loader_data.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
             except DataError as exc:
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue
@@ -998,6 +1035,7 @@ def run_export_4b(
     years: list[str],
     limit: Optional[int],
     force: bool,
+    sample_ids: Optional[set[str]] = None,
 ) -> None:
     """Export OCR texts with few-shot examples context (Phase 4B).
 
@@ -1024,7 +1062,7 @@ def run_export_4b(
                 continue
 
             try:
-                samples = list(loader_data.iter_samples(ds_key, limit=limit))
+                samples = list(loader_data.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
             except DataError as exc:
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue
@@ -1335,8 +1373,8 @@ def process_dataset_validate(
     # CER/WER on post-validation corrected texts
     # ------------------------------------------------------------------
     logger.info("[%s] Calculating Phase 4C CER/WER ...", dataset_key)
-    corrected_result = calculate_metrics(
-        corrected_samples, dataset_name=dataset_key, text_field="corrected_text"
+    corrected_result, corrected_result_nd = calculate_metrics_dual(
+        corrected_samples, dataset_name=dataset_key, text_field="corrected_text",
     )
 
     metrics_json = {
@@ -1350,6 +1388,7 @@ def process_dataset_validate(
             },
         ),
         "corrected": corrected_result.to_dict(),
+        "corrected_no_diacritics": corrected_result_nd.to_dict(),
     }
     save_json(metrics_json, out_dir / "metrics.json")
 
@@ -1369,6 +1408,13 @@ def process_dataset_validate(
         wer_delta_abs = p2_wer - corrected_result.wer
         cer_rel = (cer_delta_abs / p2_cer * 100) if p2_cer > 0 else 0.0
         wer_rel = (wer_delta_abs / p2_wer * 100) if p2_wer > 0 else 0.0
+
+        # Load no-diacritics Phase 2 baseline
+        p2_path_full = phase2_dir / dataset_key / "metrics.json"
+        p2_nd = {}
+        if p2_path_full.exists():
+            with open(p2_path_full, encoding="utf-8") as _f:
+                p2_nd = json.load(_f).get("corrected_no_diacritics", {})
 
         comparison = {
             "meta": make_meta(
@@ -1390,6 +1436,7 @@ def process_dataset_validate(
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
+            **(_nd_comparison_block(p2_nd, corrected_result_nd, "phase4c")),
             "interpretation": (
                 f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
@@ -1443,21 +1490,24 @@ def run_validate_4c(
     """
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    # Initialise CAMeL validator once
-    try:
-        analyzer = MorphAnalyzer(config)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning(
-            "MorphAnalyzer init failed: %s -- validation will pass through unchanged.", exc
+    # Initialise CAMeL validator once (match Phase 1 pattern)
+    camel_cfg = config.get("camel", {})
+    morph_cfg = camel_cfg.get("morphology", {})
+    analyzer = MorphAnalyzer(
+        db=morph_cfg.get("db", "calima-msa-r13"),
+        cache_size=morph_cfg.get("cache_size", 10_000),
+        enabled=camel_cfg.get("enabled", True),
+    )
+
+    if not analyzer.enabled:
+        logger.error(
+            "Phase 4C requires camel_tools but it is not available.\n"
+            "Install: pip install camel-tools && camel_data -i morphology-db-msa-r13\n"
+            "Or disable with: camel.enabled: false in config.yaml"
         )
-        analyzer = MorphAnalyzer({})
+        sys.exit(1)
 
     validator = WordValidator(analyzer)
-    if not analyzer.enabled:
-        logger.warning(
-            "CAMeL Tools not available or disabled. "
-            "validate_correction() will pass LLM text through unchanged."
-        )
 
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
@@ -1802,6 +1852,14 @@ def main() -> None:
     config = load_config(args.config)
     limit = args.limit or config.get("processing", {}).get("limit_per_dataset")
     active_datasets = resolve_datasets(config, args.datasets)
+
+    sample_ids: Optional[set[str]] = None
+    if args.sample_list:
+        sample_ids, sl_datasets = load_sample_list(args.sample_list)
+        if not args.datasets:
+            active_datasets = sl_datasets
+        logger.info("Sample list loaded: %d sample IDs from %s", len(sample_ids), args.sample_list)
+
     logger.info("Datasets to process: %s", active_datasets)
 
     # ------------------------------------------------------------------
@@ -1821,6 +1879,7 @@ def main() -> None:
                 n_rules=n_rules,
                 limit=limit,
                 force=args.force,
+                sample_ids=sample_ids,
             )
             return
 
@@ -1874,6 +1933,7 @@ def main() -> None:
                 years=years,
                 limit=limit,
                 force=args.force,
+                sample_ids=sample_ids,
             )
             return
 

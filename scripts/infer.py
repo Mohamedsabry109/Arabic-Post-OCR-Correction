@@ -402,9 +402,19 @@ def main() -> None:
                 prompt_ver = builder.self_reflective_prompt_version
                 if not insights_context.strip():
                     prompt_type = "zero_shot_fallback"
+            elif prompt_type == "meta_prompt":
+                messages = builder.build_meta_prompt(record["ocr_text"])
+                prompt_ver = record.get("prompt_version", builder.meta_prompt_version)
+            elif prompt_type == "crafted":
+                system_prompt = record.get("system_prompt", "")
+                messages = builder.build_crafted(record["ocr_text"], system_prompt)
+                prompt_ver = record.get("prompt_version", builder.crafted_prompt_version)
+                if not system_prompt.strip():
+                    prompt_type = "zero_shot_fallback"
             elif prompt_type == "zero_shot":
-                messages = builder.build_zero_shot(record["ocr_text"])
-                prompt_ver = builder.prompt_version
+                pv = record.get("prompt_version", "v1")
+                messages = builder.build_zero_shot(record["ocr_text"], version=pv)
+                prompt_ver = pv
             else:
                 logger.warning(
                     "Unknown prompt_type '%s' for %s -- falling back to zero_shot.",

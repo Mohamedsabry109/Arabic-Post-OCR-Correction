@@ -150,6 +150,7 @@ class DataLoader:
         font: str = "Akhbar",
         split: Optional[str] = None,
         limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
     ) -> list[OCRSample]:
         """Load PATS-A01 samples for a specific font.
 
@@ -199,6 +200,10 @@ class DataLoader:
         if allowed_ids is not None:
             ocr_files = [p for p in ocr_files if p.stem in allowed_ids]
 
+        # Filter to requested sample IDs (skip files not in the set entirely).
+        if sample_ids is not None:
+            ocr_files = [p for p in ocr_files if p.stem in sample_ids]
+
         # Load GT
         gt_lines, gt_file = self._load_pats_gt(font, len(ocr_files))
 
@@ -242,6 +247,7 @@ class DataLoader:
         self,
         split: str = "train",
         limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
     ) -> list[OCRSample]:
         """Load KHATT samples for a given split.
 
@@ -268,6 +274,10 @@ class DataLoader:
             raise DataError(f"KHATT GT directory not found: {gt_dir}")
 
         pairs = _pair_by_stem(ocr_dir, gt_dir)
+
+        # Filter to requested sample IDs (skip files not in the set entirely).
+        if sample_ids is not None:
+            pairs = [(o, g) for o, g in pairs if o.stem in sample_ids]
 
         effective_limit = limit if limit is not None else self._default_limit
         if effective_limit is not None:
@@ -339,12 +349,15 @@ class DataLoader:
         self,
         dataset: str,
         limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
     ) -> Iterator[OCRSample]:
         """Iterate samples for a named dataset without loading all into memory.
 
         Args:
             dataset: E.g. "KHATT-train", "PATS-A01-Akhbar".
             limit: Stop after this many samples.
+            sample_ids: If provided, only yield samples whose sample_id is in
+                this set. Applied *before* limit.
 
         Yields:
             OCRSample objects.
@@ -367,14 +380,21 @@ class DataLoader:
                         break
                 font = tail
                 pats_split = None
-            samples = self.load_pats(font=font, split=pats_split, limit=limit)
+            samples = self.load_pats(font=font, split=pats_split, limit=None if sample_ids else limit, sample_ids=sample_ids)
         elif dataset.startswith("KHATT-"):
             split = dataset.split("-", 1)[1]
-            samples = self.load_khatt(split=split, limit=limit)
+            samples = self.load_khatt(split=split, limit=None if sample_ids else limit, sample_ids=sample_ids)
         else:
             raise DataError(f"Unknown dataset key: '{dataset}'")
 
-        yield from samples
+        count = 0
+        for s in samples:
+            if sample_ids is not None and s.sample_id not in sample_ids:
+                continue
+            yield s
+            count += 1
+            if limit is not None and count >= limit:
+                break
 
     # ------------------------------------------------------------------
     # Private helpers

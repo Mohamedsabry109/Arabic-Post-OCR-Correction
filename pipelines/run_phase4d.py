@@ -69,12 +69,12 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 from src.data.data_loader import DataLoader, DataError
 from src.data.knowledge_base import LLMInsightsLoader
-from src.analysis.metrics import MetricResult, calculate_metrics
+from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.analysis.llm_error_analyzer import LLMErrorAnalyzer
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
-from pipelines._utils import resolve_datasets
+from pipelines._utils import resolve_datasets, load_sample_list
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +145,13 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="DATASET",
         help="Subset of dataset keys to process. Defaults to all from config.",
+    )
+    parser.add_argument(
+        "--sample-list",
+        type=Path,
+        default=None,
+        dest="sample_list",
+        help="Path to test_samples.json to filter samples (overrides --datasets with relevant datasets).",
     )
     parser.add_argument(
         "--limit",
@@ -337,6 +344,26 @@ def load_phase2_dataset_metrics(phase2_dir: Path, dataset_key: str) -> Optional[
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Could not load Phase 2 metrics for %s: %s", dataset_key, exc)
         return None
+
+
+def _nd_comparison_block(p2_nd: dict, corrected_nd: "MetricResult", phase_label: str) -> dict:
+    """Build no-diacritics comparison sub-dict for JSON output."""
+    if not p2_nd:
+        return {}
+    p2_cer_nd = float(p2_nd.get("cer", 0.0))
+    p2_wer_nd = float(p2_nd.get("wer", 0.0))
+    cer_d = p2_cer_nd - corrected_nd.cer
+    wer_d = p2_wer_nd - corrected_nd.wer
+    cer_r = (cer_d / p2_cer_nd * 100) if p2_cer_nd > 0 else 0.0
+    wer_r = (wer_d / p2_wer_nd * 100) if p2_wer_nd > 0 else 0.0
+    return {
+        "phase2_baseline_no_diacritics": {"cer": round(p2_cer_nd, 6), "wer": round(p2_wer_nd, 6)},
+        f"{phase_label}_corrected_no_diacritics": {"cer": round(corrected_nd.cer, 6), "wer": round(corrected_nd.wer, 6)},
+        "delta_no_diacritics": {
+            "cer_absolute": round(cer_d, 6), "wer_absolute": round(wer_d, 6),
+            "cer_relative_pct": round(cer_r, 2), "wer_relative_pct": round(wer_r, 2),
+        },
+    }
 
 
 def load_corrections_jsonl(corrections_path: Path) -> list[dict]:
@@ -647,6 +674,7 @@ def run_export(
     limit: Optional[int],
     force: bool,
     explicit_datasets: bool = False,
+    sample_ids: Optional[set[str]] = None,
 ) -> None:
     """Build inference_input.jsonl for Phase 4D (val splits only by default).
 
@@ -760,7 +788,7 @@ def run_export(
                 )
 
             try:
-                samples = list(loader_data.iter_samples(ds_key, limit=limit))
+                samples = list(loader_data.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
             except DataError as exc:
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue
@@ -835,7 +863,7 @@ def process_dataset_analyze(
     )
 
     # Step 1: CER/WER
-    corrected_result = calculate_metrics(
+    corrected_result, corrected_result_nd = calculate_metrics_dual(
         corrected_samples, dataset_name=dataset_key, text_field="corrected_text"
     )
 
@@ -854,6 +882,7 @@ def process_dataset_analyze(
             },
         ),
         "corrected": corrected_result.to_dict(),
+        "corrected_no_diacritics": corrected_result_nd.to_dict(),
     }
     save_json(metrics_json, out_dir / "metrics.json")
     logger.info(
@@ -866,6 +895,12 @@ def process_dataset_analyze(
     if p2_metrics is not None:
         p2_cer = float(p2_metrics.get("cer", 0.0))
         p2_wer = float(p2_metrics.get("wer", 0.0))
+        # Load no-diacritics Phase 2 baseline
+        p2_path_full = phase2_dir / dataset_key / "metrics.json"
+        p2_nd = {}
+        if p2_path_full.exists():
+            with open(p2_path_full, encoding="utf-8") as _f:
+                p2_nd = json.load(_f).get("corrected_no_diacritics", {})
         cer_delta = p2_cer - corrected_result.cer
         wer_delta = p2_wer - corrected_result.wer
         cer_rel = (cer_delta / p2_cer * 100) if p2_cer > 0 else 0.0
@@ -891,6 +926,7 @@ def process_dataset_analyze(
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
+            **(_nd_comparison_block(p2_nd, corrected_result_nd, "phase4d")),
             "interpretation": (
                 f"CER {'reduced' if cer_delta >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
@@ -1142,6 +1178,13 @@ def main() -> None:
     all_dataset_names = resolve_datasets(config, None)  # all datasets from config
     active_datasets   = resolve_datasets(config, args.datasets)
 
+    sample_ids: Optional[set[str]] = None
+    if args.sample_list:
+        sample_ids, sl_datasets = load_sample_list(args.sample_list)
+        if not args.datasets:
+            active_datasets = sl_datasets
+        logger.info("Sample list loaded: %d sample IDs from %s", len(sample_ids), args.sample_list)
+
     logger.info("=" * 60)
     logger.info("Phase 4D: Self-Reflective Prompting")
     logger.info("Mode: %s", args.mode)
@@ -1171,6 +1214,7 @@ def main() -> None:
             limit=args.limit,
             force=args.force,
             explicit_datasets=args.datasets is not None,
+            sample_ids=sample_ids,
         )
 
     elif args.mode == "analyze":

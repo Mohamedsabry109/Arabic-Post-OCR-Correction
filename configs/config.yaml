@@ -237,7 +237,7 @@ phase4d:
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:
-  prompt_version: "v1"         # increment if prompt wording changes between runs
+  prompt_version: "v2"         # "v1" (aggressive correction) | "v2" (conservative: preserve correct text)
   analyze_errors: true          # run error_changes.json (adds ~10% runtime)
   max_retries: 2                # LLM retry count on empty or failed output
 
@@ -248,6 +248,25 @@ phase1:
   min_confusion_count: 2      # minimum count to include in confusion matrix
   top_confusions_n: 20        # number of top confusions exported in summary
   error_examples_per_type: 5  # max examples per error type in taxonomy
+
+# ---------------------------------------------------------------------------
+# Evaluation settings
+# ---------------------------------------------------------------------------
+evaluation:
+  strip_diacritics: true    # primary metric: strip Arabic diacritics before CER/WER
+  report_both: true          # always compute & store both with/without diacritics
+
+# ---------------------------------------------------------------------------
+# Prompt crafting (LLM-assisted prompt design via scripts/craft_prompt.py)
+# ---------------------------------------------------------------------------
+prompt_craft:
+  results_dir: "results/prompt_craft"
+  # Samples per CER stratum in the meta-prompt
+  n_correct: 5               # CER = 0 (correct samples to teach conservation)
+  n_easy: 5                  # CER < 0.05
+  n_medium: 10               # 0.05 < CER < 0.25
+  n_hard: 5                  # CER > 0.25
+  seed: 42
 
 # ---------------------------------------------------------------------------
 # Output settings

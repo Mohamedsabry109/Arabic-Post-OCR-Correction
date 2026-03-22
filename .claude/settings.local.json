@@ -29,7 +29,13 @@
       "Bash(venv/Scripts/python pipelines/run_phase1.py --datasets PATS-A01-Akhbar-train PATS-A01-Akhbar-val --no-camel)",
       "Bash(venv/Scripts/python pipelines/run_phase2.py --datasets PATS-A01-Akhbar-train --limit 200 --mode analyze)",
       "Bash(venv/Scripts/python pipelines/run_phase2.py --datasets PATS-A01-Akhbar-train --mode analyze --force)",
-      "Bash(venv/Scripts/python pipelines/run_phase4d.py --datasets PATS-A01-Akhbar-train --limit 200 --mode export)"
+      "Bash(venv/Scripts/python pipelines/run_phase4d.py --datasets PATS-A01-Akhbar-train --limit 200 --mode export)",
+      "Bash(wc:*)",
+      "Bash(for f:*)",
+      "Bash(done)",
+      "Bash(echo \"FAIL: $f\")",
+      "Bash(python -c \":*)",
+      "Bash(.venv/Scripts/python.exe scripts/craft_prompt.py --help)"
     ]
   }
 }

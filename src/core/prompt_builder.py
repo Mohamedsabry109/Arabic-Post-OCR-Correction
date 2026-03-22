@@ -32,9 +32,22 @@ class PromptBuilder:
         "أعد النص المصحح فقط بدون أي شرح أو تعليق إضافي."
     )
 
+    ZERO_SHOT_SYSTEM_V2: str = (
+        "أنت مدقق نصوص عربية. "
+        "النص التالي ناتج عن نظام التعرف الضوئي وقد يكون صحيحاً بالكامل أو يحتوي على أخطاء قليلة. "
+        "مهمتك: إذا كان النص صحيحاً، أعده كما هو بالضبط. "
+        "إذا وجدت خطأ واضحاً فقط، صححه. لا تغير ما هو صحيح. "
+        "أعد النص فقط بدون أي شرح."
+    )
+
+    _ZERO_SHOT_VERSIONS: dict[str, str] = {
+        "v1": ZERO_SHOT_SYSTEM_V1,
+        "v2": ZERO_SHOT_SYSTEM_V2,
+    }
+
     PROMPT_VERSION: str = "v1"
 
-    def build_zero_shot(self, ocr_text: str) -> list[dict]:
+    def build_zero_shot(self, ocr_text: str, version: str = "v1") -> list[dict]:
         """Build zero-shot correction prompt (Phase 2).
 
         No task-specific knowledge injected. The LLM receives a general
@@ -42,6 +55,8 @@ class PromptBuilder:
 
         Args:
             ocr_text: OCR prediction text to correct.
+            version: Prompt version — ``"v1"`` (aggressive correction) or
+                ``"v2"`` (conservative: preserve correct text).
 
         Returns:
             Two-element messages list::
@@ -51,8 +66,9 @@ class PromptBuilder:
                   {"role": "user",   "content": ocr_text}
                 ]
         """
+        system = self._ZERO_SHOT_VERSIONS.get(version, self.ZERO_SHOT_SYSTEM_V1)
         return [
-            {"role": "system", "content": self.ZERO_SHOT_SYSTEM_V1},
+            {"role": "system", "content": system},
             {"role": "user",   "content": ocr_text},
         ]
 
@@ -348,6 +364,66 @@ class PromptBuilder:
     def combined_prompt_version(self) -> str:
         """Return the Phase 6 combined prompt version string."""
         return self.COMBINED_PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Crafted Prompt (LLM-designed via scripts/craft_prompt.py)
+    # -----------------------------------------------------------------------
+
+    CRAFTED_PROMPT_VERSION: str = "crafted_v1"
+
+    def build_crafted(self, ocr_text: str, system_prompt: str) -> list[dict]:
+        """Build correction prompt using a custom/crafted system prompt.
+
+        Used for LLM-designed prompts produced by ``scripts/craft_prompt.py``.
+        Falls back to zero-shot v2 if *system_prompt* is empty.
+
+        Args:
+            ocr_text: OCR prediction text to correct.
+            system_prompt: The crafted Arabic system prompt text.
+
+        Returns:
+            Two-element messages list in OpenAI chat format.
+        """
+        if not system_prompt.strip():
+            return self.build_zero_shot(ocr_text, version="v2")
+
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": ocr_text},
+        ]
+
+    @property
+    def crafted_prompt_version(self) -> str:
+        """Return the crafted prompt version string."""
+        return self.CRAFTED_PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Meta-prompting (prompt generation via scripts/craft_prompt.py)
+    # -----------------------------------------------------------------------
+
+    META_PROMPT_VERSION: str = "meta_v1"
+
+    def build_meta_prompt(self, user_prompt: str) -> list[dict]:
+        """Build messages for a meta-prompting task (e.g., prompt generation).
+
+        Unlike correction prompts, this sends the full meta-prompt as the
+        user message with no system message, letting the LLM follow the
+        embedded instructions directly.
+
+        Args:
+            user_prompt: The full meta-prompt text (from craft_prompt.py).
+
+        Returns:
+            Single-element messages list in OpenAI chat format::
+
+                [{"role": "user", "content": user_prompt}]
+        """
+        return [{"role": "user", "content": user_prompt}]
+
+    @property
+    def meta_prompt_version(self) -> str:
+        """Return the meta-prompt version string."""
+        return self.META_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
     # Phase 4D — Self-Reflective Prompting

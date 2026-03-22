@@ -20,6 +20,7 @@ import logging
 import subprocess
 import sys
 from datetime import datetime, timezone
+from typing import Optional
 from pathlib import Path
 
 import yaml
@@ -31,11 +32,11 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
-from src.analysis.metrics import calculate_metrics, calculate_metrics_split, MetricResult
+from src.analysis.metrics import calculate_metrics, calculate_metrics_split, calculate_metrics_split_dual, MetricResult
 from src.analysis.error_analyzer import ErrorAnalyzer, SampleError
 from src.linguistic.morphology import MorphAnalyzer
 from src.linguistic.validator import WordValidator
-from pipelines._utils import resolve_datasets
+from pipelines._utils import resolve_datasets, load_sample_list
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,13 @@ def parse_args() -> argparse.Namespace:
             "(e.g. KHATT-train PATS-A01-Akhbar). "
             "Defaults to all datasets from config."
         ),
+    )
+    parser.add_argument(
+        "--sample-list",
+        type=Path,
+        default=None,
+        dest="sample_list",
+        help="Path to test_samples.json to filter samples (overrides --datasets with relevant datasets).",
     )
     parser.add_argument(
         "--force",
@@ -218,14 +226,19 @@ def process_dataset(
     # Step 1: CER / WER metrics (all samples + normal-only split)
     # ------------------------------------------------------------------
     logger.info("[%s] Calculating CER / WER ...", dataset_key)
-    metric_result, normal_result, data_quality = calculate_metrics_split(
+    all_w, normal_w, all_nd, normal_nd, data_quality = calculate_metrics_split_dual(
         samples, dataset_name=dataset_key
     )
+    # Keep backward-compatible names for the with-diacritics results
+    metric_result = all_w
+    normal_result = normal_w
 
     metrics_json = {
         "meta": make_meta(dataset_key, len(samples), config, limit),
         "all_samples": metric_result.to_dict(),
         "normal_samples_only": normal_result.to_dict(),
+        "all_samples_no_diacritics": all_nd.to_dict(),
+        "normal_samples_only_no_diacritics": normal_nd.to_dict(),
         "data_quality": data_quality,
     }
     save_json(metrics_json, out_dir / "metrics.json")
@@ -300,7 +313,7 @@ def process_dataset(
             out_dir / "morphological_analysis.json",
         )
 
-    return metric_result, normal_result, data_quality
+    return metric_result, normal_result, all_nd, normal_nd, data_quality
 
 
 def run_morphological_analysis(
@@ -403,6 +416,8 @@ def run_morphological_analysis(
 def aggregate_metrics(
     all_results: dict[str, MetricResult],
     normal_results: dict[str, MetricResult],
+    all_nd_results: dict[str, MetricResult],
+    normal_nd_results: dict[str, MetricResult],
     quality_stats: dict[str, dict],
     config: dict,
     results_dir: Path,
@@ -423,6 +438,8 @@ def aggregate_metrics(
         },
         "results_all_samples": {k: v.to_dict() for k, v in all_results.items()},
         "results_normal_only": {k: v.to_dict() for k, v in normal_results.items()},
+        "results_all_samples_no_diacritics": {k: v.to_dict() for k, v in all_nd_results.items()},
+        "results_normal_only_no_diacritics": {k: v.to_dict() for k, v in normal_nd_results.items()},
         "data_quality": quality_stats,
     }
 
@@ -656,8 +673,10 @@ def _load_cached_metrics(
     dataset_name = data.get("meta", {}).get("dataset", metrics_path.parent.name)
     all_r = _make(data.get("all_samples", {}), dataset_name)
     norm_r = _make(data.get("normal_samples_only", {}), dataset_name)
+    all_nd = _make(data.get("all_samples_no_diacritics", data.get("all_samples", {})), dataset_name)
+    norm_nd = _make(data.get("normal_samples_only_no_diacritics", data.get("normal_samples_only", {})), dataset_name)
     quality = data.get("data_quality", {})
-    return all_r, norm_r, quality
+    return all_r, norm_r, all_nd, norm_nd, quality
 
 
 # ---------------------------------------------------------------------------
@@ -703,10 +722,20 @@ def main() -> None:
 
     # Determine which datasets to run (CLI --datasets overrides config list)
     dataset_keys = resolve_datasets(config, args.datasets)
+
+    sample_ids: Optional[set[str]] = None
+    if args.sample_list:
+        sample_ids, sl_datasets = load_sample_list(args.sample_list)
+        if not args.datasets:
+            dataset_keys = sl_datasets
+        logger.info("Sample list loaded: %d sample IDs from %s", len(sample_ids), args.sample_list)
+
     logger.info("Datasets to process: %s", dataset_keys)
 
     all_metric_results: dict[str, MetricResult] = {}
     normal_metric_results: dict[str, MetricResult] = {}
+    all_nd_results: dict[str, MetricResult] = {}
+    normal_nd_results: dict[str, MetricResult] = {}
     all_quality_stats: dict[str, dict] = {}
 
     for ds_key in dataset_keys:
@@ -717,20 +746,22 @@ def main() -> None:
                 logger.info(
                     "[%s] Already processed — skipping (use --force to re-run).", ds_key
                 )
-                all_r, norm_r, dq = _load_cached_metrics(metrics_path)
+                all_r, norm_r, a_nd, n_nd, dq = _load_cached_metrics(metrics_path)
                 all_metric_results[ds_key] = all_r
                 normal_metric_results[ds_key] = norm_r
+                all_nd_results[ds_key] = a_nd
+                normal_nd_results[ds_key] = n_nd
                 all_quality_stats[ds_key] = dq
                 continue
 
             logger.info("Loading dataset: %s ...", ds_key)
-            samples = list(loader.iter_samples(ds_key, limit=limit))
+            samples = list(loader.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
 
             if not samples:
                 logger.warning("No samples loaded for %s -- skipping.", ds_key)
                 continue
 
-            metric_result, normal_result, dq = process_dataset(
+            metric_result, normal_result, all_nd, normal_nd, dq = process_dataset(
                 dataset_key=ds_key,
                 samples=samples,
                 config=config,
@@ -740,6 +771,8 @@ def main() -> None:
             )
             all_metric_results[ds_key] = metric_result
             normal_metric_results[ds_key] = normal_result
+            all_nd_results[ds_key] = all_nd
+            normal_nd_results[ds_key] = normal_nd
             all_quality_stats[ds_key] = dq
 
         except DataError as exc:
@@ -752,8 +785,9 @@ def main() -> None:
         sys.exit(1)
 
     # Aggregate and write combined output
-    aggregate_metrics(all_metric_results, normal_metric_results, all_quality_stats,
-                      config, results_dir, limit)
+    aggregate_metrics(all_metric_results, normal_metric_results,
+                      all_nd_results, normal_nd_results,
+                      all_quality_stats, config, results_dir, limit)
     generate_report(all_metric_results, results_dir)
 
     logger.info("Phase 1 complete. Results in: %s", results_dir)
