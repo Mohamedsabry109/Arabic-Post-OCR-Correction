@@ -1,40 +1,72 @@
 \relax 
+\citation{qaari}
+\citation{arabic_ocr_survey}
+\citation{qaari}
+\citation{afli2016,dong2018}
+\citation{nguyen2021}
+\citation{llm_ocr_correction}
+\citation{arabic_bert_ocr}
 \@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {II}Ease of Use}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Maintaining the Integrity of the Specifications}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {III}Prepare Your Paper Before Styling}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Abbreviations and Acronyms}{1}{}\protected@file@percent }
-\newlabel{AA}{{\mbox  {III-A}}{1}{}{subsection.3.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Units}{1}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Equations}{1}{}\protected@file@percent }
-\newlabel{eq}{{1}{1}{}{equation.1}{}}
-\citation{b7}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}\LaTeX  -Specific Advice}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Some Common Mistakes}{2}{}\protected@file@percent }
-\newlabel{SCM}{{\mbox  {III-E}}{2}{}{subsection.3.5}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-F}}Authors and Affiliations}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-G}}Identify the Headings}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-H}}Figures and Tables}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{\numberline {\mbox  {III-H}0a}Positioning Figures and Tables}{2}{}\protected@file@percent }
-\citation{b1}
-\citation{b2}
-\citation{b3}
-\citation{b3}
-\citation{b3}
-\citation{b3}
-\citation{b4}
-\citation{b5}
-\citation{b6}
-\bibcite{b1}{1}
-\bibcite{b2}{2}
-\bibcite{b3}{3}
-\bibcite{b4}{4}
-\bibcite{b5}{5}
-\bibcite{b6}{6}
-\bibcite{b7}{7}
-\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Table Type Styles}}{3}{}\protected@file@percent }
-\newlabel{tab1}{{I}{3}{}{table.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Example of a figure caption.}}{3}{}\protected@file@percent }
-\newlabel{fig}{{1}{3}{}{figure.1}{}}
-\@writefile{toc}{\contentsline {section}{References}{3}{}\protected@file@percent }
-\gdef \@abspage@last{3}
+\@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Arabic OCR and Its Error Patterns}{1}{}\protected@file@percent }
+\citation{brown2020}
+\citation{wei2022}
+\citation{lewis2020}
+\citation{shinn2023}
+\citation{mohit2014}
+\citation{romanov2020}
+\citation{obeid2020}
+\citation{pats}
+\citation{qwen3}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Post-OCR Correction}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-C}}Knowledge-Augmented Prompting}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Arabic NLP Resources}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {III}Dataset and Experimental Setup}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Dataset}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}OCR Engine}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Correction Model}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Evaluation Metrics}{2}{}\protected@file@percent }
+\newlabel{eq:cer}{{1}{2}{}{equation.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Pipeline Architecture}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {IV}Experimental Methodology}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Phase 1: OCR Baseline and Error Taxonomy}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Phase 2: Zero-Shot LLM Correction (Baseline)}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Phase 3: Confusion-Matrix Injection}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Phase 4A: Rule-Augmented Prompting}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Phase 4B: Few-Shot Examples from QALB}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Phase 4C: CAMeL Morphological Post-Processing}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-G}}Phase 4D: Self-Reflective Prompting}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-H}}Phase 5: Retrieval-Augmented Generation with OpenITI}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {V}Results}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Phase 1: How Bad Is Qaari on This Dataset?}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Phase 2: What Can Zero-Shot Do?}{3}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces CER and WER across all experimental phases (PATS-A01 Akhbar, 200 samples). Best LLM result is in \textbf  {bold}. $\Delta $ is relative to Phase~2.}}{4}{}\protected@file@percent }
+\newlabel{tab:main}{{I}{4}{}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Phase 3--5: Knowledge Augmentation Hurts}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-D}}Summary}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Discussion}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}Why Does Augmentation Backfire?}{4}{}\protected@file@percent }
+\bibcite{qaari}{1}
+\bibcite{arabic_ocr_survey}{2}
+\bibcite{pats}{3}
+\bibcite{khatt}{4}
+\bibcite{mohit2014}{5}
+\bibcite{romanov2020}{6}
+\bibcite{obeid2020}{7}
+\bibcite{qwen3}{8}
+\bibcite{afli2016}{9}
+\bibcite{dong2018}{10}
+\bibcite{nguyen2021}{11}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}The Repetition Artifact}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Why CAMeL Had No Effect}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Few-Shot as the Least Harmful Augmentation}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-E}}Limitations}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Conclusion}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{5}{}\protected@file@percent }
+\bibcite{llm_ocr_correction}{12}
+\bibcite{arabic_bert_ocr}{13}
+\bibcite{brown2020}{14}
+\bibcite{wei2022}{15}
+\bibcite{lewis2020}{16}
+\bibcite{shinn2023}{17}
+\gdef \@abspage@last{6}
