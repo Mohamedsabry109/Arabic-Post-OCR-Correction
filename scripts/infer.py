@@ -338,7 +338,8 @@ def main() -> None:
     # Load model once
     logger.info("Loading model...")
     corrector = get_corrector(config)
-    builder = PromptBuilder()
+    crafted_prompt_path = config.get("prompt_craft", {}).get("crafted_prompt_path")
+    builder = PromptBuilder(crafted_prompt_path=crafted_prompt_path)
     logger.info("Model ready: %s", corrector.model_name)
 
     # Inference loop

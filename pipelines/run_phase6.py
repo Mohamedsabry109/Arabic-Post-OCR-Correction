@@ -753,7 +753,7 @@ def process_dataset_analyze(
         corrected_samples, dataset_name=dataset_key, text_field="corrected_text"
     )
 
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     metrics_extra = {
         "prompt_type":              "combined",
         "prompt_version":           builder.combined_prompt_version,
@@ -1511,7 +1511,7 @@ def aggregate_combo_results(
     limit: Optional[int],
 ) -> None:
     """Write aggregated metrics.json and comparison.json for one combo."""
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     output = {
         "meta": {
             "phase":       "phase6",

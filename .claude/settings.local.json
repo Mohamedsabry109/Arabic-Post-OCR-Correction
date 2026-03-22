@@ -42,7 +42,14 @@
       "Read(//c/Users/moham/AppData/Local/Programs/MiKTeX/**)",
       "Bash(\"/c/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex.exe\" -interaction=nonstopmode conference_101719.tex)",
       "Bash(source .venv/Scripts/activate)",
-      "Bash(source venv/Scripts/activate)"
+      "Bash(source venv/Scripts/activate)",
+      "Bash(sed -n '1088,1098p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase2.py)",
+      "Bash(sed -n '881,892p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(sed -n '762,772p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4d.py)",
+      "Bash(sed -n '870,895p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(sed -n '1110,1120p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(sed -n '1898,1910p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(sed -n '1952,1962p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)"
     ]
   }
 }

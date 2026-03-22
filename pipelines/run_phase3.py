@@ -1540,7 +1540,7 @@ def main() -> None:
             )
             sys.exit(1)
         corrector = get_corrector(config)
-        builder = PromptBuilder()
+        builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
         logger.info("Corrector ready: %s (backend=%s)", corrector.model_name, backend)
 
     # ------------------------------------------------------------------

@@ -765,7 +765,7 @@ def run_export(
 
     already_exported = _load_exported_datasets(output_path) if not force else set()
     loader_data = DataLoader(config)
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     total_written = 0
 
     with open(output_path, "a", encoding="utf-8") as f:
@@ -867,7 +867,7 @@ def process_dataset_analyze(
         corrected_samples, dataset_name=dataset_key, text_field="corrected_text"
     )
 
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     metrics_json = {
         "meta": make_meta(
             dataset_key, n, config, limit,

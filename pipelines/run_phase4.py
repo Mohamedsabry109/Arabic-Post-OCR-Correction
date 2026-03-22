@@ -884,7 +884,7 @@ def run_analyze_4a(
     """
     _maybe_split_combined_corrections(results_dir)
 
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
 
@@ -1114,7 +1114,7 @@ def run_analyze_4b(
     """Analyze Phase 4B corrections: compute metrics and comparisons."""
     _maybe_split_combined_corrections(results_dir)
 
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
 
@@ -1901,7 +1901,7 @@ def main() -> None:
             logger.error("No datasets successfully processed.")
             sys.exit(1)
 
-        builder = PromptBuilder()
+        builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
         aggregate_results(
             all_corrected, config, results_dir,
             phase_label, "rule_augmented", builder.rules_prompt_version,
@@ -1955,7 +1955,7 @@ def main() -> None:
             logger.error("No datasets successfully processed.")
             sys.exit(1)
 
-        builder = PromptBuilder()
+        builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
         aggregate_results(
             all_corrected, config, results_dir,
             phase_label, "few_shot", builder.few_shot_prompt_version,

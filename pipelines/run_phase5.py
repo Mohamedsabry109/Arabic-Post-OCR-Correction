@@ -961,7 +961,7 @@ def process_dataset_analyze(
     out_dir = results_dir / dataset_key
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     n = len(corrected_samples)
     n_failed = sum(1 for cs in corrected_samples if not cs.success)
     total_prompt_tokens = sum(cs.prompt_tokens for cs in corrected_samples)
@@ -1212,7 +1212,7 @@ def aggregate_results(
     limit: Optional[int],
 ) -> None:
     """Write combined metrics.json across all datasets."""
-    builder = PromptBuilder()
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     p5_cfg = config.get("phase5", {})
     rag_cfg = config.get("rag", {})
 
