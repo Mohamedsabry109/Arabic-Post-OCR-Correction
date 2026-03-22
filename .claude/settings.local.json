@@ -58,7 +58,28 @@
       "Bash(sed -n '1108,1122p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4d.py)",
       "Bash(sed -n '1908,1920p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
       "Bash(sed -n '1960,1975p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
-      "Bash(sed -n '1992,2008p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)"
+      "Bash(sed -n '1992,2008p' D:/Masters/Arabic-Post-OCR-Correction/pipelines/run_phase4.py)",
+      "Bash(git -C D:/Masters/Arabic-Post-OCR-Correction check-ignore configs/crafted_system_prompt.txt)",
+      "Bash(git:*)",
+      "Bash(pdflatex --version)",
+      "Bash(cmd.exe /c 'where pdflatex')",
+      "Bash(cmd.exe /c \"where pdflatex xelatex lualatex biber\" 2>&1)",
+      "Bash(cmd.exe /c \"dir C:\\\\texlive 2>&1\")",
+      "Bash(cmd.exe /c \"dir \"\"C:\\\\Program Files\\\\MiKTeX\"\" 2>&1\")",
+      "Bash(cmd.exe /c \"where pdflatex xelatex lualatex biber\")",
+      "Bash(cmd.exe /c \"pdflatex --version\")",
+      "Bash(powershell.exe -Command \"Get-Command pdflatex,xelatex,biber -ErrorAction SilentlyContinue | Select-Object Name,Source\")",
+      "Bash(powershell.exe -Command \"Get-Command pdflatex -ErrorAction SilentlyContinue | Select-Object Name,Source; Get-Command xelatex -ErrorAction SilentlyContinue | Select-Object Name,Source; Get-Command biber -ErrorAction SilentlyContinue | Select-Object Name,Source\")",
+      "Bash(latexmk -pdf -interaction=nonstopmode -file-line-error mthesis.tex)",
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -file-line-error mthesis.tex)",
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/pdflatex\" -interaction=nonstopmode mthesis.tex)",
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode mthesis.tex)",
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -f mthesis.tex)",
+      "Bash(rm -f mthesis.aux mthesis.toc mthesis.lof mthesis.lot mthesis.bbl mthesis.bcf mthesis.blg mthesis.log mthesis.fls mthesis.fdb_latexmk)",
+      "Bash(/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk -pdf -interaction=nonstopmode -f mthesis.tex)",
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -f -g mthesis.tex)",
+      "Bash(python3 -c \":*)",
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -g mthesis.tex)"
     ]
   }
 }

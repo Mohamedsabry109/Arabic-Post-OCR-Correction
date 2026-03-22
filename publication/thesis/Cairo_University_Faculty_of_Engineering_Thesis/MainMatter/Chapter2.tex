@@ -68,9 +68,9 @@ Several properties of the script are critical for understanding OCR failure mode
 \textbf{Positional forms.}
 Most letters have four shapes depending on their position within a word:
 isolated, initial, medial, and final.
-The letter \textit{ain} (\textarabic{ÿπ}), for instance, appears as
-\textarabic{ÿπ} (isolated), \textarabic{ÿπŸÄ} (initial), \textarabic{ŸÄÿπŸÄ} (medial),
-and \textarabic{ŸÄÿπ} (final).
+The letter \textit{ain} (\textarabic{⁄}), for instance, appears as
+\textarabic{⁄} (isolated), \textarabic{⁄‹} (initial), \textarabic{‹⁄‹} (medial),
+and \textarabic{‹⁄} (final).
 Since letters are connected into words by ligatures (joined strokes), an OCR
 engine must recognise not just a character in isolation but a glyph in context,
 making segmentation errors compound recognition errors.
@@ -90,38 +90,38 @@ sequence can represent multiple words depending on vowelisation.
 
 \textbf{Hamza.}
 The glottal stop (hamza) has a complex orthography.
-In some positions it appears alone (\textarabic{ÿ°}); in others it appears on a
-carrier letter: alef (\textarabic{ÿ£} above, \textarabic{ÿ•} below), waw (\textarabic{ÿ§}),
-or ya without dots (\textarabic{ÿ¶}).
+In some positions it appears alone (\textarabic{¡}); in others it appears on a
+carrier letter: alef (\textarabic{√} above, \textarabic{≈} below), waw (\textarabic{ƒ}),
+or ya without dots (\textarabic{∆}).
 The choice of carrier follows rules based on the surrounding vowels, and even
 educated native speakers sometimes apply these rules inconsistently.
 Hamza rules are a major source of spelling errors in human writing and a
 significant challenge for OCR.
 
 \textbf{Taa marbuta.}
-The feminine ending \textarabic{ÿ©} (taa marbuta) is pronounced /at/ in context
+The feminine ending \textarabic{…} (taa marbuta) is pronounced /at/ in context
 and /a/ in pause.
-It is written with the same base shape as the letter ha (\textarabic{Ÿá}) but
+It is written with the same base shape as the letter ha (\textarabic{Â}) but
 with two dots above.
-The visual similarity between \textarabic{ÿ©} and \textarabic{Ÿá} is a direct
+The visual similarity between \textarabic{…} and \textarabic{Â} is a direct
 source of OCR errors whenever the ink quality, resolution, or font rendering
 is imperfect.
 
 \textbf{Alef maqsura.}
-The letter \textarabic{Ÿâ} (alef maqsura, literally ``abbreviated alef'') appears
+The letter \textarabic{Ï} (alef maqsura, literally ``abbreviated alef'') appears
 at the end of certain words to write the long vowel /aa/.
-Its shape is identical to ya (\textarabic{Ÿä}) but without the two dots below.
-OCR engines regularly confuse \textarabic{Ÿâ} and \textarabic{Ÿä}, and the
+Its shape is identical to ya (\textarabic{Ì}) but without the two dots below.
+OCR engines regularly confuse \textarabic{Ï} and \textarabic{Ì}, and the
 distinction is orthographically important because the two letters signal
 different word identities.
 
 \textbf{Dot-group characters.}
 Six groups of letters share the same base skeletal shape and differ only in
 the count or position of diacritical dots above or below:
-\textarabic{ÿ®}~/~\textarabic{ÿ™}~/~\textarabic{ÿ´}~(1/2/3 dots above),
-\textarabic{ÿ¨}~/~\textarabic{ÿ≠}~/~\textarabic{ÿÆ}~(1 dot below / none / 1 dot above),
-\textarabic{ŸÅ}~/~\textarabic{ŸÇ}~(1 dot above / 2 dots above),
-\textarabic{ŸÜ}~/~\textarabic{Ÿä}~(1 dot above / 2 dots below), and others.
+\textarabic{»}~/~\textarabic{ }~/~\textarabic{À}~(1/2/3 dots above),
+\textarabic{Ã}~/~\textarabic{Õ}~/~\textarabic{Œ}~(1 dot below / none / 1 dot above),
+\textarabic{›}~/~\textarabic{ﬁ}~(1 dot above / 2 dots above),
+\textarabic{‰}~/~\textarabic{Ì}~(1 dot above / 2 dots below), and others.
 Dot placement errors -- caused by ink smearing, low resolution, or font
 rendering artefacts -- are the most frequent single-character OCR confusion
 in Arabic typewritten text.
@@ -288,7 +288,7 @@ This is the most frequent source of character-level errors in PATS-A01.
 \textbf{Ligature handling.}
 Certain letter combinations in Arabic merge into single ligature glyphs with
 a shape that may not visually resemble the component letters in isolation.
-Common examples include lam-alef (\textarabic{ŸÑÿß}), which is always written as
+Common examples include lam-alef (\textarabic{·«}), which is always written as
 a single glyph.
 OCR engines trained on character-level templates may not include all ligature
 shapes, leading to substitution or insertion errors.

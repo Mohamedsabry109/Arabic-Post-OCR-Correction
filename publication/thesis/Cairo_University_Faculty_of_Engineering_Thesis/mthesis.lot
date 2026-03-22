@@ -1,38 +1,31 @@
-\boolfalse {citerequest}\boolfalse {citetracker}\boolfalse {pagetracker}\boolfalse {backtracker}\relax 
-\babel@toc {english}{}
-\defcounter {refsection}{0}\relax 
+\babel@toc {english}{}\relax 
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {2.1}{\ignorespaces Optimum Zero Placement For Nth Order Modulator\relax }}{16}{table.caption.14}
-\defcounter {refsection}{0}\relax 
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
+\contentsline {table}{\numberline {\if@rl \I {1.3}\else \textLR {3.1}\fi }{\ignorespaces Fields in the inference JSONL files. All fields from the export stage are preserved through inference; the \texttt {correction} and status fields are appended by the inference script.}}{\if@rlmain \I {35}\else \textLR {35}\fi }{table.caption.3}%
+\contentsline {table}{\numberline {\if@rl \I {2.3}\else \textLR {3.2}\fi }{\ignorespaces Dataset summary. ``Evaluated'' is the number of samples used in experiments reported in this thesis. ``---'' indicates that statistics depend on writer count and session structure not yet fully catalogued.}}{\if@rlmain \I {39}\else \textLR {39}\fi }{table.caption.4}%
+\contentsline {table}{\numberline {\if@rl \I {3.3}\else \textLR {3.3}\fi }{\ignorespaces Error taxonomy used in Phase~1 baseline analysis. Categories are ordered from most specific (dot confusion) to most general (other substitution).}}{\if@rlmain \I {42}\else \textLR {42}\fi }{table.caption.5}%
+\contentsline {table}{\numberline {\if@rl \I {4.3}\else \textLR {3.4}\fi }{\ignorespaces Arabic orthographic rule categories used in Phase~4A. Each category targets a specific phenomenon that both human writers and OCR engines commonly mishandle.}}{\if@rlmain \I {44}\else \textLR {44}\fi }{table.caption.6}%
+\contentsline {table}{\numberline {\if@rl \I {5.3}\else \textLR {3.5}\fi }{\ignorespaces Generation parameters for \texttt {TransformersCorrector}.}}{\if@rlmain \I {50}\else \textLR {50}\fi }{table.caption.8}%
+\contentsline {table}{\numberline {\if@rl \I {6.3}\else \textLR {3.6}\fi }{\ignorespaces Prompt variant registry. Each phase uses exactly one variant. All prompts are in Arabic. Full prompt text is given in Appendix~A.}}{\if@rlmain \I {52}\else \textLR {52}\fi }{table.caption.9}%
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {4.1}{\ignorespaces Performance Summary And Comparison\relax }}{45}{table.caption.46}
-\defcounter {refsection}{0}\relax 
+\contentsline {table}{\numberline {\if@rl \I {1.4}\else \textLR {4.1}\fi }{\ignorespaces Phase~4D training-split analysis results for PATS-A01 Akhbar. The LLM is Qwen3-4B-Instruct-2507 under the zero-shot v2 prompt (Phase~2 setting). Fix rate = fraction of baseline errors of that type that the LLM corrected. Introduction rate = fraction of correct ground-truth tokens of that type that the LLM incorrectly changed. $n < 10$ entries are marked with $\dagger $ (too few samples for reliable estimates).}}{\if@rlmain \I {68}\else \textLR {68}\fi }{table.caption.10}%
+\contentsline {table}{\numberline {\if@rl \I {2.4}\else \textLR {4.2}\fi }{\ignorespaces Phase~6 combination inventory. Each combination is identified by a unique ID. Components: C = confusion matrix, R = rules, E = examples (few-shot), S = self-reflective insights, G = RAG, M = CAMeL post-processing.}}{\if@rlmain \I {73}\else \textLR {73}\fi }{table.caption.11}%
+\contentsline {table}{\numberline {\if@rl \I {3.4}\else \textLR {4.3}\fi }{\ignorespaces Summary of all experimental phases. ``Comparison'' is the phase each experiment is evaluated against.}}{\if@rlmain \I {74}\else \textLR {74}\fi }{table.caption.12}%
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {5.1}{\ignorespaces Target Specifications\relax }}{47}{table.caption.47}
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {5.2}{\ignorespaces Modulator Specifications\relax }}{48}{table.caption.48}
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {5.3}{\ignorespaces Argument Definition of realizeNTFct\relax }}{50}{table.caption.51}
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {5.4}{\ignorespaces Mapping ABCD Matrix to Modulator Coefficients\relax }}{52}{table.caption.54}
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {5.5}{\ignorespaces Parameters Used For Ideal Simulation\relax }}{55}{table.caption.59}
-\defcounter {refsection}{0}\relax 
+\contentsline {table}{\numberline {\if@rl \I {1.5}\else \textLR {5.1}\fi }{\ignorespaces Phase~1 OCR baseline metrics on PATS-A01 Akhbar (200 samples).}}{\if@rlmain \I {75}\else \textLR {75}\fi }{table.caption.13}%
+\contentsline {table}{\numberline {\if@rl \I {2.5}\else \textLR {5.2}\fi }{\ignorespaces Phase~1 error taxonomy on PATS-A01 Akhbar (all 200 samples, 2,063 total character errors).}}{\if@rlmain \I {76}\else \textLR {76}\fi }{table.caption.14}%
+\contentsline {table}{\numberline {\if@rl \I {3.5}\else \textLR {5.3}\fi }{\ignorespaces Character-level confusion pairs from Phase~1 (all 9 unique pairs; out of 61 total substitutions).}}{\if@rlmain \I {77}\else \textLR {77}\fi }{table.caption.15}%
+\contentsline {table}{\numberline {\if@rl \I {4.5}\else \textLR {5.4}\fi }{\ignorespaces Phase~2 zero-shot LLM correction metrics on PATS-A01 Akhbar (200 samples). Phase~1 all-samples figures are shown for reference.}}{\if@rlmain \I {79}\else \textLR {79}\fi }{table.caption.16}%
+\contentsline {table}{\numberline {\if@rl \I {5.5}\else \textLR {5.5}\fi }{\ignorespaces Main results: CER and WER for Phases 1--5 on PATS-A01 Akhbar (200 samples). Relative change vs. Phase~2 zero-shot baseline.}}{\if@rlmain \I {81}\else \textLR {81}\fi }{table.caption.17}%
+\contentsline {table}{\numberline {\if@rl \I {6.5}\else \textLR {5.6}\fi }{\ignorespaces Phase~4D self-reflective insights derived from the PATS-A01 Akhbar training split. Fix rate: fraction of OCR errors of this type corrected by the LLM. Introduction rate: fraction of correct tokens of this type incorrectly modified by the LLM.}}{\if@rlmain \I {85}\else \textLR {85}\fi }{table.caption.18}%
+\contentsline {table}{\numberline {\if@rl \I {7.5}\else \textLR {5.7}\fi }{\ignorespaces Phase~6 combination designs. Results pending execution.}}{\if@rlmain \I {88}\else \textLR {88}\fi }{table.caption.19}%
+\contentsline {table}{\numberline {\if@rl \I {8.5}\else \textLR {5.8}\fi }{\ignorespaces Final ranking of all executed experimental conditions by CER. Lower CER is better. Phase~6 results pending.}}{\if@rlmain \I {89}\else \textLR {89}\fi }{table.caption.20}%
+\contentsline {table}{\numberline {\if@rl \I {9.5}\else \textLR {5.9}\fi }{\ignorespaces Summary of research question answers.}}{\if@rlmain \I {90}\else \textLR {90}\fi }{table.caption.21}%
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {6.1}{\ignorespaces Integrators Results Summary\relax }}{70}{table.caption.74}
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {6.2}{\ignorespaces DAC Signals\relax }}{76}{table.caption.82}
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {6.3}{\ignorespaces Modulator Result Summary\relax }}{81}{table.caption.93}
-\defcounter {refsection}{0}\relax 
 \addvspace {10\p@ }
-\defcounter {refsection}{0}\relax 
-\contentsline {table}{\numberline {7.1}{\ignorespaces Performance Comparison\relax }}{94}{table.caption.108}
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {\if@rl \I {1.2}\else \textLR {2.1}\fi }{\ignorespaces Per-type LLM performance statistics on PATS-A01 Akhbar training split (200 samples). Null entries indicate zero baseline instances.}}{\if@rlmain \I {123}\else \textLR {123}\fi }{table.caption.23}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {\if@rl \I {1.4}\else \textLR {4.1}\fi }{\ignorespaces Representative OCR error examples from Phase~1, PATS-A01 Akhbar training split. Context is a three-character window around the error. GT = ground truth; OCR = OCR output.}}{\if@rlmain \I {130}\else \textLR {130}\fi }{table.caption.24}%

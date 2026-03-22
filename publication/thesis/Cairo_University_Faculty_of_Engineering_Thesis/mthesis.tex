@@ -12,6 +12,7 @@
 \usepackage{rotating}
 \usepackage{multirow}
 \usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 \usepackage{float}
 \usepackage[center,font=small]{caption}
 \usepackage{tikz}
@@ -45,12 +46,13 @@ defernumbers=true,
 isbn=false,
 doi=false,
 dashed=false,
-bibencoding=cp1252,
+bibencoding=utf8,
+texencoding=ascii,
 citestyle=numeric-comp]{biblatex}
 \addbibresource{thesis.bib}
 
 \usepackage[T1]{fontenc}
-\usepackage[utf8]{inputenc}   % UTF-8 input for Arabic text in verbatim/listings
+\usepackage[cp1256]{inputenc}  % cp1256 required by arabi package for Arabic text
 \usepackage{lmodern}
 \usepackage{array}
 \usepackage{paralist}
@@ -78,6 +80,13 @@ citestyle=numeric-comp]{biblatex}
 \usepackage{microtype}         % Better text justification
 \usepackage{csquotes}          % Smart quotes (required by biblatex)
 
+% Arabi defines \textRL{} and \textAR{}, not \RL{} or \textarabic{}
+% Provide aliases used throughout the thesis
+\AtBeginDocument{%
+  \providecommand{\RL}[1]{\textRL{#1}}%
+  \providecommand{\textarabic}[1]{\textRL{#1}}%
+}
+
 % Listings style for Arabic prompt templates (displayed as-is, UTF-8)
 \lstset{
   basicstyle=\small\ttfamily,
@@ -88,7 +97,7 @@ citestyle=numeric-comp]{biblatex}
   xrightmargin=6pt,
   inputencoding=utf8,
   extendedchars=true,
-  literate={ا}{{\ا}}1 % fallback; Arabic shown via verbatim or PDF-embedded text
+  % Arabic characters are rendered via \RL{} outside listings
 }
 
 % TikZ solution

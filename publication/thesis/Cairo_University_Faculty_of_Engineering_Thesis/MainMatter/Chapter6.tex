@@ -12,10 +12,10 @@ design recommendations. Section~\ref{sec:disc_limitations} enumerates
 limitations. Section~\ref{sec:disc_future} outlines future research directions.
 Section~\ref{sec:conclusion} provides the concluding statement.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{Revisiting the Research Questions}
 \label{sec:disc_rq}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 \subsection*{RQ1: OCR Error Characterisation}
 
@@ -27,7 +27,7 @@ overall degradation?
 is a catastrophic repetition artefact that affects 0.5\% of samples and
 accounts for 95.2\% of all character errors (CER 17.01\% overall, 1.37\% on
 normal samples). On normal samples, the dominant error class is dot confusion
-(ط/ظ, ي/ب, ف/ق and related pairs), and all OCR errors produce morphologically
+(\RL{�}/\RL{�}, \RL{�}/\RL{�}, \RL{�}/\RL{�} and related pairs), and all OCR errors produce morphologically
 valid Arabic forms.
 
 \textbf{Significance:} The high OCR quality on normal samples (CER 1.37\%)
@@ -58,7 +58,7 @@ over-correction.
 harmful on high-quality input --- suggests that zero-shot LLM correction
 should be applied \emph{selectively}, not universally. It is a reliable
 safety net for degenerate OCR output, but a liability for good OCR output.
-The finding aligns with \citet{kang2024} who observe that LLMs show strong
+The finding aligns with \textcite{kang2024llmocr} who observe that LLMs show strong
 performance on heavily corrupted text but introduce errors on clean text.
 
 \textbf{Caveat:} The zero-shot prompt used was the aggressive version (v1).
@@ -150,7 +150,7 @@ rate), but injecting them into the prompt does not translate the accurate
 diagnosis into improved behaviour. The model's instruction-following training
 interprets the diagnostic warnings as additional licence to intervene, not
 as constraints to hold back. This finding has implications beyond OCR
-correction: it suggests that self-diagnostic prompting strategies \citep{shinn2023reflexion}
+correction: it suggests that self-diagnostic prompting strategies \cite{shinn2023reflexion}
 may be less effective when the model's primary failure mode is
 over-intervention rather than under-intervention. Reflexion-style feedback
 was designed for tasks where the model is not trying hard enough; in this
@@ -186,10 +186,10 @@ and exclude RAG (the worst) are the most likely candidates for improvement.
 Whether any combination can exceed the zero-shot Phase~2 baseline remains
 an open question.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{The Over-Correction Problem}
 \label{sec:disc_overcorrection}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 The central unexpected finding of this study is that \emph{every active
 knowledge augmentation strategy tested degrades correction quality relative
@@ -288,11 +288,11 @@ have been observed in related settings.
 
 In \emph{fact verification}, language models provided with retrieved passages
 sometimes introduce hallucinations that align with the retrieved content
-rather than the ground truth \citep{lewis2020rag}. The model treats the
+rather than the ground truth \cite{lewis2020retrieval}. The model treats the
 retrieved content as authoritative and modifies its output accordingly ---
 a direct parallel to the Phase~5 RAG behaviour observed here.
 
-In \emph{chain-of-thought prompting} \citep{wei2022cot}, models that reason
+In \emph{chain-of-thought prompting} \cite{wei2022chain}, models that reason
 step-by-step sometimes arrive at wrong answers that they would have answered
 correctly with a direct response. Extended reasoning gives the model more
 opportunities to drift from the correct answer. The self-reflective prompting
@@ -306,10 +306,10 @@ the optimal augmentation level depends on the error density of the input:
 high-error-density input benefits from more guidance; low-error-density input
 is harmed by it.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{When Would Augmentation Help?}
 \label{sec:disc_when}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 The findings of this study are specific to a well-defined experimental
 context: a high-quality typewritten corpus, a single OCR engine, a single
@@ -362,10 +362,10 @@ samples below a confidence threshold could be flagged for correction while
 high-confidence outputs are left untouched. This would limit the LLM's
 exposure to correct text and substantially reduce the over-correction rate.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{Implications for System Design}
 \label{sec:disc_design}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 The following practical recommendations are derived from the experimental
 findings.
@@ -407,10 +407,10 @@ target documents. Before deploying RAG in a production Arabic OCR pipeline,
 retrieval precision should be validated on held-out samples and a CER
 threshold should be applied to confirm the corpus is helping, not hurting.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{Limitations}
 \label{sec:disc_limitations}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 This study acknowledges the following limitations.
 
@@ -470,16 +470,16 @@ degradation.
 
 \paragraph{Diacritic stripping in evaluation.}
 All CER and WER figures are computed after stripping diacritics from both
-the reference and hypothesis texts (Section~\ref{subsec:sys_normalization}).
+the reference and hypothesis texts (Section~\ref{subsec:norm}).
 This is the standard evaluation protocol for Arabic NLP, as diacritics are
 optional in most printed Arabic. However, if the application requires
 diacritics (e.g., Quranic text, children's educational material), the
 evaluation protocol and the correction task would be more demanding.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{Future Work}
 \label{sec:disc_future}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 \paragraph{Evaluate on KHATT and all PATS-A01 fonts.}
 The highest-priority next step is expanding evaluation to the 199 KHATT
@@ -541,10 +541,10 @@ NLP tool support. Extending the experimental framework to dialectal Arabic
 would require new ground-truth corpora and would test whether the
 over-correction problem is specific to MSA or applies more broadly.
 
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 \section{Conclusion}
 \label{sec:conclusion}
-%────────────────────────────────────────────────────────────────────────────
+%----------------------------------------------------------------------------
 
 This thesis set out to answer a single central question: \emph{Can a
 lightweight open-source LLM correct Arabic OCR errors through prompt

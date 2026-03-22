@@ -143,10 +143,10 @@
 \usepackage{amssymb}
 \usepackage{amsthm}
 \usepackage[toc,page]{appendix}
-\usepackage[english]{babel}
+\usepackage[arabic,english]{babel}
 \usepackage{calc}
 \usepackage{epsfig}
-\usepackage[hidelinks]{hyperref}
+\usepackage[hidelinks,hyperfootnotes=false]{hyperref}
 \usepackage[all]{hypcap}
 \usepackage{ifthen}
 \usepackage{pdflscape}

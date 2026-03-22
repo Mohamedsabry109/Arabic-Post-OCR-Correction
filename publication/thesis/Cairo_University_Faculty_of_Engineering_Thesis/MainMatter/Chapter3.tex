@@ -412,7 +412,7 @@ Similar shapes
   & Substitution between characters sharing the same skeleton but differing
     in secondary visual features:
     \{ra, zay\}, \{dal, dhal\}, \{ta marbuta, ha\},
-    \{ta with extended tail (Ø·), dha (Ø¸)\}. \\
+    \{ta with extended tail (\RL{Ø}), dha (\RL{Ù})\}. \\
 Merged words
   & Fewer words in the OCR output than in the ground truth;
     a word boundary is missing. \\
@@ -689,7 +689,7 @@ Fig.~\ref{fig:corrector} shows the class hierarchy.
 \begin{tikzpicture}[
   cls/.style={rectangle, draw, rounded corners=3pt, minimum width=4.5cm,
               minimum height=0.9cm, align=center, font=\small},
-  inh/.style={-{open triangle 60}, thick}
+  inh/.style={-{Triangle[open]}, thick}
 ]
   \node[cls, fill=gray!15] (base) at (0,0) {\texttt{BaseLLMCorrector} (abstract)};
   \node[cls, fill=blue!10] (tc)  at (-4,-2.5) {\texttt{TransformersCorrector}};
