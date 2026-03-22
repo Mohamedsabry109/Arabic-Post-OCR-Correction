@@ -167,8 +167,17 @@ class PromptBuilder:
     def _load_crafted_base(self) -> str:
         """Return the crafted system prompt text, loading from disk on first call."""
         if self._crafted_base is None:
+            path = Path(self._crafted_prompt_path)
+            # If relative path not found from CWD, try resolving from project root.
+            # prompt_builder.py lives at src/core/ — project root is 3 levels up.
+            # This handles Kaggle/Colab where CWD != project root.
+            if not path.is_absolute() and not path.exists():
+                project_root = Path(__file__).resolve().parent.parent.parent
+                alt = project_root / path
+                if alt.exists():
+                    path = alt
             try:
-                with open(self._crafted_prompt_path, encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     self._crafted_base = f.read()
             except FileNotFoundError:
                 logger.warning(
