@@ -1,0 +1,3 @@
+  Read all corrections.jsonl files under results/phase2/*/, extract every sample where ocr_text != gt_text, compute word-level diffs using
+  SequenceMatcher, and dump all error pairs in the format ocr_word > gt_word to results/phase2/word_error_examples.txt, grouped by dataset and   
+  sample ID. Write the script in Python and run it directly — don't ask me to run it.
