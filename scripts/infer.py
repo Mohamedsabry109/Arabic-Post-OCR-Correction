@@ -355,21 +355,21 @@ def main() -> None:
             return builder.build_rule_augmented(rec["ocr_text"], rec.get("rules_context", ""))
         if pt == "few_shot":
             return builder.build_few_shot(rec["ocr_text"], rec.get("examples_context", ""))
-        if pt == "rag":
-            return builder.build_rag(rec["ocr_text"], rec.get("retrieval_context", ""))
         if pt == "combined":
             return builder.build_combined(
                 ocr_text=rec["ocr_text"],
                 confusion_context=rec.get("confusion_context") or "",
                 rules_context=rec.get("rules_context") or "",
                 examples_context=rec.get("examples_context") or "",
-                retrieval_context=rec.get("retrieval_context") or "",
                 insights_context=rec.get("insights_context") or "",
+                word_pairs_context=rec.get("word_pairs_context") or "",
             )
         if pt == "self_reflective":
-            return builder.build_self_reflective(rec["ocr_text"], rec.get("insights_context", ""))
-        if pt == "word_error_pairs":
-            return builder.build_word_error_pairs(rec["ocr_text"], rec.get("word_pairs_context", ""))
+            return builder.build_self_reflective(
+                rec["ocr_text"],
+                rec.get("insights_context", ""),
+                rec.get("word_pairs_context", ""),
+            )
         if pt == "meta_prompt":
             return builder.build_meta_prompt(rec["ocr_text"])
         if pt == "crafted":
@@ -423,43 +423,33 @@ def main() -> None:
                 prompt_ver = builder.few_shot_prompt_version
                 if not examples_context.strip():
                     prompt_type = "zero_shot_fallback"
-            elif prompt_type == "rag":
-                retrieval_context = record.get("retrieval_context", "")
-                messages = builder.build_rag(record["ocr_text"], retrieval_context)
-                prompt_ver = builder.rag_prompt_version
-                if not retrieval_context.strip():
-                    prompt_type = "zero_shot_fallback"
             elif prompt_type == "combined":
                 messages = builder.build_combined(
                     ocr_text=record["ocr_text"],
                     confusion_context=record.get("confusion_context") or "",
                     rules_context=record.get("rules_context") or "",
                     examples_context=record.get("examples_context") or "",
-                    retrieval_context=record.get("retrieval_context") or "",
                     insights_context=record.get("insights_context") or "",
+                    word_pairs_context=record.get("word_pairs_context") or "",
                 )
                 prompt_ver = builder.combined_prompt_version
-                # Detect if all contexts were empty (fell back to zero_shot internally)
                 _any_ctx = any([
                     record.get("confusion_context"),
                     record.get("rules_context"),
                     record.get("examples_context"),
-                    record.get("retrieval_context"),
                     record.get("insights_context"),
+                    record.get("word_pairs_context"),
                 ])
                 if not _any_ctx:
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "self_reflective":
                 insights_context = record.get("insights_context", "")
-                messages = builder.build_self_reflective(record["ocr_text"], insights_context)
-                prompt_ver = builder.self_reflective_prompt_version
-                if not insights_context.strip():
-                    prompt_type = "zero_shot_fallback"
-            elif prompt_type == "word_error_pairs":
                 word_pairs_context = record.get("word_pairs_context", "")
-                messages = builder.build_word_error_pairs(record["ocr_text"], word_pairs_context)
-                prompt_ver = builder.word_error_pairs_prompt_version
-                if not word_pairs_context.strip():
+                messages = builder.build_self_reflective(
+                    record["ocr_text"], insights_context, word_pairs_context
+                )
+                prompt_ver = builder.self_reflective_prompt_version
+                if not insights_context.strip() and not word_pairs_context.strip():
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "meta_prompt":
                 messages = builder.build_meta_prompt(record["ocr_text"])

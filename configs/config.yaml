@@ -21,7 +21,6 @@ data:
   pats_splits_file: "./data/ocr-raw-data/PATS_A01_Dataset/pats_splits.json"
 
   # Knowledge sources (used from Phase 3 onward)
-  openiti: "./data/OpenITI"
   qalb: "./data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
   rules: "./data/rules"
 
@@ -112,14 +111,6 @@ model:
   quantize_4bit: false       # set true for GPUs with <8GB VRAM
 
 # ---------------------------------------------------------------------------
-# RAG settings (Phase 5)
-# ---------------------------------------------------------------------------
-rag:
-  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-  top_k: 3
-  chunk_size: 200
-
-# ---------------------------------------------------------------------------
 # Few-shot settings (Phase 4B)
 # ---------------------------------------------------------------------------
 few_shot:
@@ -187,26 +178,6 @@ phase4:
     phase2_dir: "results/phase2" # source of corrections.jsonl for Phase 4C
 
 # ---------------------------------------------------------------------------
-# Phase 5 specific
-# ---------------------------------------------------------------------------
-phase5:
-  corpus:
-    max_sentences: 200000        # Sentences to extract from OpenITI
-    min_char_len: 30             # Minimum sentence character length
-    max_char_len: 300            # Maximum sentence character length
-    status_filter: "pri"         # Only use primary-status OpenITI texts
-    seed: 42
-  index:
-    type: "FlatIP"               # FAISS index type: "FlatIP" | "IVFFlat"
-    batch_size: 256              # Embedding batch size
-  retrieval:
-    top_k: 3                     # Sentences to retrieve per OCR sample
-    min_score: 0.0               # Minimum cosine similarity (0 = no filter)
-    format_style: "numbered_arabic"
-  analyze_errors: true
-  max_retries: 2
-
-# ---------------------------------------------------------------------------
 # Phase 6 specific
 # ---------------------------------------------------------------------------
 phase6:
@@ -218,19 +189,7 @@ phase6:
     n_bootstrap: 1000          # Bootstrap iterations for confidence intervals
 
 # ---------------------------------------------------------------------------
-# Phase 4D specific
-# ---------------------------------------------------------------------------
-phase4e:
-  word_pairs_path: "data/word_error_pairs.txt"  # ocr_word > gt_word, one per line
-  select_n: 15                   # number of pairs to inject per sample
-  select_strategy: "random"      # "random" | "first"
-  select_seed: 42                # random seed for reproducibility
-  analyze_errors: true
-  max_retries: 2
-  prompt_version: "p4ev1"
-
-# ---------------------------------------------------------------------------
-# Phase 4D specific
+# Phase 4D specific (self-reflective insights + word-error pairs)
 # ---------------------------------------------------------------------------
 phase4d:
   source_phase: "phase2"         # which phase's train predictions to analyze
@@ -241,9 +200,12 @@ phase4d:
     min_sample_size: 10          # min baseline count to include an error type
     top_n_weaknesses: 3          # max weakness items in prompt
     top_n_overcorrections: 2     # max over-correction items in prompt
+  word_pairs_n: 15               # number of word-error pairs to inject per sample
+  word_pairs_strategy: "random"  # "random" | "first"
+  word_pairs_seed: 42            # random seed for reproducibility
   analyze_errors: true
   max_retries: 2
-  prompt_version: "p4dv1"
+  prompt_version: "p4dv3"
 
 # ---------------------------------------------------------------------------
 # Phase 2 specific

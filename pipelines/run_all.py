@@ -82,11 +82,6 @@ _PHASE_STEPS: dict[str, list[dict]] = {
         {"script": "pipelines/run_phase4.py", "mode": "validate", "stage": "analyze",
          "extra": ["--sub-phase", "4c"]},
     ],
-    "5": [
-        {"script": "pipelines/run_phase5.py", "mode": "build",   "stage": "local"},
-        {"script": "pipelines/run_phase5.py", "mode": "export",  "stage": "export"},
-        {"script": "pipelines/run_phase5.py", "mode": "analyze", "stage": "analyze"},
-    ],
     "6": [
         {"script": "pipelines/run_phase6.py", "mode": "export",   "stage": "export",
          "extra": ["--combo", "all"]},
@@ -98,7 +93,7 @@ _PHASE_STEPS: dict[str, list[dict]] = {
     ],
 }
 
-_ALL_PHASES = ["1", "2", "3", "4a", "4b", "4c", "5", "6"]
+_ALL_PHASES = ["1", "2", "3", "4a", "4b", "4c", "4d", "6"]
 
 # Inference input/output paths per phase (for --mode full)
 _INFERENCE_IO: dict[str, tuple[str, str]] = {
@@ -106,7 +101,7 @@ _INFERENCE_IO: dict[str, tuple[str, str]] = {
     "3":  ("results/phase3/inference_input.jsonl",  "results/phase3/corrections.jsonl"),
     "4a": ("results/phase4a/inference_input.jsonl", "results/phase4a/corrections.jsonl"),
     "4b": ("results/phase4b/inference_input.jsonl", "results/phase4b/corrections.jsonl"),
-    "5":  ("results/phase5/inference_input.jsonl",  "results/phase5/corrections.jsonl"),
+    "4d": ("results/phase4d/inference_input.jsonl", "results/phase4d/corrections.jsonl"),
 }
 
 
@@ -203,11 +198,6 @@ def _build_cmd(
 
     if args.force:
         cmd += ["--force"]
-
-    # Phase 5 build has --max-sentences; pass limit as that flag too
-    if step["script"] == "pipelines/run_phase5.py" and step.get("mode") == "build":
-        if args.limit is not None:
-            cmd += ["--max-sentences", str(args.limit * 5)]
 
     return cmd
 

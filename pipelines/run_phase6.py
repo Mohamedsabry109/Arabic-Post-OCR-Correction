@@ -88,8 +88,8 @@ from src.data.knowledge_base import (
     RulesLoader,
     QALBLoader,
     LLMInsightsLoader,
+    WordErrorPairsLoader,
 )
-from src.core.rag_retriever import RAGRetriever
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual, calculate_cer
@@ -107,23 +107,21 @@ logger = logging.getLogger(__name__)
 # Combo definitions
 # ---------------------------------------------------------------------------
 
-# (use_confusion, use_rules, use_fewshot, use_rag, use_self)
-# use_self = True requires Phase 4D insights files to exist in results/phase4d/insights/
-COMBO_COMPONENTS: dict[str, tuple[bool, bool, bool, bool, bool]] = {
-    # Phase 3–5 combinations (self=False)
-    "pair_conf_rules":    (True,  True,  False, False, False),
-    "pair_conf_fewshot":  (True,  False, True,  False, False),
-    "pair_conf_rag":      (True,  False, False, True,  False),
-    "pair_rules_fewshot": (False, True,  True,  False, False),
-    "full_prompt":        (True,  True,  True,  True,  False),
-    "abl_no_confusion":   (False, True,  True,  True,  False),
-    "abl_no_rules":       (True,  False, True,  True,  False),
-    "abl_no_fewshot":     (True,  True,  False, True,  False),
-    "abl_no_rag":         (True,  True,  True,  False, False),
-    # Phase 4D extension combos (use_self=True)
-    "self_reflective":    (False, False, False, False, True),
-    "pair_self_conf":     (True,  False, False, False, True),
-    "full_with_self":     (True,  True,  True,  True,  True),
+# (use_confusion, use_rules, use_fewshot, use_self)
+# use_self = True requires Phase 4D insights + word_error_pairs.txt in results/phase4d/
+COMBO_COMPONENTS: dict[str, tuple[bool, bool, bool, bool]] = {
+    # Phase 3-4 combinations (use_self=False)
+    "pair_conf_rules":    (True,  True,  False, False),
+    "pair_conf_fewshot":  (True,  False, True,  False),
+    "pair_rules_fewshot": (False, True,  True,  False),
+    "full_prompt":        (True,  True,  True,  False),
+    "abl_no_confusion":   (False, True,  True,  False),
+    "abl_no_rules":       (True,  False, True,  False),
+    "abl_no_fewshot":     (True,  True,  False, False),
+    # Phase 4D combos (use_self=True — includes insights + word pairs)
+    "self_reflective":    (False, False, False, True),
+    "pair_self_conf":     (True,  False, False, True),
+    "full_with_self":     (True,  True,  True,  True),
 }
 
 CAMEL_COMBOS = {"pair_best_camel", "full_system"}
@@ -134,16 +132,14 @@ ALL_COMBOS = INFERENCE_COMBOS + sorted(CAMEL_COMBOS)
 COMBO_DESCRIPTIONS: dict[str, str] = {
     "pair_conf_rules":    "Confusion + Rules",
     "pair_conf_fewshot":  "Confusion + Few-Shot",
-    "pair_conf_rag":      "Confusion + RAG",
     "pair_rules_fewshot": "Rules + Few-Shot",
-    "full_prompt":        "All Prompt Components (Confusion + Rules + Few-Shot + RAG)",
+    "full_prompt":        "All Prompt Components (Confusion + Rules + Few-Shot)",
     "abl_no_confusion":   "Full Prompt minus Confusion",
     "abl_no_rules":       "Full Prompt minus Rules",
     "abl_no_fewshot":     "Full Prompt minus Few-Shot",
-    "abl_no_rag":         "Full Prompt minus RAG",
-    "self_reflective":    "Self-Reflective Prompting (Phase 4D only)",
+    "self_reflective":    "Self-Reflective Prompting (Phase 4D: insights + word pairs)",
     "pair_self_conf":     "Self-Reflective + Confusion",
-    "full_with_self":     "Full Prompt + Self-Reflective (All 5 components)",
+    "full_with_self":     "Full Prompt + Self-Reflective",
     "pair_best_camel":    "Best Pair + CAMeL Validation",
     "full_system":        "Full System (All + CAMeL)",
 }
@@ -329,9 +325,9 @@ def _active_component_names(combo_id: str) -> list[str]:
     if combo_id in CAMEL_COMBOS:
         base = "full_prompt" if combo_id == "full_system" else "pair_best"
         return [base, "camel"]
-    flags = COMBO_COMPONENTS.get(combo_id, (False, False, False, False, False))
+    flags = COMBO_COMPONENTS.get(combo_id, (False, False, False, False))
     names = []
-    labels = ["confusion", "rules", "fewshot", "rag", "self"]
+    labels = ["confusion", "rules", "fewshot", "self"]
     for flag, label in zip(flags, labels):
         if flag:
             names.append(label)
@@ -887,7 +883,7 @@ def run_export(
     Loads contexts once, then iterates over all active datasets.
     Confusion context is per-dataset; rules/examples are global; retrieval is per-sample.
     """
-    use_conf, use_rules, use_fewshot, use_rag, use_self = COMBO_COMPONENTS[combo_id]
+    use_conf, use_rules, use_fewshot, use_self = COMBO_COMPONENTS[combo_id]
 
     output_path = combo_dir / "inference_input.jsonl"
     combo_dir.mkdir(parents=True, exist_ok=True)
@@ -895,8 +891,8 @@ def run_export(
     logger.info("=" * 60)
     logger.info("Phase 6 EXPORT: combo=%s  (%s)", combo_id, COMBO_DESCRIPTIONS[combo_id])
     logger.info(
-        "  Components: confusion=%s  rules=%s  fewshot=%s  rag=%s  self=%s",
-        use_conf, use_rules, use_fewshot, use_rag, use_self,
+        "  Components: confusion=%s  rules=%s  fewshot=%s  self=%s",
+        use_conf, use_rules, use_fewshot, use_self,
     )
 
     # --- Build global contexts once ---
@@ -915,45 +911,12 @@ def run_export(
     rules_context = build_rules_context(config) if use_rules else ""
     examples_context = build_examples_context(config) if use_fewshot else ""
 
-    # --- RAG retriever ---
-    retriever: Optional[RAGRetriever] = None
-    if use_rag:
-        p5_ret_cfg = config.get("phase5", {}).get("retrieval", {})
-        top_k = p5_ret_cfg.get("top_k") or config.get("rag", {}).get("top_k", 3)
-        min_score = p5_ret_cfg.get("min_score", 0.0)
-        format_style_rag = p5_ret_cfg.get("format_style", "numbered_arabic")
-
-        index_path = Path("results/phase5/faiss.index")
-        if not index_path.exists():
-            logger.error(
-                "FAISS index not found: %s\n"
-                "Run: python pipelines/run_phase5.py --mode build",
-                index_path,
-            )
-            sys.exit(1)
-
-        retriever = RAGRetriever(config)
-        try:
-            retriever.load_index(index_path)
-        except (FileNotFoundError, RuntimeError) as exc:
-            logger.error("Cannot load RAG retriever: %s", exc)
-            sys.exit(1)
-
-        if not retriever.enabled:
-            logger.error("RAGRetriever disabled -- install sentence-transformers and faiss-cpu.")
-            sys.exit(1)
-
-        logger.info("RAG retriever loaded: %d sentences in index.", retriever.corpus_size)
-    else:
-        top_k = 0
-        min_score = 0.0
-        format_style_rag = "numbered_arabic"
-
-    # --- Phase 4D self-reflective insights ---
     pats_insights_context = ""
     khatt_insights_context = ""
+    word_pairs_context = ""
     if use_self:
-        insights_dir = _PROJECT_ROOT / "results" / "phase4d" / "insights"
+        phase4d_dir = _PROJECT_ROOT / "results" / "phase4d"
+        insights_dir = phase4d_dir / "insights"
         pats_path = insights_dir / "PATS-A01_insights.json"
         khatt_path = insights_dir / "KHATT_insights.json"
 
@@ -993,9 +956,28 @@ def run_export(
                 khatt_path,
             )
 
-        if not pats_insights_context and not khatt_insights_context:
+        # Load word-error pairs (auto-generated alongside insights)
+        pairs_path = phase4d_dir / "word_error_pairs.txt"
+        if pairs_path.exists():
+            pairs_loader = WordErrorPairsLoader()
+            try:
+                all_pairs = pairs_loader.load(pairs_path)
+                selected = pairs_loader.select(
+                    all_pairs,
+                    n=int(phase4d_cfg.get("word_pairs_n", 15)),
+                    strategy=str(phase4d_cfg.get("word_pairs_strategy", "random")),
+                    seed=int(phase4d_cfg.get("word_pairs_seed", 42)),
+                )
+                word_pairs_context = pairs_loader.format_for_prompt(selected)
+                logger.info("Loaded %d word-error pairs (%d chars).", len(selected), len(word_pairs_context))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not load word-error pairs: %s", exc)
+        else:
+            logger.info("Word-error pairs file not found: %s", pairs_path)
+
+        if not pats_insights_context and not khatt_insights_context and not word_pairs_context:
             logger.error(
-                "use_self=True but no insights files found. "
+                "use_self=True but no Phase 4D outputs found. "
                 "Cannot export combo '%s'. "
                 "Run: python pipelines/run_phase4d.py --mode analyze-train",
                 combo_id,
@@ -1028,19 +1010,17 @@ def run_export(
             else:
                 confusion_context, conf_source = "", "disabled"
 
-            # Resolve self-reflective insights context for this dataset
+            # Resolve self-reflective context for this dataset
             if use_self:
-                if ds_key.startswith("PATS-A01-"):
-                    insights_context = pats_insights_context
-                else:
-                    insights_context = khatt_insights_context
+                insights_context = (
+                    pats_insights_context if ds_key.startswith("PATS-A01-") else khatt_insights_context
+                )
             else:
                 insights_context = ""
 
             # Determine prompt_type
-            any_context = any([
-                confusion_context, rules_context, examples_context, use_rag, insights_context
-            ])
+            any_context = any([confusion_context, rules_context, examples_context,
+                               insights_context, word_pairs_context])
             prompt_type = "combined" if any_context else "zero_shot"
 
             try:
@@ -1049,39 +1029,21 @@ def run_export(
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue
 
-            n_with_rag = 0
             for sample in tqdm(samples, desc=f"  Export {ds_key}", unit="sample"):
-                retrieval_context = ""
-                retrieval_scores: list[float] = []
-                retrieved_k = 0
-
-                if retriever is not None and retriever.enabled:
-                    chunks = retriever.retrieve(sample.ocr_text, k=top_k, min_score=min_score)
-                    retrieval_context = retriever.format_for_prompt(
-                        chunks, style=format_style_rag
-                    )
-                    retrieval_scores = [c.score for c in chunks]
-                    retrieved_k = len(chunks)
-                    if chunks:
-                        n_with_rag += 1
-
                 record: dict = {
-                    "sample_id":         sample.sample_id,
-                    "dataset":           ds_key,
-                    "ocr_text":          sample.ocr_text,
-                    "gt_text":           sample.gt_text,
-                    "prompt_type":       prompt_type,
-                    "combo_id":          combo_id,
-                    "prompt_version":    PromptBuilder.COMBINED_PROMPT_VERSION,
-                    "confusion_context": confusion_context or None,
-                    "rules_context":     rules_context or None,
-                    "examples_context":  examples_context or None,
-                    "retrieval_context": retrieval_context or None,
-                    "insights_context":  insights_context or None,
+                    "sample_id":          sample.sample_id,
+                    "dataset":            ds_key,
+                    "ocr_text":           sample.ocr_text,
+                    "gt_text":            sample.gt_text,
+                    "prompt_type":        prompt_type,
+                    "combo_id":           combo_id,
+                    "prompt_version":     PromptBuilder.COMBINED_PROMPT_VERSION,
+                    "confusion_context":  confusion_context or None,
+                    "rules_context":      rules_context or None,
+                    "examples_context":   examples_context or None,
+                    "insights_context":   insights_context or None,
+                    "word_pairs_context": word_pairs_context or None,
                 }
-                if use_rag:
-                    record["retrieved_k"] = retrieved_k
-                    record["retrieval_scores"] = retrieval_scores
                 if use_conf:
                     record["confusion_source"] = conf_source
 
@@ -1089,9 +1051,8 @@ def run_export(
                 total_written += 1
 
             logger.info(
-                "Exported %d samples for %s (conf_src=%s, rag_hits=%d/%d).",
+                "Exported %d samples for %s (conf_src=%s).",
                 len(samples), ds_key, conf_source,
-                n_with_rag if use_rag else 0, len(samples),
             )
 
     logger.info("=" * 60)
@@ -1784,7 +1745,7 @@ def run_summarize(
         ("phase4a", Path("results/phase4a")),
         ("phase4b", Path("results/phase4b")),
         ("phase4c", Path("results/phase4c")),
-        ("phase5", Path("results/phase5")),
+        ("phase4d", Path("results/phase4d")),
     ]:
         v = _load_isolated_phase_avg_cer(phase_dir)
         if v is not None:
@@ -1795,11 +1756,11 @@ def run_summarize(
         "confusion": "phase3",
         "rules":     "phase4a",
         "fewshot":   "phase4b",
-        "rag":       "phase5",
+        "self":      "phase4d",
     }
 
     # --- Combinations summary ---
-    pair_combos = ["pair_conf_rules", "pair_conf_fewshot", "pair_conf_rag", "pair_rules_fewshot"]
+    pair_combos = ["pair_conf_rules", "pair_conf_fewshot", "pair_rules_fewshot"]
     combinations: dict[str, dict] = {}
     for cid in pair_combos + ["pair_best_camel", "full_prompt", "full_system"]:
         if cid not in combo_metrics:
@@ -1834,7 +1795,7 @@ def run_summarize(
     # --- Ablation summary ---
     full_prompt_cer = combo_metrics.get("full_prompt", {}).get("avg_cer")
     full_system_cer = combo_metrics.get("full_system", {}).get("avg_cer")
-    abl_combos = ["abl_no_confusion", "abl_no_rules", "abl_no_fewshot", "abl_no_rag"]
+    abl_combos = ["abl_no_confusion", "abl_no_rules", "abl_no_fewshot"]
     ablations: dict[str, dict] = {}
     for abl_id in abl_combos:
         if abl_id not in combo_metrics:
@@ -1881,7 +1842,6 @@ def run_summarize(
     pair_component_map = {
         "pair_conf_rules":    ("confusion", "rules"),
         "pair_conf_fewshot":  ("confusion", "fewshot"),
-        "pair_conf_rag":      ("confusion", "rag"),
         "pair_rules_fewshot": ("rules", "fewshot"),
     }
     for cid, (comp_a, comp_b) in pair_component_map.items():
@@ -2014,7 +1974,7 @@ def run_summarize(
         ("phase4a_rules", Path("results/phase4a")),
         ("phase4b_fewshot", Path("results/phase4b")),
         ("phase4c_camel", Path("results/phase4c")),
-        ("phase5_rag", Path("results/phase5")),
+        ("phase4d_self", Path("results/phase4d")),
     ]:
         # Phase 1 stores OCR metrics differently
         if ph_key == "phase1_ocr":
@@ -2104,7 +2064,7 @@ def _generate_paper_tables(
     lines.append("| System | Avg CER | Avg WER |")
     lines.append("|--------|---------|---------|")
 
-    # Order: phase1 -> phase2 -> phases 3-5 -> phase6 combos
+    # Order: phase1 -> phase2 -> phases 3-4 -> phase6 combos
     system_order = [
         ("phase1_ocr",           "Phase 1 (OCR only)"),
         ("phase2_zero_shot",     "Phase 2 (Zero-shot)"),
@@ -2112,7 +2072,7 @@ def _generate_paper_tables(
         ("phase4a_rules",        "Phase 4A (+Rules)"),
         ("phase4b_fewshot",      "Phase 4B (+Few-Shot)"),
         ("phase4c_camel",        "Phase 4C (+CAMeL)"),
-        ("phase5_rag",           "Phase 5 (+RAG)"),
+        ("phase4d_self",         "Phase 4D (+Self-Reflective)"),
     ]
     for cid in INFERENCE_COMBOS + sorted(CAMEL_COMBOS):
         system_order.append((f"phase6_{cid}", f"Phase 6: {COMBO_DESCRIPTIONS.get(cid, cid)}"))

@@ -79,7 +79,9 @@
       "Bash(/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk -pdf -interaction=nonstopmode -f mthesis.tex)",
       "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -f -g mthesis.tex)",
       "Bash(python3 -c \":*)",
-      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -g mthesis.tex)"
+      "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -g mthesis.tex)",
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction/data/OpenITI -type f -name *.csv -o -name *.json -o -name *.jsonl)",
+      "Bash(ls:*)"
     ]
   }
 }

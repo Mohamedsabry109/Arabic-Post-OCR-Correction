@@ -12,7 +12,7 @@
 - **Metrics**: CER (Character Error Rate), WER (Word Error Rate)
 - **Model**: Qwen3-4B-Instruct-2507 (primary)
 
-## Experimental Structure (8 Phases)
+## Experimental Structure (7 Phases)
 
 | Phase | Name | Research Question | Comparison |
 |-------|------|-------------------|------------|
@@ -22,11 +22,12 @@
 | **4A** | Rule-Augmented | Do spelling rules help? | vs Phase 2 (**isolated**) |
 | **4B** | Few-Shot Learning | Do correction examples help? | vs Phase 2 (**isolated**) |
 | **4C** | CAMeL Validation | Does morphological post-processing help? | vs Phase 2 (**isolated**) |
-| **4D** | Self-Reflective | Do LLM's own error patterns help? | vs Phase 2 (**isolated**) |
-| **5** | RAG | Does corpus grounding help? | vs Phase 2 (**isolated**) |
+| **4D** | Self-Reflective + Word Pairs | Do error patterns + concrete examples help? | vs Phase 2 (**isolated**) |
 | **6** | Combinations + Ablation | What's optimal? What contributes? | Pairs + Full + Ablation |
 
-**Key Design**: Phases 3-5 (including 4A-4D) are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests meaningful combinations before ablation.
+**Key Design**: Phases 3-4 (including 4A-4D) are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests meaningful combinations before ablation.
+
+**Phase 4D pipeline**: `analyze-train` auto-generates both `insights/*.json` (error-type fix/intro rates) and `word_error_pairs.txt` (concrete OCR→GT word samples). Export mode uses both signals.
 
 ## Knowledge Sources
 
@@ -36,7 +37,7 @@
 | Arabic Rules | `./data/rules/` | Phase 4A, 6 |
 | QALB Corpus | `./data/QALB-*/` | Phase 4B, 6 |
 | CAMeL Tools | `pip install camel-tools` | Phase 1, 4C, 6 |
-| OpenITI | `./data/OpenITI/` | Phase 5, 6 |
+| Phase 4D outputs | `results/phase4d/insights/` + `word_error_pairs.txt` | Phase 4D, 6 |
 
 ### CAMeL Tools (Morphological Analysis)
 
@@ -52,7 +53,7 @@ Arabic-Post-OCR-Correction/
 ├── src/
 │   ├── data/           # DataLoader, KnowledgeBase, TextUtils
 │   ├── linguistic/     # CAMeL Tools wrappers (MorphAnalyzer, WordValidator)
-│   ├── core/           # LLMCorrector, PromptBuilder, RAGRetriever
+│   ├── core/           # LLMCorrector, PromptBuilder
 │   └── analysis/       # Metrics, ErrorAnalyzer, StatsTester, Visualizer
 ├── pipelines/          # run_phase1.py ... run_phase6.py, run_phase4d.py
 ├── configs/            # config.yaml
@@ -73,7 +74,6 @@ Arabic-Post-OCR-Correction/
 ├── ocr-raw-data/                   # Original ground-truth texts
 │   ├── PATS_A01_Dataset/
 │   └── KHATT/
-├── OpenITI/                        # Arabic corpus (RAG)
 ├── QALB-*/                         # Error-correction pairs
 └── rules/                          # Arabic spelling rules
 ```
@@ -124,6 +124,5 @@ See `docs/Guidelines.md` for full standards.
 - [x] Phase 4A: Rule-Augmented
 - [x] Phase 4B: Few-Shot (QALB)
 - [x] Phase 4C: CAMeL Validation (isolated)
-- [x] Phase 4D: Self-Reflective Prompting (isolated)
-- [x] Phase 5: RAG (OpenITI)
+- [x] Phase 4D: Self-Reflective + Word Pairs (isolated; fused from 4D+4E)
 - [x] Phase 6: Combinations + Ablation
