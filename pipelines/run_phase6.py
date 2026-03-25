@@ -557,8 +557,11 @@ def _load_exported_datasets(output_path: Path) -> set[str]:
     return found
 
 
-def _maybe_split_combined_corrections(combo_dir: Path) -> None:
-    """Split combined corrections.jsonl into per-dataset files if needed."""
+def _maybe_split_combined_corrections(combo_dir: Path, force: bool = False) -> None:
+    """Split combined corrections.jsonl into per-dataset files if needed.
+
+    When *force* is True, existing per-dataset files are overwritten.
+    """
     combined = combo_dir / "corrections.jsonl"
     if not combined.exists():
         return
@@ -580,8 +583,8 @@ def _maybe_split_combined_corrections(combo_dir: Path) -> None:
 
     for ds_key, records in records_by_dataset.items():
         out_path = combo_dir / ds_key / "corrections.jsonl"
-        if out_path.exists():
-            logger.info("  [%s] Already split -- skipping.", ds_key)
+        if out_path.exists() and not force:
+            logger.info("  [%s] Already split -- skipping (use --force to re-split).", ds_key)
             continue
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
@@ -771,8 +774,12 @@ def process_dataset_analyze(
     }
     save_json(metrics_json, out_dir / "metrics.json")
     logger.info(
-        "[%s / %s] CER=%.2f%%  WER=%.2f%%",
-        combo_id, dataset_key, corrected_result.cer * 100, corrected_result.wer * 100,
+        "[%s / %s] CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%",
+        combo_id, dataset_key,
+        corrected_result.cer * 100,
+        corrected_result.wer * 100,
+        corrected_result_nd.cer * 100,
+        corrected_result_nd.wer * 100,
     )
 
     # Step 2: Comparison vs Phase 2
@@ -823,9 +830,25 @@ def process_dataset_analyze(
         }
         save_json(comparison, out_dir / "comparison_vs_phase2.json")
         logger.info(
-            "[%s / %s] Phase2->Phase6 CER: %.2f%% -> %.2f%% (%+.1f%%)",
-            combo_id, dataset_key, p2_cer * 100, corrected_result.cer * 100, cer_rel,
+            "[%s / %s] Phase2->Phase6 CER: %.2f%% -> %.2f%% (%+.1f%%) | "
+            "WER: %.2f%% -> %.2f%% (%+.1f%%)",
+            combo_id, dataset_key,
+            p2_cer * 100, corrected_result.cer * 100, cer_rel,
+            p2_wer * 100, corrected_result.wer * 100, wer_rel,
         )
+        if p2_nd:
+            p2_cer_nd_v = float(p2_nd.get("cer", 0.0))
+            p2_wer_nd_v = float(p2_nd.get("wer", 0.0))
+            cer_d_nd_v = p2_cer_nd_v - corrected_result_nd.cer
+            wer_d_nd_v = p2_wer_nd_v - corrected_result_nd.wer
+            cer_r_nd_v = (cer_d_nd_v / p2_cer_nd_v * 100) if p2_cer_nd_v > 0 else 0.0
+            wer_r_nd_v = (wer_d_nd_v / p2_wer_nd_v * 100) if p2_wer_nd_v > 0 else 0.0
+            logger.info(
+                "[%s / %s] ND  CER: %.2f%% -> %.2f%% (%+.1f%%)  |  ND  WER: %.2f%% -> %.2f%% (%+.1f%%)",
+                combo_id, dataset_key,
+                p2_cer_nd_v * 100, corrected_result_nd.cer * 100, cer_r_nd_v,
+                p2_wer_nd_v * 100, corrected_result_nd.wer * 100, wer_r_nd_v,
+            )
     else:
         logger.warning(
             "[%s / %s] Phase 2 metrics not found -- skipping comparison.", combo_id, dataset_key
@@ -1103,7 +1126,7 @@ def run_analyze(
     analyze_errors: bool,
 ) -> tuple[dict[str, MetricResult], dict[str, dict]]:
     """Compute metrics and comparisons for one combo across all active datasets."""
-    _maybe_split_combined_corrections(combo_dir)
+    _maybe_split_combined_corrections(combo_dir, force=force)
 
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
@@ -1433,7 +1456,7 @@ def run_validate(
         )
 
     # Split base corrections if needed
-    _maybe_split_combined_corrections(base_combo_dir)
+    _maybe_split_combined_corrections(base_combo_dir, force=force)
 
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
@@ -1503,6 +1526,20 @@ def run_validate(
 # ---------------------------------------------------------------------------
 
 
+def _load_nd_results(all_corrected: dict, results_dir: Path) -> dict:
+    """Load corrected_no_diacritics from per-dataset metrics.json files."""
+    nd: dict = {}
+    for ds_key in all_corrected:
+        path = results_dir / ds_key / "metrics.json"
+        if path.exists():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    nd[ds_key] = json.load(f).get("corrected_no_diacritics", {})
+            except (json.JSONDecodeError, OSError):
+                pass
+    return nd
+
+
 def aggregate_combo_results(
     combo_id: str,
     all_corrected: dict[str, MetricResult],
@@ -1513,6 +1550,20 @@ def aggregate_combo_results(
 ) -> None:
     """Write aggregated metrics.json and comparison.json for one combo."""
     builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
+
+    # Aggregate no-diacritics metrics
+    nd_data = _load_nd_results(all_corrected, combo_dir)
+    nd_chars  = sum(v.get("num_chars_ref", 0) for v in nd_data.values())
+    nd_words  = sum(v.get("num_words_ref", 0) for v in nd_data.values())
+    agg_cer_nd = (
+        sum(v.get("cer", 0) * v.get("num_chars_ref", 0) for v in nd_data.values()) / nd_chars
+        if nd_chars > 0 else 0.0
+    )
+    agg_wer_nd = (
+        sum(v.get("wer", 0) * v.get("num_words_ref", 0) for v in nd_data.values()) / nd_words
+        if nd_words > 0 else 0.0
+    )
+
     output = {
         "meta": {
             "phase":       "phase6",
@@ -1527,6 +1578,14 @@ def aggregate_combo_results(
             "limit_applied": limit,
         },
         "results": {k: v.to_dict() for k, v in all_corrected.items()},
+        "aggregated_corrected_no_diacritics": {
+            "cer": round(agg_cer_nd, 6),
+            "wer": round(agg_wer_nd, 6),
+        },
+        "results_no_diacritics": {
+            ds: {"cer": round(v.get("cer", 0), 6), "wer": round(v.get("wer", 0), 6)}
+            for ds, v in nd_data.items()
+        },
     }
     save_json(output, combo_dir / "metrics.json")
 
@@ -1548,23 +1607,61 @@ def print_combo_summary(
     combo_id: str,
     all_corrected: dict[str, MetricResult],
     all_comparisons: dict[str, dict],
+    combo_dir: Optional[Path] = None,
 ) -> None:
-    print("\n" + "=" * 80)
-    print(f"PHASE6 [{combo_id}] SUMMARY -- {COMBO_DESCRIPTIONS.get(combo_id, combo_id)}")
-    print("=" * 80)
-    print(f"{'Dataset':<28} {'P2 CER':>8} {'This CER':>9} {'D CER':>8} {'This WER':>9} {'N':>6}")
-    print("-" * 80)
+    nd_data = _load_nd_results(all_corrected, combo_dir) if combo_dir is not None else {}
+
+    sep = "=" * 90
+    row_sep = "  " + "-" * 82
+    title = f"PHASE6 [{combo_id}] -- {COMBO_DESCRIPTIONS.get(combo_id, combo_id)}"
+
+    # Table 1: WITH DIACRITICS
+    print("\n" + sep)
+    print(f"{title}  [WITH DIACRITICS]")
+    print(sep)
+    print(f"{'Dataset':<28} {'P2 CER':>8} {'Px CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'Px WER':>8} {'D(WER)':>8} {'N':>6}")
+    print(row_sep)
     for ds, r in all_corrected.items():
         cmp = all_comparisons.get(ds, {})
         p2_cer = cmp.get("phase2_baseline", {}).get("cer", 0.0)
+        p2_wer = cmp.get("phase2_baseline", {}).get("wer", 0.0)
         cer_rel = cmp.get("delta", {}).get("cer_relative_pct", 0.0)
-        p2_str    = f"{p2_cer*100:.2f}%" if cmp else "N/A"
-        delta_str = f"{cer_rel:+.1f}%"   if cmp else "N/A"
+        wer_rel = cmp.get("delta", {}).get("wer_relative_pct", 0.0)
+        p2_cer_str = f"{p2_cer*100:.2f}%" if cmp else "N/A"
+        p2_wer_str = f"{p2_wer*100:.2f}%" if cmp else "N/A"
+        d_cer_str  = f"{cer_rel:+.1f}%"   if cmp else "N/A"
+        d_wer_str  = f"{wer_rel:+.1f}%"   if cmp else "N/A"
         print(
-            f"{ds:<28} {p2_str:>8} {r.cer*100:>8.2f}% {delta_str:>8} "
-            f"{r.wer*100:>8.2f}% {r.num_samples:>6}"
+            f"{ds:<28} {p2_cer_str:>8} {r.cer*100:>7.2f}% {d_cer_str:>8} "
+            f"{p2_wer_str:>8} {r.wer*100:>7.2f}% {d_wer_str:>8} {r.num_samples:>6}"
         )
-    print("=" * 80)
+    print(sep)
+
+    # Table 2: NO DIACRITICS
+    print(f"\n{title}  [NO DIACRITICS]")
+    print(sep)
+    print(f"{'Dataset':<28} {'P2 CER':>8} {'Px CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'Px WER':>8} {'D(WER)':>8} {'N':>6}")
+    print(row_sep)
+    for ds, r in all_corrected.items():
+        cmp = all_comparisons.get(ds, {})
+        nd = nd_data.get(ds, {})
+        p2_nd_cer = cmp.get("phase2_baseline_no_diacritics", {}).get("cer", 0.0)
+        p2_nd_wer = cmp.get("phase2_baseline_no_diacritics", {}).get("wer", 0.0)
+        nd_cer_rel = cmp.get("delta_no_diacritics", {}).get("cer_relative_pct", 0.0)
+        nd_wer_rel = cmp.get("delta_no_diacritics", {}).get("wer_relative_pct", 0.0)
+        p2_nd_cer_str = f"{p2_nd_cer*100:.2f}%" if cmp else "N/A"
+        p2_nd_wer_str = f"{p2_nd_wer*100:.2f}%" if cmp else "N/A"
+        nd_d_cer_str  = f"{nd_cer_rel:+.1f}%"   if cmp else "N/A"
+        nd_d_wer_str  = f"{nd_wer_rel:+.1f}%"   if cmp else "N/A"
+        nd_cer_val = nd.get("cer", 0.0) * 100 if nd else 0.0
+        nd_wer_val = nd.get("wer", 0.0) * 100 if nd else 0.0
+        nd_cer_cur = f"{nd_cer_val:.2f}%" if nd else "N/A"
+        nd_wer_cur = f"{nd_wer_val:.2f}%" if nd else "N/A"
+        print(
+            f"{ds:<28} {p2_nd_cer_str:>8} {nd_cer_cur:>8} {nd_d_cer_str:>8} "
+            f"{p2_nd_wer_str:>8} {nd_wer_cur:>8} {nd_d_wer_str:>8} {r.num_samples:>6}"
+        )
+    print(sep)
 
 
 # ---------------------------------------------------------------------------
@@ -2253,7 +2350,7 @@ def main() -> None:
             aggregate_combo_results(
                 combo_id, all_corrected, all_comparisons, config, combo_dir, limit
             )
-            print_combo_summary(combo_id, all_corrected, all_comparisons)
+            print_combo_summary(combo_id, all_corrected, all_comparisons, combo_dir)
             write_corrections_report(
                 corrections_path=combo_dir,
                 output_path=combo_dir / "sample_report.txt",
@@ -2289,7 +2386,7 @@ def main() -> None:
             aggregate_combo_results(
                 combo_id, all_corrected, all_comparisons, config, combo_dir, limit
             )
-            print_combo_summary(combo_id, all_corrected, all_comparisons)
+            print_combo_summary(combo_id, all_corrected, all_comparisons, combo_dir)
             logger.info("[%s] validate complete. Results in: %s", combo_id, combo_dir)
 
     logger.info("Phase 6 done.")

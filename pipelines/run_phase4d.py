@@ -300,8 +300,11 @@ def _load_exported_datasets(output_path: Path) -> set[str]:
     return found
 
 
-def _maybe_split_combined_corrections(results_dir: Path) -> None:
-    """Split combined corrections.jsonl into per-dataset files if needed."""
+def _maybe_split_combined_corrections(results_dir: Path, force: bool = False) -> None:
+    """Split combined corrections.jsonl into per-dataset files if needed.
+
+    When *force* is True, existing per-dataset files are overwritten.
+    """
     combined = results_dir / "corrections.jsonl"
     if not combined.exists():
         return
@@ -323,8 +326,8 @@ def _maybe_split_combined_corrections(results_dir: Path) -> None:
 
     for ds_key, records in records_by_dataset.items():
         out_path = results_dir / ds_key / "corrections.jsonl"
-        if out_path.exists():
-            logger.info("  [%s] Already split -- skipping.", ds_key)
+        if out_path.exists() and not force:
+            logger.info("  [%s] Already split -- skipping (use --force to re-split).", ds_key)
             continue
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
@@ -887,8 +890,12 @@ def process_dataset_analyze(
     }
     save_json(metrics_json, out_dir / "metrics.json")
     logger.info(
-        "[%s] CER=%.2f%%  WER=%.2f%%",
-        dataset_key, corrected_result.cer * 100, corrected_result.wer * 100,
+        "[%s] CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%",
+        dataset_key,
+        corrected_result.cer * 100,
+        corrected_result.wer * 100,
+        corrected_result_nd.cer * 100,
+        corrected_result_nd.wer * 100,
     )
 
     # Step 2: Comparison vs Phase 2
@@ -939,9 +946,25 @@ def process_dataset_analyze(
         }
         save_json(comparison, out_dir / "comparison_vs_phase2.json")
         logger.info(
-            "[%s] Phase2->Phase7 CER: %.2f%% -> %.2f%% (%+.1f%%)",
-            dataset_key, p2_cer * 100, corrected_result.cer * 100, cer_rel,
+            "[%s] Phase2->Phase4D CER: %.2f%% -> %.2f%% (%+.1f%%) | "
+            "WER: %.2f%% -> %.2f%% (%+.1f%%)",
+            dataset_key,
+            p2_cer * 100, corrected_result.cer * 100, cer_rel,
+            p2_wer * 100, corrected_result.wer * 100, wer_rel,
         )
+        if p2_nd:
+            p2_cer_nd_v = float(p2_nd.get("cer", 0.0))
+            p2_wer_nd_v = float(p2_nd.get("wer", 0.0))
+            cer_d_nd_v = p2_cer_nd_v - corrected_result_nd.cer
+            wer_d_nd_v = p2_wer_nd_v - corrected_result_nd.wer
+            cer_r_nd_v = (cer_d_nd_v / p2_cer_nd_v * 100) if p2_cer_nd_v > 0 else 0.0
+            wer_r_nd_v = (wer_d_nd_v / p2_wer_nd_v * 100) if p2_wer_nd_v > 0 else 0.0
+            logger.info(
+                "[%s] ND  CER: %.2f%% -> %.2f%% (%+.1f%%)  |  ND  WER: %.2f%% -> %.2f%% (%+.1f%%)",
+                dataset_key,
+                p2_cer_nd_v * 100, corrected_result_nd.cer * 100, cer_r_nd_v,
+                p2_wer_nd_v * 100, corrected_result_nd.wer * 100, wer_r_nd_v,
+            )
     else:
         logger.warning(
             "[%s] Phase 2 metrics not found -- skipping comparison.", dataset_key
@@ -973,7 +996,7 @@ def run_analyze(
     from src.data.data_loader import OCRSample
     from src.core.llm_corrector import CorrectedSample as CS
 
-    _maybe_split_combined_corrections(results_dir)
+    _maybe_split_combined_corrections(results_dir, force=force)
 
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
@@ -1090,6 +1113,19 @@ def run_analyze(
     else:
         agg_wer = 0.0
 
+    # Aggregate no-diacritics metrics
+    nd_data = _load_nd_results(all_corrected, results_dir)
+    nd_chars  = sum(v.get("num_chars_ref", 0) for v in nd_data.values())
+    nd_words  = sum(v.get("num_words_ref", 0) for v in nd_data.values())
+    agg_cer_nd = (
+        sum(v.get("cer", 0) * v.get("num_chars_ref", 0) for v in nd_data.values()) / nd_chars
+        if nd_chars > 0 else 0.0
+    )
+    agg_wer_nd = (
+        sum(v.get("wer", 0) * v.get("num_words_ref", 0) for v in nd_data.values()) / nd_words
+        if nd_words > 0 else 0.0
+    )
+
     aggregated = {
         "meta": make_meta(
             "all_datasets", total_samples, config, limit,
@@ -1102,9 +1138,17 @@ def run_analyze(
             "total_chars_ref": total_chars,
             "total_words_ref": total_words,
         },
+        "aggregated_corrected_no_diacritics": {
+            "cer": round(agg_cer_nd, 6),
+            "wer": round(agg_wer_nd, 6),
+        },
         "by_dataset": {
             ds: {"cer": round(r.cer, 6), "wer": round(r.wer, 6), "num_samples": r.num_samples}
             for ds, r in all_corrected.items()
+        },
+        "by_dataset_no_diacritics": {
+            ds: {"cer": round(v.get("cer", 0), 6), "wer": round(v.get("wer", 0), 6)}
+            for ds, v in nd_data.items()
         },
     }
     save_json(aggregated, results_dir / "metrics.json")
@@ -1115,8 +1159,10 @@ def run_analyze(
     logger.info("=" * 60)
     logger.info("Phase 4D analysis complete.")
     logger.info(
-        "Aggregated CER=%.2f%%  WER=%.2f%% across %d datasets.",
-        agg_cer * 100, agg_wer * 100, len(all_corrected),
+        "Aggregated CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%  across %d datasets.",
+        agg_cer * 100, agg_wer * 100,
+        agg_cer_nd * 100, agg_wer_nd * 100,
+        len(all_corrected),
     )
     logger.info("=" * 60)
 
@@ -1125,6 +1171,20 @@ def run_analyze(
         output_path=results_dir / "sample_report.txt",
         title="Phase 4D -- Self-Reflective Prompting",
     )
+
+
+def _load_nd_results(all_corrected: dict, results_dir: Path) -> dict:
+    """Load corrected_no_diacritics from per-dataset metrics.json files."""
+    nd: dict = {}
+    for ds_key in all_corrected:
+        path = results_dir / ds_key / "metrics.json"
+        if path.exists():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    nd[ds_key] = json.load(f).get("corrected_no_diacritics", {})
+            except (json.JSONDecodeError, OSError):
+                pass
+    return nd
 
 
 def _write_paper_tables(
@@ -1138,9 +1198,11 @@ def _write_paper_tables(
         "",
         "## Per-Dataset Metrics",
         "",
-        "| Dataset | CER (%) | WER (%) | vs Phase 2 CER | vs Phase 2 WER |",
-        "|---------|---------|---------|----------------|----------------|",
+        "| Dataset | CER (%) | WER (%) | ND CER (%) | ND WER (%) | vs Phase 2 CER | vs Phase 2 WER |",
+        "|---------|---------|---------|------------|------------|----------------|----------------|",
     ]
+
+    nd_data = _load_nd_results(all_corrected, results_dir)
 
     for ds_key in sorted(all_corrected.keys()):
         r = all_corrected[ds_key]
@@ -1150,8 +1212,12 @@ def _write_paper_tables(
         wer_rel = delta.get("wer_relative_pct", "N/A")
         cer_rel_str = f"{cer_rel:+.1f}%" if isinstance(cer_rel, (int, float)) else "N/A"
         wer_rel_str = f"{wer_rel:+.1f}%" if isinstance(wer_rel, (int, float)) else "N/A"
+        nd = nd_data.get(ds_key, {})
+        nd_cer_str = f"{nd.get('cer', 0)*100:.2f}" if nd else "N/A"
+        nd_wer_str = f"{nd.get('wer', 0)*100:.2f}" if nd else "N/A"
         lines.append(
             f"| {ds_key} | {r.cer*100:.2f} | {r.wer*100:.2f} "
+            f"| {nd_cer_str} | {nd_wer_str} "
             f"| {cer_rel_str} | {wer_rel_str} |"
         )
 

@@ -353,8 +353,11 @@ def _load_exported_datasets(output_path: Path) -> set[str]:
     return found
 
 
-def _maybe_split_combined_corrections(results_dir: Path) -> None:
-    """Split a combined corrections.jsonl into per-dataset files if needed."""
+def _maybe_split_combined_corrections(results_dir: Path, force: bool = False) -> None:
+    """Split a combined corrections.jsonl into per-dataset files if needed.
+
+    When *force* is True, existing per-dataset files are overwritten.
+    """
     combined = results_dir / "corrections.jsonl"
     if not combined.exists():
         return
@@ -376,8 +379,8 @@ def _maybe_split_combined_corrections(results_dir: Path) -> None:
 
     for ds_key, records in records_by_dataset.items():
         out_path = results_dir / ds_key / "corrections.jsonl"
-        if out_path.exists():
-            logger.info("  [%s] Already split -- skipping.", ds_key)
+        if out_path.exists() and not force:
+            logger.info("  [%s] Already split -- skipping (use --force to re-split).", ds_key)
             continue
         out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as f:
@@ -1008,8 +1011,12 @@ def process_dataset_analyze(
     save_json(metrics_json, out_dir / "metrics.json")
 
     logger.info(
-        "[%s] phase5 CER=%.2f%%  WER=%.2f%%",
-        dataset_key, corrected_result.cer * 100, corrected_result.wer * 100,
+        "[%s] phase5 CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%",
+        dataset_key,
+        corrected_result.cer * 100,
+        corrected_result.wer * 100,
+        corrected_result_nd.cer * 100,
+        corrected_result_nd.wer * 100,
     )
 
     # ------------------------------------------------------------------
@@ -1068,6 +1075,19 @@ def process_dataset_analyze(
             p2_cer * 100, corrected_result.cer * 100, cer_rel,
             p2_wer * 100, corrected_result.wer * 100, wer_rel,
         )
+        if p2_nd:
+            p2_cer_nd_v = float(p2_nd.get("cer", 0.0))
+            p2_wer_nd_v = float(p2_nd.get("wer", 0.0))
+            cer_d_nd_v = p2_cer_nd_v - corrected_result_nd.cer
+            wer_d_nd_v = p2_wer_nd_v - corrected_result_nd.wer
+            cer_r_nd_v = (cer_d_nd_v / p2_cer_nd_v * 100) if p2_cer_nd_v > 0 else 0.0
+            wer_r_nd_v = (wer_d_nd_v / p2_wer_nd_v * 100) if p2_wer_nd_v > 0 else 0.0
+            logger.info(
+                "[%s] ND  CER: %.2f%% -> %.2f%% (%+.1f%%)  |  ND  WER: %.2f%% -> %.2f%% (%+.1f%%)",
+                dataset_key,
+                p2_cer_nd_v * 100, corrected_result_nd.cer * 100, cer_r_nd_v,
+                p2_wer_nd_v * 100, corrected_result_nd.wer * 100, wer_r_nd_v,
+            )
     else:
         logger.warning(
             "[%s] Phase 2 metrics not found at %s -- skipping comparison.",
@@ -1133,7 +1153,7 @@ def run_analyze(
     Returns:
         Tuple of (all_corrected, all_comparisons) dicts.
     """
-    _maybe_split_combined_corrections(results_dir)
+    _maybe_split_combined_corrections(results_dir, force=force)
 
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
@@ -1205,6 +1225,20 @@ def run_analyze(
 # ---------------------------------------------------------------------------
 
 
+def _load_nd_results(all_corrected: dict, results_dir: Path) -> dict:
+    """Load corrected_no_diacritics from per-dataset metrics.json files."""
+    nd: dict = {}
+    for ds_key in all_corrected:
+        path = results_dir / ds_key / "metrics.json"
+        if path.exists():
+            try:
+                with open(path, encoding="utf-8") as f:
+                    nd[ds_key] = json.load(f).get("corrected_no_diacritics", {})
+            except (json.JSONDecodeError, OSError):
+                pass
+    return nd
+
+
 def aggregate_results(
     all_corrected: dict[str, MetricResult],
     config: dict,
@@ -1231,6 +1265,7 @@ def aggregate_results(
             "limit_applied": limit,
         },
         "results": {k: v.to_dict() for k, v in all_corrected.items()},
+        "results_no_diacritics": _load_nd_results(all_corrected, results_dir),
     }
     save_json(output, results_dir / "metrics.json")
 
@@ -1404,24 +1439,61 @@ def generate_report(
 def print_summary(
     all_corrected: dict[str, MetricResult],
     all_comparisons: dict[str, dict],
+    results_dir: Optional[Path] = None,
 ) -> None:
-    """Print a final summary table to stdout."""
-    print("\n" + "=" * 80)
-    print("PHASE5 (RAG) SUMMARY")
-    print("=" * 80)
-    print(f"{'Dataset':<28} {'P2 CER':>8} {'P5 CER':>8} {'D CER':>8} {'P5 WER':>8} {'N':>6}")
-    print("-" * 80)
+    """Print a final summary table to stdout (with-diacritics and no-diacritics side-by-side)."""
+    nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
+
+    sep = "=" * 90
+    row_sep = "  " + "-" * 82
+
+    # Table 1: WITH DIACRITICS
+    print("\n" + sep)
+    print("PHASE5 (RAG) SUMMARY  [WITH DIACRITICS]")
+    print(sep)
+    print(f"{'Dataset':<28} {'P2 CER':>8} {'P5 CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'P5 WER':>8} {'D(WER)':>8} {'N':>6}")
+    print(row_sep)
     for ds, r in all_corrected.items():
         cmp = all_comparisons.get(ds, {})
         p2_cer = cmp.get("phase2_baseline", {}).get("cer", 0.0)
+        p2_wer = cmp.get("phase2_baseline", {}).get("wer", 0.0)
         cer_rel = cmp.get("delta", {}).get("cer_relative_pct", 0.0)
-        p2_str    = f"{p2_cer*100:.2f}%" if cmp else "N/A"
-        delta_str = f"{cer_rel:+.1f}%"   if cmp else "N/A"
+        wer_rel = cmp.get("delta", {}).get("wer_relative_pct", 0.0)
+        p2_cer_str = f"{p2_cer*100:.2f}%" if cmp else "N/A"
+        p2_wer_str = f"{p2_wer*100:.2f}%" if cmp else "N/A"
+        d_cer_str  = f"{cer_rel:+.1f}%"   if cmp else "N/A"
+        d_wer_str  = f"{wer_rel:+.1f}%"   if cmp else "N/A"
         print(
-            f"{ds:<28} {p2_str:>8} {r.cer*100:>7.2f}% {delta_str:>8} "
-            f"{r.wer*100:>7.2f}% {r.num_samples:>6}"
+            f"{ds:<28} {p2_cer_str:>8} {r.cer*100:>7.2f}% {d_cer_str:>8} "
+            f"{p2_wer_str:>8} {r.wer*100:>7.2f}% {d_wer_str:>8} {r.num_samples:>6}"
         )
-    print("=" * 80)
+    print(sep)
+
+    # Table 2: NO DIACRITICS
+    print(f"\nPHASE5 (RAG) SUMMARY  [NO DIACRITICS]")
+    print(sep)
+    print(f"{'Dataset':<28} {'P2 CER':>8} {'P5 CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'P5 WER':>8} {'D(WER)':>8} {'N':>6}")
+    print(row_sep)
+    for ds, r in all_corrected.items():
+        cmp = all_comparisons.get(ds, {})
+        nd = nd_results.get(ds, {})
+        p2_nd_cer = cmp.get("phase2_baseline_no_diacritics", {}).get("cer", 0.0)
+        p2_nd_wer = cmp.get("phase2_baseline_no_diacritics", {}).get("wer", 0.0)
+        nd_cer_rel = cmp.get("delta_no_diacritics", {}).get("cer_relative_pct", 0.0)
+        nd_wer_rel = cmp.get("delta_no_diacritics", {}).get("wer_relative_pct", 0.0)
+        p2_nd_cer_str = f"{p2_nd_cer*100:.2f}%" if cmp else "N/A"
+        p2_nd_wer_str = f"{p2_nd_wer*100:.2f}%" if cmp else "N/A"
+        nd_d_cer_str  = f"{nd_cer_rel:+.1f}%"   if cmp else "N/A"
+        nd_d_wer_str  = f"{nd_wer_rel:+.1f}%"   if cmp else "N/A"
+        nd_cer_val = nd.get("cer", 0.0) * 100 if nd else 0.0
+        nd_wer_val = nd.get("wer", 0.0) * 100 if nd else 0.0
+        nd_cer_cur = f"{nd_cer_val:.2f}%" if nd else "N/A"
+        nd_wer_cur = f"{nd_wer_val:.2f}%" if nd else "N/A"
+        print(
+            f"{ds:<28} {p2_nd_cer_str:>8} {nd_cer_cur:>8} {nd_d_cer_str:>8} "
+            f"{p2_nd_wer_str:>8} {nd_wer_cur:>8} {nd_d_wer_str:>8} {r.num_samples:>6}"
+        )
+    print(sep)
 
 
 # ---------------------------------------------------------------------------
@@ -1532,7 +1604,7 @@ def main() -> None:
     aggregate_results(all_corrected, config, results_dir, top_k, limit)
     aggregate_comparisons(all_comparisons, config, results_dir, limit)
     generate_report(all_corrected, all_comparisons, results_dir, config, top_k)
-    print_summary(all_corrected, all_comparisons)
+    print_summary(all_corrected, all_comparisons, results_dir)
     write_corrections_report(
         corrections_path=results_dir,
         output_path=results_dir / "sample_report.txt",
