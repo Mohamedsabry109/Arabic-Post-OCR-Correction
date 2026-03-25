@@ -342,6 +342,58 @@ def main() -> None:
     builder = PromptBuilder(crafted_prompt_path=crafted_prompt_path)
     logger.info("Model ready: %s", corrector.model_name)
 
+    # ------------------------------------------------------------------
+    # Print the prompt that will be used for the first pending sample so
+    # the user can verify the prompt before the full run begins.
+    # ------------------------------------------------------------------
+    def _build_messages_for_record(rec: dict) -> list[dict]:
+        """Build messages for a single record (mirrors the dispatch below)."""
+        pt = rec.get("prompt_type", "zero_shot")
+        if pt == "ocr_aware":
+            return builder.build_ocr_aware(rec["ocr_text"], rec.get("confusion_context", ""))
+        if pt == "rule_augmented":
+            return builder.build_rule_augmented(rec["ocr_text"], rec.get("rules_context", ""))
+        if pt == "few_shot":
+            return builder.build_few_shot(rec["ocr_text"], rec.get("examples_context", ""))
+        if pt == "rag":
+            return builder.build_rag(rec["ocr_text"], rec.get("retrieval_context", ""))
+        if pt == "combined":
+            return builder.build_combined(
+                ocr_text=rec["ocr_text"],
+                confusion_context=rec.get("confusion_context") or "",
+                rules_context=rec.get("rules_context") or "",
+                examples_context=rec.get("examples_context") or "",
+                retrieval_context=rec.get("retrieval_context") or "",
+                insights_context=rec.get("insights_context") or "",
+            )
+        if pt == "self_reflective":
+            return builder.build_self_reflective(rec["ocr_text"], rec.get("insights_context", ""))
+        if pt == "word_error_pairs":
+            return builder.build_word_error_pairs(rec["ocr_text"], rec.get("word_pairs_context", ""))
+        if pt == "meta_prompt":
+            return builder.build_meta_prompt(rec["ocr_text"])
+        if pt == "crafted":
+            return builder.build_crafted(rec["ocr_text"], rec.get("system_prompt", ""))
+        # zero_shot and fallback
+        return builder.build_zero_shot(rec["ocr_text"], version=rec.get("prompt_version", "crafted"))
+
+    _preview = pending[0]
+    _preview_messages = _build_messages_for_record(_preview)
+    _sep = "=" * 70
+    print(_sep, flush=True)
+    print(
+        f"PROMPT PREVIEW  (sample_id={_preview['sample_id']}  "
+        f"prompt_type={_preview.get('prompt_type', 'zero_shot')})",
+        flush=True,
+    )
+    print(_sep, flush=True)
+    for _msg in _preview_messages:
+        print(f"[{_msg['role'].upper()}]", flush=True)
+        print(_msg["content"], flush=True)
+        print(flush=True)
+    print(_sep, flush=True)
+    print(flush=True)
+
     # Inference loop
     n_success = n_failed = 0
     pushed_at = 0
@@ -402,6 +454,12 @@ def main() -> None:
                 messages = builder.build_self_reflective(record["ocr_text"], insights_context)
                 prompt_ver = builder.self_reflective_prompt_version
                 if not insights_context.strip():
+                    prompt_type = "zero_shot_fallback"
+            elif prompt_type == "word_error_pairs":
+                word_pairs_context = record.get("word_pairs_context", "")
+                messages = builder.build_word_error_pairs(record["ocr_text"], word_pairs_context)
+                prompt_ver = builder.word_error_pairs_prompt_version
+                if not word_pairs_context.strip():
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "meta_prompt":
                 messages = builder.build_meta_prompt(record["ocr_text"])

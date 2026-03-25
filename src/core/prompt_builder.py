@@ -58,6 +58,7 @@ class PromptBuilder:
     RULES_PROMPT_VERSION: str = "p4av2"            # Phase 4A
     FEWSHOT_PROMPT_VERSION: str = "p4bv2"          # Phase 4B
     SELF_REFLECTIVE_PROMPT_VERSION: str = "p4dv2"  # Phase 4D
+    WORD_ERROR_PAIRS_PROMPT_VERSION: str = "p4ev1" # Phase 4E
     RAG_PROMPT_VERSION: str = "p5v2"               # Phase 5
     COMBINED_PROMPT_VERSION: str = "p6v2"          # Phase 6
     CRAFTED_PROMPT_VERSION: str = "crafted_v1"     # standalone crafted
@@ -115,6 +116,11 @@ class PromptBuilder:
     _SELF_REFLECTIVE_SECTION: str = (
         "7. ملاحظات مستخلصة من تحليل أخطاء سابقة في التصحيح:\n"
         "{insights_context}"
+    )
+
+    _WORD_ERROR_PAIRS_SECTION: str = (
+        "7. أمثلة على أخطاء كلمات شائعة يُنتجها نظام Qaari (مستخلصة من بيانات تدريبية):\n"
+        "{word_pairs_context}"
     )
 
     _RAG_SECTION: str = (
@@ -367,6 +373,40 @@ class PromptBuilder:
     def self_reflective_prompt_version(self) -> str:
         """Phase 4D prompt version string."""
         return self.SELF_REFLECTIVE_PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Phase 4E — Word-Error Pairs Prompting
+    # -----------------------------------------------------------------------
+
+    def build_word_error_pairs(
+        self, ocr_text: str, word_pairs_context: str
+    ) -> list[dict]:
+        """Build word-error-pairs correction prompt (Phase 4E).
+
+        Injects concrete ``ocr_word -> gt_word`` correction examples derived
+        from training-split word-level diffs as rule 7 into the crafted system
+        prompt.  Falls back to zero-shot if *word_pairs_context* is empty.
+
+        Args:
+            ocr_text:           OCR prediction text to correct.
+            word_pairs_context: Pre-formatted Arabic word-pair string produced
+                by ``WordErrorPairsLoader.format_for_prompt()``.
+
+        Returns:
+            Two-element messages list in OpenAI chat format.
+        """
+        if not word_pairs_context.strip():
+            return self.build_zero_shot(ocr_text)
+        base = self._load_crafted_base()
+        section = self._WORD_ERROR_PAIRS_SECTION.format(
+            word_pairs_context=word_pairs_context
+        )
+        return self._messages(self._inject_knowledge(base, section), ocr_text)
+
+    @property
+    def word_error_pairs_prompt_version(self) -> str:
+        """Phase 4E prompt version string."""
+        return self.WORD_ERROR_PAIRS_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
     # Phase 5 — RAG (OpenITI corpus retrieval)

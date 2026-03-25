@@ -220,6 +220,18 @@ phase6:
 # ---------------------------------------------------------------------------
 # Phase 4D specific
 # ---------------------------------------------------------------------------
+phase4e:
+  word_pairs_path: "data/word_error_pairs.txt"  # ocr_word > gt_word, one per line
+  select_n: 15                   # number of pairs to inject per sample
+  select_strategy: "random"      # "random" | "first"
+  select_seed: 42                # random seed for reproducibility
+  analyze_errors: true
+  max_retries: 2
+  prompt_version: "p4ev1"
+
+# ---------------------------------------------------------------------------
+# Phase 4D specific
+# ---------------------------------------------------------------------------
 phase4d:
   source_phase: "phase2"         # which phase's train predictions to analyze
   insights:
