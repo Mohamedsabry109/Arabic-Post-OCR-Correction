@@ -20,37 +20,6 @@ Align the input text word-by-word with what the original Arabic document most li
 9. Be cautious with proper nouns and narrator names (isnad) — only correct them when the OCR error pattern is unambiguous.
 </rules>
 
-<error_patterns>
-Common Arabic OCR confusion pairs (corrupted → correct):
-
-DOT ERRORS (most frequent):
-  ن↔ف : نقال→فقال  نطاء→عطاء
-  ب↔ي↔ت↔ث : ثه→ثم  ته→ثم  أنيه→أبيه  قيلته→قيلت
-  ح↔ج↔خ↔ص : الصالع→الصالح  يجلي→يصلي  فحل→فصل  يحلى→يصلى  الجوتة→الحوت  بجوته→بصوته  يبتز→يحتز
-  ه↔م : فسله→فسلم  يقوه→يقوم  سماه→همام  شحاله→شماله
-  ر↔ز : رواذ→رواد
-  ك↔ع : كباس→عباس
-
-HAMZA / MADDA ERRORS:
-  يتوضاً→يتوضأ  فتوضاً→فتوضأ  ففأضت→ففاضت  وكأن→وكان  يومنَذ→يومئذ
-
-SHADDA / DUPLICATION ERRORS:
-  وعببيد→وعبيد  واببيضت→وابيضت  أرعتتني→أرضعتني
-
-EXTRA / MISSING LETTER ERRORS:
-  بالبيتة→بالبيت  ينصرفه→ينصرف  فقدهت→فقدت  فارج→فارجع
-
-WHOLE-WORD VISUAL SUBSTITUTION (spelled correctly but wrong word):
-  قائلا→قائما  شكرا→شبك  الشربية→التربية  والصفحات→والصفصف
-
-COMPLEX MISREADS:
-  إخنا→إذا  إخذا→إذا  الاستققاء→الاستسقاء  رحاعه→رداءه  ألوبرت→الحويرث
-  مسبدا→مسجدا  خزراوا→ذراعا  والجرابه→والحراب  بالحرق→بالدرق
-  وسراءة→وراءه  يحكش→يكشف  ديكسفان→ينكسفان  اسنوى→استوى
-  الالخة→الآخرة  أصلبت→أصليت  مريرة→هريرة  فَحِي→نهى
-  تطبقون→تطيقون  عمد→عهد  باجه→باب  المحسنينِ→المحدثين  يَجْبِيَ→يحيى
-</error_patterns>
-
 <examples>
 INPUT:  توجهاً من شن معلق وضوعاً خفيفاً بينفنه عمرو ويقلله وقام يطيي فتوضاًت نجوا ما توجاً ثه بئت
 OUTPUT: فتوضأ من شن معلق وضوءا خفيفا يخففه عمرو ويقلله وقام يصلي فتوضأت نحوا مما توضأ ثم جئت

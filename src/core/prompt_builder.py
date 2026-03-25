@@ -5,18 +5,33 @@ with both HuggingFace tokenizer.apply_chat_template() and API calls.
 
 Architecture
 ------------
-Every phase uses ``results/prompt_craft/crafted_system_prompt.txt`` as its
-base system prompt.  Phase-specific knowledge (confusion matrix, rules,
-few-shot pairs, self-reflective insights + word-error pairs) is injected
-into that base rather than replacing it.
+The base prompt (``configs/crafted_system_prompt.txt``) uses an XML-like
+tag structure: ``<system>``, ``<task>``, ``<rules>``, ``<examples>``,
+``<output_format>``.  Phase-specific knowledge is injected as additional
+XML sections following the same convention.
+
+Prompt language
+~~~~~~~~~~~~~~~
+Section wrappers and labels are in English.  Arabic-specific content
+(confusion pairs, spelling rules, word-error examples, insights) remains
+in Arabic — it is the knowledge payload, not the meta-language.
 
 Injection strategy
 ~~~~~~~~~~~~~~~~~~
-* **Knowledge sections** (phases 3, 4A, 4D, 6): inserted as new numbered
-  rules (7, 8, …) immediately before the
-  ``القيود الصارمة للمخرجات`` (output constraints) block.
-* **Extra examples** (phase 4B, and the examples slot of phase 6):
-  appended after the trailing ``---`` examples section.
+* **Knowledge sections** (phases 3, 4A, 4D) — injected as XML tags
+  immediately *before* ``<examples>`` so the model sees them before the
+  few-shot pairs:
+
+    - Phase 3  → ``<confusion_patterns>``
+    - Phase 4A → ``<additional_rules>``
+    - Phase 4D → ``<self_analysis>`` (bundles insights + word-error pairs)
+
+* **Extra few-shot examples** (phase 4B) — injected as
+  ``<additional_examples>`` immediately *before* ``<output_format>`` so
+  the output constraint always stays last.
+
+* **Phase 6** (combined) injects all of the above in order; each section
+  is only included if its context is non-empty.
 """
 from __future__ import annotations
 
@@ -33,8 +48,9 @@ class PromptBuilder:
     can be passed directly to any ``BaseLLMCorrector`` implementation.
 
     All phases share the crafted system prompt as their base.  Phase-specific
-    context is layered on top via :meth:`_inject_knowledge` (rules block) or
-    :meth:`_append_examples` (examples block).
+    knowledge is injected as XML sections via :meth:`_inject_knowledge`
+    (before ``<examples>``) or :meth:`_append_examples` (before
+    ``<output_format>``).
 
     Usage::
 
@@ -88,54 +104,62 @@ class PromptBuilder:
 
     # -----------------------------------------------------------------------
     # Anchors for structured injection into the crafted base prompt.
+    # The prompt uses XML-like section tags; injections follow that pattern.
     # -----------------------------------------------------------------------
 
-    # Text that starts the "output constraints" block — knowledge sections
-    # are inserted immediately before this.
-    _INJECT_ANCHOR: str = "القيود الصارمة للمخرجات"
+    # Knowledge sections (phases 3, 4A, 4D) are inserted immediately before
+    # the <examples> block so the model sees them before the few-shot pairs.
+    _INJECT_ANCHOR: str = "<examples>"
 
-    # Separator between the rules block and the few-shot examples block.
-    _EXAMPLES_SEPARATOR: str = "\n---\n"
+    # Additional few-shot examples (phase 4B) are inserted immediately before
+    # <output_format> so the output constraint always stays last.
+    _EXAMPLES_ANCHOR: str = "<output_format>"
 
     # -----------------------------------------------------------------------
-    # Per-phase section headers (Arabic, matching the crafted prompt's style)
+    # Per-phase XML section templates.
+    # Section wrappers / labels are in English; Arabic content stays Arabic.
     # -----------------------------------------------------------------------
 
     _OCR_AWARE_SECTION: str = (
-        "7. أخطاء الارتباك الخاصة بنظام Qaari (مستخلصة من مصفوفة الارتباك):\n"
-        "{confusion_context}"
+        "<confusion_patterns>\n"
+        "Character confusions specific to this OCR system (corrupted → correct):\n"
+        "{confusion_context}\n"
+        "</confusion_patterns>"
     )
 
     _RULES_SECTION: str = (
-        "7. قواعد إملائية عربية إضافية يجب مراعاتها:\n"
-        "{rules_context}"
-    )
-
-    _SELF_REFLECTIVE_SECTION: str = (
-        "7. ملاحظات مستخلصة من تحليل أخطاء سابقة في التصحيح:\n"
-        "{insights_context}"
+        "<additional_rules>\n"
+        "Additional Arabic orthographic rules to observe:\n"
+        "{rules_context}\n"
+        "</additional_rules>"
     )
 
     _FEWSHOT_EXTRA_HEADER: str = (
-        "أمثلة إضافية من بيانات التدريب (QALB):\n\n{examples_context}"
+        "<additional_examples>\n"
+        "{examples_context}\n"
+        "</additional_examples>"
     )
 
-    # Combined-phase section bodies (numbered dynamically in build_combined).
+    # Combined-phase section bodies — knowledge-only (no number prefix; XML tags).
     _COMBINED_CONFUSION: str = (
-        "أخطاء ارتباك نظام Qaari:\n{confusion_context}"
+        "<confusion_patterns>\n"
+        "Character confusions specific to this OCR system:\n"
+        "{confusion_context}\n"
+        "</confusion_patterns>"
     )
     _COMBINED_RULES: str = (
-        "قواعد إملائية عربية إضافية:\n{rules_context}"
-    )
-    _COMBINED_WORD_PAIRS: str = (
-        "أمثلة على أخطاء كلمات Qaari الشائعة:\n{word_pairs_context}"
-    )
-    _COMBINED_INSIGHTS: str = (
-        "ملاحظات من تحليل أخطاء سابقة:\n{insights_context}"
+        "<additional_rules>\n"
+        "{rules_context}\n"
+        "</additional_rules>"
     )
     _COMBINED_EXAMPLES_HEADER: str = (
-        "أمثلة إضافية من بيانات التدريب (QALB):\n\n{examples_context}"
+        "<additional_examples>\n"
+        "{examples_context}\n"
+        "</additional_examples>"
     )
+
+    # Self-analysis section is built dynamically (bundles insights + word pairs).
+    # _COMBINED_INSIGHTS and _COMBINED_WORD_PAIRS are inlined in build_* methods.
 
     # -----------------------------------------------------------------------
     # Constructor
@@ -182,10 +206,11 @@ class PromptBuilder:
         return self._crafted_base
 
     def _inject_knowledge(self, base: str, section: str) -> str:
-        """Insert *section* just before the output-constraints block.
+        """Insert *section* immediately before the ``<examples>`` block.
 
-        Falls back to injecting before the ``---`` separator, or appending
-        at the end, if the anchor text is absent.
+        Falls back to appending at the end if the anchor is absent (e.g. when
+        the crafted base prompt is not available and zero-shot v2 is used as
+        fallback).
         """
         if self._INJECT_ANCHOR in base:
             return base.replace(
@@ -193,16 +218,19 @@ class PromptBuilder:
                 section + "\n\n" + self._INJECT_ANCHOR,
                 1,
             )
-        if self._EXAMPLES_SEPARATOR in base:
-            return base.replace(
-                self._EXAMPLES_SEPARATOR,
-                "\n\n" + section + self._EXAMPLES_SEPARATOR,
-                1,
-            )
-        return base + "\n\n" + section
+        return base.rstrip() + "\n\n" + section
 
     def _append_examples(self, base: str, extra: str) -> str:
-        """Append *extra* to the very end of the prompt."""
+        """Insert *extra* immediately before ``<output_format>`` (always last).
+
+        Falls back to appending at the very end if the anchor is absent.
+        """
+        if self._EXAMPLES_ANCHOR in base:
+            return base.replace(
+                self._EXAMPLES_ANCHOR,
+                extra + "\n\n" + self._EXAMPLES_ANCHOR,
+                1,
+            )
         return base.rstrip() + "\n\n" + extra
 
     def _messages(self, system: str, ocr_text: str) -> list[dict]:
@@ -342,8 +370,8 @@ class PromptBuilder:
     ) -> list[dict]:
         """Build Phase 4D correction prompt: self-reflective insights + word-error pairs.
 
-        Injects one or both signals as numbered rules starting at 7.
-        Falls back to zero-shot if both contexts are empty.
+        Injects both signals as a single ``<self_analysis>`` section before
+        ``<examples>``.  Falls back to zero-shot if both contexts are empty.
 
         Args:
             ocr_text: OCR prediction text to correct.
@@ -361,19 +389,23 @@ class PromptBuilder:
         if not has_insights and not has_pairs:
             return self.build_zero_shot(ocr_text)
         base = self._load_crafted_base()
-        parts: list[str] = []
-        num = 7
+        inner_parts: list[str] = []
         if has_insights:
-            parts.append(
-                f"{num}. ملاحظات مستخلصة من تحليل أخطاء سابقة في التصحيح:\n{insights_context}"
+            inner_parts.append(
+                "Analysis of previous correction patterns on similar texts:\n"
+                + insights_context
             )
-            num += 1
         if has_pairs:
-            parts.append(
-                f"{num}. أمثلة على أخطاء كلمات شائعة يُنتجها نظام Qaari"
-                f" (مستخلصة من بيانات تدريبية):\n{word_pairs_context}"
+            inner_parts.append(
+                "Common word-level OCR errors found in training data:\n"
+                + word_pairs_context
             )
-        return self._messages(self._inject_knowledge(base, "\n\n".join(parts)), ocr_text)
+        section = (
+            "<self_analysis>\n"
+            + "\n\n".join(inner_parts)
+            + "\n</self_analysis>"
+        )
+        return self._messages(self._inject_knowledge(base, section), ocr_text)
 
     @property
     def self_reflective_prompt_version(self) -> str:
@@ -396,26 +428,25 @@ class PromptBuilder:
         """Build a combined correction prompt (Phase 6).
 
         Uses the crafted system prompt as the base and injects any non-empty
-        context sources.  Knowledge sections (confusion, rules, insights,
-        word pairs) are numbered 7, 8, … and inserted before the output
-        constraints block.  QALB examples are appended at the end.
+        context sources as XML sections, following the prompt's tag structure.
 
         Falls back to zero-shot if all contexts are empty.
 
-        Injection order:
-            1. Confusion matrix (Phase 3)
-            2. Spelling rules   (Phase 4A)
-            3. Self-reflective insights (Phase 4D)
-            4. Word-error pairs (Phase 4D — auto-generated)
-            5. QALB examples   (Phase 4B — appended, not injected)
+        Injection order (all appear before ``<examples>``):
+            1. ``<confusion_patterns>``  — Phase 3 confusion matrix
+            2. ``<additional_rules>``    — Phase 4A spelling rules
+            3. ``<self_analysis>``       — Phase 4D insights + word pairs (bundled)
+
+        Few-shot examples (Phase 4B) are injected as ``<additional_examples>``
+        immediately before ``<output_format>``.
 
         Args:
             ocr_text: OCR prediction text to correct.
             confusion_context: Pre-formatted confusion pairs (Phase 3 format).
             rules_context: Pre-formatted Arabic rules (Phase 4A format).
             examples_context: Pre-formatted few-shot pairs (Phase 4B format).
-            insights_context: Pre-formatted self-reflective insights (Phase 4D format).
-            word_pairs_context: Pre-formatted word-error pairs (Phase 4D format).
+            insights_context: Pre-formatted self-reflective insights (Phase 4D).
+            word_pairs_context: Pre-formatted word-error pairs (Phase 4D).
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -432,29 +463,36 @@ class PromptBuilder:
 
         base = self._load_crafted_base()
 
-        # Build numbered knowledge sections (starting at 7).
-        parts: list[str] = []
-        num = 7
+        # Inject knowledge sections before <examples> (in order).
         if confusion_context.strip():
-            body = self._COMBINED_CONFUSION.format(confusion_context=confusion_context)
-            parts.append(f"{num}. {body}")
-            num += 1
+            section = self._COMBINED_CONFUSION.format(confusion_context=confusion_context)
+            base = self._inject_knowledge(base, section)
         if rules_context.strip():
-            body = self._COMBINED_RULES.format(rules_context=rules_context)
-            parts.append(f"{num}. {body}")
-            num += 1
-        if insights_context.strip():
-            body = self._COMBINED_INSIGHTS.format(insights_context=insights_context)
-            parts.append(f"{num}. {body}")
-            num += 1
-        if word_pairs_context.strip():
-            body = self._COMBINED_WORD_PAIRS.format(word_pairs_context=word_pairs_context)
-            parts.append(f"{num}. {body}")
+            section = self._COMBINED_RULES.format(rules_context=rules_context)
+            base = self._inject_knowledge(base, section)
+        # Bundle Phase 4D signals into one <self_analysis> section.
+        has_insights = bool(insights_context.strip())
+        has_pairs = bool(word_pairs_context.strip())
+        if has_insights or has_pairs:
+            inner: list[str] = []
+            if has_insights:
+                inner.append(
+                    "Analysis of previous correction patterns on similar texts:\n"
+                    + insights_context
+                )
+            if has_pairs:
+                inner.append(
+                    "Common word-level OCR errors found in training data:\n"
+                    + word_pairs_context
+                )
+            section = (
+                "<self_analysis>\n"
+                + "\n\n".join(inner)
+                + "\n</self_analysis>"
+            )
+            base = self._inject_knowledge(base, section)
 
-        if parts:
-            base = self._inject_knowledge(base, "\n\n".join(parts))
-
-        # QALB examples go after the trailing examples section.
+        # Additional few-shot examples go before <output_format>.
         if examples_context.strip():
             extra = self._COMBINED_EXAMPLES_HEADER.format(
                 examples_context=examples_context
