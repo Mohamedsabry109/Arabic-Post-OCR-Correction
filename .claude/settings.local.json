@@ -81,7 +81,10 @@
       "Bash(python3 -c \":*)",
       "Bash(\"/C/Users/moham/AppData/Local/Programs/MiKTeX/miktex/bin/x64/latexmk\" -pdf -interaction=nonstopmode -g mthesis.tex)",
       "Bash(find /d/Masters/Arabic-Post-OCR-Correction/data/OpenITI -type f -name *.csv -o -name *.json -o -name *.jsonl)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(sed -i 's/Phase 6/Phase 5/g' pipelines/run_phase2.py pipelines/run_phase3.py pipelines/run_phase4.py)",
+      "Bash(sed -i 's/phase6/phase5/g' pipelines/run_phase4d.py src/analysis/llm_error_analyzer.py)",
+      "Bash(sed -i 's/Phase 6/Phase 5/g' src/analysis/stats_tester.py)"
     ]
   }
 }

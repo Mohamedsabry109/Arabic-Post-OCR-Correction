@@ -23,7 +23,7 @@ Every subsequent phase depends on Phase 1 outputs:
 
 - **Phase 2** uses `baseline_metrics.json` as the lower-bound reference
 - **Phase 3** uses `confusion_matrix.json` to inject OCR-specific error knowledge into prompts
-- **Phase 6** uses `error_taxonomy.json` for per-category ablation analysis
+- **Phase 5** uses `error_taxonomy.json` for per-category ablation analysis
 - **All phases** use the normalisation utilities built here
 
 ---
@@ -99,7 +99,7 @@ src/
 └── analysis/
     ├── metrics.py          ← calculate_cer(), calculate_wer()
     ├── error_analyzer.py   ← ErrorAnalyzer, ConfusionMatrix
-    └── visualizer.py       ← (stub for Phase 1; populated in Phase 6)
+    └── visualizer.py       ← (stub for Phase 1; populated in Phase 5)
 ```
 
 Pipeline entry point:

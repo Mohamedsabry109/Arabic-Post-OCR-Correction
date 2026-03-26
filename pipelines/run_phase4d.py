@@ -400,7 +400,7 @@ def load_corrections_jsonl(corrections_path: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Error change analysis (same pattern as Phase 6)
+# Error change analysis (same pattern as Phase 5)
 # ---------------------------------------------------------------------------
 
 

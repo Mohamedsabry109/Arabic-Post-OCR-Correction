@@ -421,23 +421,23 @@ python pipelines/run_phase5.py \
 
 ---
 
-## Phase 6 — Combinations & Ablation
+## Phase 5 — Combinations & Ablation
 
 ### Step 1: Export all 12 combos (LOCAL)
 
 ```bash
-python pipelines/run_phase6.py \
+python pipelines/run_phase5.py \
     --sample-list data/test_samples.json \
     --combo all \
     --mode export \
     --force
 ```
 
-**Produces**: 12 files at `results/phase6/{combo_id}/inference_input.jsonl`
+**Produces**: 12 files at `results/phase5/{combo_id}/inference_input.jsonl`
 
 ### Step 2: Upload all 12 JSONLs to Kaggle dataset (LOCAL)
 
-Upload the entire `results/phase6/` directory (or each `inference_input.jsonl`
+Upload the entire `results/phase5/` directory (or each `inference_input.jsonl`
 individually) to your Kaggle dataset. Push code if changed.
 
 ### Step 3: Inference — all 12 combos (KAGGLE)
@@ -448,78 +448,78 @@ in the Kaggle notebook:
 ```bash
 # Pair combos
 python scripts/infer.py \
-    --input  results/phase6/pair_conf_rules/inference_input.jsonl \
-    --output results/phase6/pair_conf_rules/corrections.jsonl \
+    --input  results/phase5/pair_conf_rules/inference_input.jsonl \
+    --output results/phase5/pair_conf_rules/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/pair_conf_fewshot/inference_input.jsonl \
-    --output results/phase6/pair_conf_fewshot/corrections.jsonl \
+    --input  results/phase5/pair_conf_fewshot/inference_input.jsonl \
+    --output results/phase5/pair_conf_fewshot/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/pair_conf_rag/inference_input.jsonl \
-    --output results/phase6/pair_conf_rag/corrections.jsonl \
+    --input  results/phase5/pair_conf_rag/inference_input.jsonl \
+    --output results/phase5/pair_conf_rag/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/pair_rules_fewshot/inference_input.jsonl \
-    --output results/phase6/pair_rules_fewshot/corrections.jsonl \
+    --input  results/phase5/pair_rules_fewshot/inference_input.jsonl \
+    --output results/phase5/pair_rules_fewshot/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 # Full prompt (all knowledge sources)
 python scripts/infer.py \
-    --input  results/phase6/full_prompt/inference_input.jsonl \
-    --output results/phase6/full_prompt/corrections.jsonl \
+    --input  results/phase5/full_prompt/inference_input.jsonl \
+    --output results/phase5/full_prompt/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 # Ablation combos
 python scripts/infer.py \
-    --input  results/phase6/abl_no_confusion/inference_input.jsonl \
-    --output results/phase6/abl_no_confusion/corrections.jsonl \
+    --input  results/phase5/abl_no_confusion/inference_input.jsonl \
+    --output results/phase5/abl_no_confusion/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/abl_no_rules/inference_input.jsonl \
-    --output results/phase6/abl_no_rules/corrections.jsonl \
+    --input  results/phase5/abl_no_rules/inference_input.jsonl \
+    --output results/phase5/abl_no_rules/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/abl_no_fewshot/inference_input.jsonl \
-    --output results/phase6/abl_no_fewshot/corrections.jsonl \
+    --input  results/phase5/abl_no_fewshot/inference_input.jsonl \
+    --output results/phase5/abl_no_fewshot/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/abl_no_rag/inference_input.jsonl \
-    --output results/phase6/abl_no_rag/corrections.jsonl \
+    --input  results/phase5/abl_no_rag/inference_input.jsonl \
+    --output results/phase5/abl_no_rag/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 # Self-reflective combos
 python scripts/infer.py \
-    --input  results/phase6/self_reflective/inference_input.jsonl \
-    --output results/phase6/self_reflective/corrections.jsonl \
+    --input  results/phase5/self_reflective/inference_input.jsonl \
+    --output results/phase5/self_reflective/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/pair_self_conf/inference_input.jsonl \
-    --output results/phase6/pair_self_conf/corrections.jsonl \
+    --input  results/phase5/pair_self_conf/inference_input.jsonl \
+    --output results/phase5/pair_self_conf/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 
 python scripts/infer.py \
-    --input  results/phase6/full_with_self/inference_input.jsonl \
-    --output results/phase6/full_with_self/corrections.jsonl \
+    --input  results/phase5/full_with_self/inference_input.jsonl \
+    --output results/phase5/full_with_self/corrections.jsonl \
     --model  Qwen/Qwen3-4B-Instruct-2507
 ```
 
 ### Step 4: Download all 12 corrections.jsonl files (KAGGLE -> LOCAL)
 
 Download each `corrections.jsonl` from the Kaggle Output tab and place them
-in the matching `results/phase6/{combo_id}/` directory locally.
+in the matching `results/phase5/{combo_id}/` directory locally.
 
 ### Step 5: Analyze all combos (LOCAL)
 
 ```bash
-python pipelines/run_phase6.py \
+python pipelines/run_phase5.py \
     --sample-list data/test_samples.json \
     --combo all \
     --mode analyze \
@@ -529,16 +529,16 @@ python pipelines/run_phase6.py \
 ### Step 6: CAMeL validation combos (LOCAL only, no inference)
 
 First check which combo had the best CER from the analyze step, then set
-`phase6.pair_best` in `configs/config.yaml` to that combo ID (e.g. `full_prompt`).
+`phase5.pair_best` in `configs/config.yaml` to that combo ID (e.g. `full_prompt`).
 
 ```bash
-python pipelines/run_phase6.py \
+python pipelines/run_phase5.py \
     --sample-list data/test_samples.json \
     --combo pair_best_camel \
     --mode validate \
     --force
 
-python pipelines/run_phase6.py \
+python pipelines/run_phase5.py \
     --sample-list data/test_samples.json \
     --combo full_system \
     --mode validate \
@@ -548,7 +548,7 @@ python pipelines/run_phase6.py \
 ### Step 7: Final summary (LOCAL)
 
 ```bash
-python pipelines/run_phase6.py --mode summarize
+python pipelines/run_phase5.py --mode summarize
 ```
 
 ---
@@ -754,7 +754,7 @@ python pipelines/run_phase4d.py --mode analyze-train
 python pipelines/run_phase4d.py --sample-list data/test_samples.json --mode export --force
 python pipelines/run_phase5.py --mode build --max-sentences 10000
 python pipelines/run_phase5.py --sample-list data/test_samples.json --mode export --force
-python pipelines/run_phase6.py --sample-list data/test_samples.json --combo all --mode export --force
+python pipelines/run_phase5.py --sample-list data/test_samples.json --combo all --mode export --force
 
 # Prompt craft Round 1
 python scripts/craft_prompt.py --mode prepare --include-khatt
@@ -788,10 +788,10 @@ python pipelines/run_phase4.py --sub-phase 4b --sample-list data/test_samples.js
 python pipelines/run_phase4.py --sub-phase 4c --sample-list data/test_samples.json --mode validate --force
 python pipelines/run_phase4d.py --sample-list data/test_samples.json --mode analyze --force
 python pipelines/run_phase5.py --sample-list data/test_samples.json --mode analyze --force
-python pipelines/run_phase6.py --sample-list data/test_samples.json --combo all --mode analyze --force
-python pipelines/run_phase6.py --sample-list data/test_samples.json --combo pair_best_camel --mode validate --force
-python pipelines/run_phase6.py --sample-list data/test_samples.json --combo full_system --mode validate --force
-python pipelines/run_phase6.py --mode summarize
+python pipelines/run_phase5.py --sample-list data/test_samples.json --combo all --mode analyze --force
+python pipelines/run_phase5.py --sample-list data/test_samples.json --combo pair_best_camel --mode validate --force
+python pipelines/run_phase5.py --sample-list data/test_samples.json --combo full_system --mode validate --force
+python pipelines/run_phase5.py --mode summarize
 ```
 
 ### Batch 6: Prompt craft Round 1 extract + Round 2 (LOCAL + KAGGLE)
@@ -844,19 +844,19 @@ python scripts/infer.py --input results/phase4d/inference_input.jsonl --output r
 # Phase 5
 python scripts/infer.py --input results/phase5/inference_input.jsonl --output results/phase5/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
 
-# Phase 6 — all 12 combos
-python scripts/infer.py --input results/phase6/pair_conf_rules/inference_input.jsonl --output results/phase6/pair_conf_rules/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/pair_conf_fewshot/inference_input.jsonl --output results/phase6/pair_conf_fewshot/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/pair_conf_rag/inference_input.jsonl --output results/phase6/pair_conf_rag/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/pair_rules_fewshot/inference_input.jsonl --output results/phase6/pair_rules_fewshot/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/full_prompt/inference_input.jsonl --output results/phase6/full_prompt/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/abl_no_confusion/inference_input.jsonl --output results/phase6/abl_no_confusion/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/abl_no_rules/inference_input.jsonl --output results/phase6/abl_no_rules/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/abl_no_fewshot/inference_input.jsonl --output results/phase6/abl_no_fewshot/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/abl_no_rag/inference_input.jsonl --output results/phase6/abl_no_rag/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/self_reflective/inference_input.jsonl --output results/phase6/self_reflective/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/pair_self_conf/inference_input.jsonl --output results/phase6/pair_self_conf/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
-python scripts/infer.py --input results/phase6/full_with_self/inference_input.jsonl --output results/phase6/full_with_self/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+# Phase 5 — all 12 combos
+python scripts/infer.py --input results/phase5/pair_conf_rules/inference_input.jsonl --output results/phase5/pair_conf_rules/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/pair_conf_fewshot/inference_input.jsonl --output results/phase5/pair_conf_fewshot/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/pair_conf_rag/inference_input.jsonl --output results/phase5/pair_conf_rag/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/pair_rules_fewshot/inference_input.jsonl --output results/phase5/pair_rules_fewshot/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/full_prompt/inference_input.jsonl --output results/phase5/full_prompt/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/abl_no_confusion/inference_input.jsonl --output results/phase5/abl_no_confusion/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/abl_no_rules/inference_input.jsonl --output results/phase5/abl_no_rules/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/abl_no_fewshot/inference_input.jsonl --output results/phase5/abl_no_fewshot/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/abl_no_rag/inference_input.jsonl --output results/phase5/abl_no_rag/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/self_reflective/inference_input.jsonl --output results/phase5/self_reflective/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/pair_self_conf/inference_input.jsonl --output results/phase5/pair_self_conf/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
+python scripts/infer.py --input results/phase5/full_with_self/inference_input.jsonl --output results/phase5/full_with_self/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507
 
 # Prompt craft — meta-prompt (Round 1)
 python scripts/infer.py --input results/prompt_craft/meta_prompt_input.jsonl --output results/prompt_craft/meta_prompt_output.jsonl --model Qwen/Qwen3-4B-Instruct-2507

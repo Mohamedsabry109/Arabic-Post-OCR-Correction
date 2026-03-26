@@ -1468,7 +1468,7 @@ def generate_report(
     lines.append("")
     lines.append(
         "> Phase 3 is an isolated experiment comparing OCR-aware prompting vs zero-shot.\n"
-        "> Phase 6 will combine Phase 3 knowledge with other sources for the full system."
+        "> Phase 5 will combine Phase 3 knowledge with other sources for the full system."
     )
 
     report_path = results_dir / "report.md"

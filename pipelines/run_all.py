@@ -3,7 +3,8 @@
 
 Executes the local portions of every phase in order:
   - Phase 1:  fully local (no LLM)
-  - Phases 2-6: export stage (local), then analyze/validate/summarize (local)
+  - Phases 2-5: export stage (local), then analyze/validate/summarize (local)
+  - Phase 7:  DSPy prompt optimization (export local, optimize on Kaggle, analyze local)
 
 Inference (LLM on GPU) is a separate step that must be run on Kaggle/Colab.
 After running --mode export, follow the prompts or see HOW_TO_RUN.md for
@@ -82,18 +83,22 @@ _PHASE_STEPS: dict[str, list[dict]] = {
         {"script": "pipelines/run_phase4.py", "mode": "validate", "stage": "analyze",
          "extra": ["--sub-phase", "4c"]},
     ],
-    "6": [
-        {"script": "pipelines/run_phase6.py", "mode": "export",   "stage": "export",
+    "5": [
+        {"script": "pipelines/run_phase5.py", "mode": "export",   "stage": "export",
          "extra": ["--combo", "all"]},
-        {"script": "pipelines/run_phase6.py", "mode": "analyze",  "stage": "analyze",
+        {"script": "pipelines/run_phase5.py", "mode": "analyze",  "stage": "analyze",
          "extra": ["--combo", "all"]},
-        {"script": "pipelines/run_phase6.py", "mode": "validate", "stage": "analyze",
+        {"script": "pipelines/run_phase5.py", "mode": "validate", "stage": "analyze",
          "extra": ["--combo", "full_system"]},
-        {"script": "pipelines/run_phase6.py", "mode": "summarize","stage": "analyze"},
+        {"script": "pipelines/run_phase5.py", "mode": "summarize","stage": "analyze"},
+    ],
+    "7": [
+        {"script": "pipelines/run_phase7.py", "mode": "export",  "stage": "export"},
+        {"script": "pipelines/run_phase7.py", "mode": "analyze", "stage": "analyze"},
     ],
 }
 
-_ALL_PHASES = ["1", "2", "3", "4a", "4b", "4c", "4d", "6"]
+_ALL_PHASES = ["1", "2", "3", "4a", "4b", "4c", "4d", "5", "7"]
 
 # Inference input/output paths per phase (for --mode full)
 _INFERENCE_IO: dict[str, tuple[str, str]] = {
@@ -131,7 +136,7 @@ def parse_args() -> argparse.Namespace:
         metavar="PHASE",
         help=(
             "Phases to run (default: all). "
-            "Options: 1 2 3 4a 4b 4c 5 6. "
+            "Options: 1 2 3 4a 4b 4c 4d 5 7. "
             "Example: --phases 2 3 4a"
         ),
     )
@@ -223,7 +228,7 @@ def _run_step(step: dict, args: argparse.Namespace, phase_key: str) -> bool:
 def _run_inference(phase_key: str, args: argparse.Namespace) -> bool:
     """Run scripts/infer.py for a given phase (--mode full only)."""
     if phase_key not in _INFERENCE_IO:
-        return True  # Phase 1, 4c, 6 combos handled separately
+        return True  # Phase 1, 4c, 5 combos handled separately
 
     input_path, output_path = _INFERENCE_IO[phase_key]
     cmd = [
@@ -253,16 +258,17 @@ def _run_inference(phase_key: str, args: argparse.Namespace) -> bool:
     return True
 
 
-def _run_phase6_inference_full(args: argparse.Namespace) -> bool:
-    """Run infer.py for each Phase 6 inference combo (--mode full only)."""
+def _run_phase5_inference_full(args: argparse.Namespace) -> bool:
+    """Run infer.py for each Phase 5 inference combo (--mode full only)."""
     inference_combos = [
-        "pair_conf_rules", "pair_conf_fewshot", "pair_conf_rag",
+        "pair_conf_rules", "pair_conf_fewshot",
         "pair_rules_fewshot", "full_prompt",
-        "abl_no_confusion", "abl_no_rules", "abl_no_fewshot", "abl_no_rag",
+        "abl_no_confusion", "abl_no_rules", "abl_no_fewshot",
+        "self_reflective", "pair_self_conf", "full_with_self",
     ]
     for combo in inference_combos:
-        input_path  = f"results/phase6/{combo}/inference_input.jsonl"
-        output_path = f"results/phase6/{combo}/corrections.jsonl"
+        input_path  = f"results/phase5/{combo}/inference_input.jsonl"
+        output_path = f"results/phase5/{combo}/corrections.jsonl"
         cmd = [
             _PYTHON, str(_PROJECT_ROOT / "scripts/infer.py"),
             "--input",  input_path,
@@ -275,7 +281,7 @@ def _run_phase6_inference_full(args: argparse.Namespace) -> bool:
         if args.force:
             cmd += ["--force"]
 
-        label = f"Phase 6 | Inference | {combo}"
+        label = f"Phase 5 | Inference | {combo}"
         logger.info("=" * 60)
         logger.info("Running: %s", label)
         logger.info("=" * 60)
@@ -321,7 +327,7 @@ def main() -> None:
                     continue
             elif args.mode == "analyze":
                 if stage not in ("analyze", "local"):
-                    # Phase 5 build is 'local' — skip on analyze-only pass
+                    # local-only stages — skip on analyze-only pass
                     # (index should already exist)
                     if stage == "local" and step.get("mode") == "build":
                         continue
@@ -336,9 +342,9 @@ def main() -> None:
 
             # Inject inference step between export and analyze in --mode full
             if args.mode == "full" and stage == "export":
-                if phase_key == "6":
-                    if not _run_phase6_inference_full(args):
-                        failed.append(f"Phase 6 | Inference")
+                if phase_key == "5":
+                    if not _run_phase5_inference_full(args):
+                        failed.append(f"Phase 5 | Inference")
                         break
                 else:
                     if not _run_inference(phase_key, args):

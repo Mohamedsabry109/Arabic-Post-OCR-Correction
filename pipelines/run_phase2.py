@@ -1014,7 +1014,7 @@ def generate_report(
     lines.append(
         "> Phase 2 establishes the zero-shot LLM baseline.\n"
         "> Phases 3–5 each compare their results against Phase 2 CER/WER.\n"
-        "> Phase 6 uses Phase 2 as the lower bound in the ablation study."
+        "> Phase 5 uses Phase 2 as the lower bound in the ablation study."
     )
 
     report_path = results_dir / "report.md"

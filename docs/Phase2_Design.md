@@ -27,7 +27,7 @@ Phase 2 outputs are consumed by every subsequent phase:
 
 - **Phases 3, 4A, 4B, 4C, 5**: Load `comparison.json` as the comparison baseline
 - **Phase 4C**: Can load `corrections.jsonl` directly to apply CAMeL validation on top
-- **Phase 6**: Uses Phase 2 as lower bound in the ablation table
+- **Phase 5**: Uses Phase 2 as lower bound in the ablation table
 - **Paper**: "Zero-shot LLM" row in the main results table
 
 ### 1.4 Compute Environment

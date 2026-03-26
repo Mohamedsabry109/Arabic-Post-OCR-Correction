@@ -1821,7 +1821,7 @@ def generate_report(
     lines.append(
         f"> {phase_label.upper()} is an isolated experiment comparing {phase_title} "
         f"vs zero-shot.\n"
-        f"> Phase 6 will combine all linguistic sources for the full system."
+        f"> Phase 5 will combine all linguistic sources for the full system."
     )
 
     report_path = results_dir / "report.md"

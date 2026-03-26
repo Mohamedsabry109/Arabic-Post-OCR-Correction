@@ -30,7 +30,7 @@ Injection strategy
   ``<additional_examples>`` immediately *before* ``<output_format>`` so
   the output constraint always stays last.
 
-* **Phase 6** (combined) injects all of the above in order; each section
+* **Phase 5** (combined) injects all of the above in order; each section
   is only included if its context is non-empty.
 """
 from __future__ import annotations
@@ -74,7 +74,7 @@ class PromptBuilder:
     RULES_PROMPT_VERSION: str = "p4av2"            # Phase 4A
     FEWSHOT_PROMPT_VERSION: str = "p4bv2"          # Phase 4B
     SELF_REFLECTIVE_PROMPT_VERSION: str = "p4dv3"  # Phase 4D (insights + word pairs)
-    COMBINED_PROMPT_VERSION: str = "p6v2"          # Phase 6
+    COMBINED_PROMPT_VERSION: str = "p5v1"          # Phase 5
     CRAFTED_PROMPT_VERSION: str = "crafted_v1"     # standalone crafted
     META_PROMPT_VERSION: str = "meta_v1"           # meta-prompting
 
@@ -413,7 +413,7 @@ class PromptBuilder:
         return self.SELF_REFLECTIVE_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
-    # Phase 6 — Combined Prompting
+    # Phase 5 — Combined Prompting
     # -----------------------------------------------------------------------
 
     def build_combined(
@@ -425,7 +425,7 @@ class PromptBuilder:
         insights_context: str = "",
         word_pairs_context: str = "",
     ) -> list[dict]:
-        """Build a combined correction prompt (Phase 6).
+        """Build a combined correction prompt (Phase 5).
 
         Uses the crafted system prompt as the base and injects any non-empty
         context sources as XML sections, following the prompt's tag structure.
@@ -503,7 +503,7 @@ class PromptBuilder:
 
     @property
     def combined_prompt_version(self) -> str:
-        """Phase 6 prompt version string."""
+        """Phase 5 prompt version string."""
         return self.COMBINED_PROMPT_VERSION
 
     # -----------------------------------------------------------------------

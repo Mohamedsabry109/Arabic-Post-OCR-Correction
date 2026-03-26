@@ -139,7 +139,7 @@ phase5:
   analyze_errors: true
   max_retries: 0
 
-phase6:
+phase5:
   pair_best: null
   analyze_errors: true
   max_retries: 0

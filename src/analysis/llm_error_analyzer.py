@@ -61,7 +61,7 @@ class LLMErrorAnalyzer:
         """Compute per-ErrorType breakdown for one sample.
 
         Creates minimal stub objects to call ErrorAnalyzer without needing
-        full OCRSample instances (following the existing pattern in run_phase6.py).
+        full OCRSample instances (following the existing pattern in run_phase5.py).
 
         Args:
             ocr_text:  Raw OCR prediction from Qaari.

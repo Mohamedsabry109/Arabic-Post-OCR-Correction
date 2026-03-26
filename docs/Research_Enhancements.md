@@ -196,7 +196,7 @@ generate_kwargs = dict(
 
 ---
 
-### 2.2 Confusion Matrix Parameters (Phase 3 / Phase 6)
+### 2.2 Confusion Matrix Parameters (Phase 3 / Phase 5)
 
 ```yaml
 phase3:
@@ -678,7 +678,7 @@ Categorizing the error type in the few-shot example helps the model generalize t
 
 ---
 
-### 4.6 Combined Prompt (Phase 6) — Section Ordering
+### 4.6 Combined Prompt (Phase 5) — Section Ordering
 
 **Current order**: confusion → rules → examples → retrieval
 
@@ -758,7 +758,7 @@ Abstract
    6.1 Baseline (Phase 1)
    6.2 Zero-Shot LLM (Phase 2)
    6.3 Individual Knowledge Types (Phases 3-5)
-   6.4 Combinations & Ablation (Phase 6)
+   6.4 Combinations & Ablation (Phase 5)
    6.5 Error Analysis
 7. Discussion
 8. Limitations & Future Work
@@ -809,7 +809,7 @@ Always include this table in the paper — reviewers need to understand the data
 
 ---
 
-### 5.4 Phase 6 Ablation Table
+### 5.4 Phase 5 Ablation Table
 
 **Standard ablation format** — each row removes one component from the full system:
 
@@ -932,7 +932,7 @@ Write concrete, specific limitations rather than generic disclaimers:
    - "OCR-specific knowledge (confusion matrix) provides additional Y% improvement" → Phase 3 finding
    - "Rule injection and few-shot examples contribute comparably" → Phase 4 finding
    - "RAG from a historical corpus provides Z% additional improvement" → Phase 5 finding
-   - "The optimal combination achieves W% CER, closing X% of the gap to closed-source VLMs" → Phase 6 finding
+   - "The optimal combination achieves W% CER, closing X% of the gap to closed-source VLMs" → Phase 5 finding
    - "Handwritten text (KHATT) remains challenging at 65% baseline CER" → Honest limitation
 
 4. **The Contribution**:

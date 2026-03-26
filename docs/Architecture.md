@@ -18,9 +18,9 @@
 | Phase 4C | Does morphological validation help? | vs Phase 2 (isolated) |
 | Phase 4D | Do the LLM's own error patterns help (self-reflection)? | vs Phase 2 (isolated) |
 | Phase 5 | Does corpus grounding help? | vs Phase 2 (isolated) |
-| Phase 6 | What combination is optimal? What contributes? | Combinations + ablation |
+| Phase 5 | What combination is optimal? What contributes? | Combinations + ablation |
 
-**Key Design Principle**: Phases 3-5 (including 4A–4D) are **isolated experiments** comparing to Phase 2 baseline. This measures each knowledge type's independent contribution before combining them in Phase 6.
+**Key Design Principle**: Phases 3-5 (including 4A–4D) are **isolated experiments** comparing to Phase 2 baseline. This measures each knowledge type's independent contribution before combining them in Phase 5.
 
 ### 1.3 Datasets
 
@@ -61,7 +61,7 @@
 **Integration Points:**
 1. **Phase 1**: Enhanced error categorization (morphologically invalid vs valid-but-wrong)
 2. **Phase 4A**: Morphology-aware rule application
-3. **Phase 6**: Post-LLM validation layer (optional)
+3. **Phase 5**: Post-LLM validation layer (optional)
 
 ---
 
@@ -111,7 +111,7 @@
 1. **Phase 2 is the hub**: All knowledge-enhanced phases (3-5, including 4A–4D) compare to Phase 2
 2. **Isolated experiments**: Each phase tests ONE knowledge addition
 3. **Incremental complexity**: Simple injection (3,4A) → Examples (4B) → Post-processing (4C) → Self-reflection (4D) → Retrieval (5)
-4. **Final synthesis**: Phase 6 combines all and measures individual contributions
+4. **Final synthesis**: Phase 5 combines all and measures individual contributions
 
 ---
 
@@ -407,7 +407,7 @@ results/phase4/
 - **Tests morphological validation in isolation** (consistent with Phases 3-5 design)
 - Answers: Can symbolic post-processing improve neural correction?
 - Compares: Prompt-based knowledge (3, 4A, 4B) vs post-processing (4C)
-- Provides baseline for CAMeL's contribution before Phase 6 combines everything
+- Provides baseline for CAMeL's contribution before Phase 5 combines everything
 
 #### Phase 4D: Self-Reflective Prompting
 
@@ -522,7 +522,7 @@ results/phase5/
 
 ---
 
-## Phase 6: Combinations & Ablation Study
+## Phase 5: Combinations & Ablation Study
 
 ### Research Questions
 1. **What is the optimal combination of knowledge sources?**
@@ -530,7 +530,7 @@ results/phase5/
 3. **What does each component contribute to the full system?** (ablation)
 
 ### Purpose
-Phase 6 goes beyond simple ablation to test meaningful combinations, answering both "what works best together?" and "what does each part contribute?"
+Phase 5 goes beyond simple ablation to test meaningful combinations, answering both "what works best together?" and "what does each part contribute?"
 
 ### Experimental Design Rationale
 
@@ -654,7 +654,7 @@ For all comparisons:
 
 ### Outputs
 ```
-results/phase6/
+results/phase5/
 ├── combinations/
 │   ├── pair_confusion_rules/
 │   ├── pair_confusion_fewshot/
@@ -826,7 +826,7 @@ Arabic-Post-OCR-Correction/
 │   ├── run_phase4.py
 │   ├── run_phase4d.py
 │   ├── run_phase5.py
-│   ├── run_phase6.py
+│   ├── run_phase5.py
 │   └── run_all.py
 ├── configs/
 │   └── config.yaml
@@ -839,7 +839,7 @@ Arabic-Post-OCR-Correction/
 │   ├── phase4c/
 │   ├── phase4d/
 │   ├── phase5/
-│   └── phase6/
+│   └── phase5/
 ├── docs/
 ├── tests/
 ├── scripts/
@@ -876,7 +876,7 @@ Phase 2 (BASELINE) ════════════════════�
     └──────┴──────┴──────┴──────┴──────┘      ║
                                         │                                       ║
                                         ▼                                       ║
-                                  Phase 6 ◄═════════════════════════════════════╝
+                                  Phase 5 ◄═════════════════════════════════════╝
                                   (Combinations + Ablation)
 ```
 
@@ -1002,7 +1002,7 @@ processing:
 | 6 | Phase 4C | CAMeL Tools, Phase 2 output | Medium |
 | 7 | Phase 4D | Phase 2 train-split corrections | Medium |
 | 8 | Phase 5 | OpenITI, embedding model | High |
-| 9 | Phase 6 | All previous phases | High |
+| 9 | Phase 5 | All previous phases | High |
 
 ### Shared Components to Build First
 
@@ -1084,7 +1084,7 @@ processing:
 | Baseline Results | baseline_metrics.json | Phase 1 |
 | Zero-shot Results | metrics.json | Phase 2 |
 | Knowledge-Enhanced Results | metrics.json | Phase 3-5 |
-| Ablation Study | ablation_summary.json | Phase 6 |
+| Ablation Study | ablation_summary.json | Phase 5 |
 | Error Analysis | error_taxonomy.json | Phase 1, 6 |
-| Figures | figures/*.png | Phase 6 |
-| Tables | paper_tables.md | Phase 6 |
+| Figures | figures/*.png | Phase 5 |
+| Tables | paper_tables.md | Phase 5 |

@@ -71,19 +71,19 @@ python scripts/infer.py --config configs/config_dev.yaml --backend mock \
     --output results/phase5/corrections.jsonl
 python pipelines/run_phase5.py --config configs/config_dev.yaml --mode analyze
 
-# 9. Phase 6 — combinations (export all 12 combos at once)
-python pipelines/run_phase6.py --config configs/config_dev.yaml --mode export --combo all
+# 9. Phase 5 — combinations (export all 12 combos at once)
+python pipelines/run_phase5.py --config configs/config_dev.yaml --mode export --combo all
 python scripts/infer.py --config configs/config_dev.yaml --backend mock \
-    --input results/phase6/full_prompt/inference_input.jsonl \
-    --output results/phase6/full_prompt/corrections.jsonl
+    --input results/phase5/full_prompt/inference_input.jsonl \
+    --output results/phase5/full_prompt/corrections.jsonl
 # ... repeat infer for each combo, or use the loop below
-python pipelines/run_phase6.py --config configs/config_dev.yaml --mode analyze --combo all
-python pipelines/run_phase6.py --config configs/config_dev.yaml --mode summarize
+python pipelines/run_phase5.py --config configs/config_dev.yaml --mode analyze --combo all
+python pipelines/run_phase5.py --config configs/config_dev.yaml --mode summarize
 ```
 
 ---
 
-## Faster: loop all Phase 6 combos in one command
+## Faster: loop all Phase 5 combos in one command
 
 ```bash
 for combo in pair_conf_rules pair_conf_fewshot pair_conf_rag pair_rules_fewshot \
@@ -92,8 +92,8 @@ for combo in pair_conf_rules pair_conf_fewshot pair_conf_rag pair_rules_fewshot 
     python scripts/infer.py \
         --config configs/config_dev.yaml \
         --backend mock \
-        --input  results/phase6/${combo}/inference_input.jsonl \
-        --output results/phase6/${combo}/corrections.jsonl
+        --input  results/phase5/${combo}/inference_input.jsonl \
+        --output results/phase5/${combo}/corrections.jsonl
 done
 ```
 
@@ -168,7 +168,7 @@ results/
 ├── phase5/
 │   ├── corpus.jsonl, faiss.index, faiss.index.sentences.jsonl
 │   └── ...
-└── phase6/
+└── phase5/
     ├── full_prompt/  inference_input.jsonl, corrections.jsonl, {dataset}/...
     ├── ...
     ├── combinations_summary.json
@@ -198,7 +198,7 @@ python pipelines/run_phase4d.py --mode analyze-train --force
 python pipelines/run_phase4d.py --mode export --force
 python pipelines/run_phase5.py  --mode build   # one-time, reuses if index exists
 python pipelines/run_phase5.py  --mode export --force
-python pipelines/run_phase6.py  --mode export --combo all --force
+python pipelines/run_phase5.py  --mode export --combo all --force
 ```
 
 ### Step 2 — Upload each `inference_input.jsonl` to Kaggle/Colab
@@ -221,7 +221,7 @@ If you want a clean slate before production:
 ```bash
 # Remove mock corrections (keeps Phase 1 data which is real)
 rm -rf results/phase2 results/phase3 results/phase4a results/phase4b \
-       results/phase4c results/phase4d results/phase5 results/phase6
+       results/phase4c results/phase4d results/phase5 results/phase5
 ```
 
 Phase 1 data is safe to keep — it doesn't depend on the LLM backend.
@@ -253,7 +253,7 @@ pip install sentence-transformers faiss-cpu
 The dev config uses only 1000 sentences from OpenITI, so the build completes
 in under a minute.
 
-**Phase 6 summarize has no stats (skipped)**
+**Phase 5 summarize has no stats (skipped)**
 Statistical tests require at least 10 paired samples per combo.
 With 20 samples per dataset × 4 datasets = 80 samples, tests will run.
 If you used `--limit 5`, increase it to at least 10 for the summarize step.
@@ -288,7 +288,7 @@ A 0.6B model runs on CPU (slowly, ~5-30 sec/sample) but produces real correction
 | `limit_per_dataset` | 20 | null (unlimited) |
 | `phase5.corpus.max_sentences` | 1000 | 200000 |
 | `phase5.index.batch_size` | 64 | 256 |
-| `phase6.stats.n_bootstrap` | 100 | 1000 |
+| `phase5.stats.n_bootstrap` | 100 | 1000 |
 | `phase*.max_retries` | 0 | 2 |
 | `phase1.min_confusion_count` | 1 | 2 |
 | `phase3.min_substitutions` | 1 | 200 |

@@ -6,6 +6,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-03-26 — Rename Phase 6 to Phase 5; add Phase 7 (DSPy)
+
+### Added
+- `pipelines/run_phase7.py` — Phase 7: DSPy automated prompt optimization pipeline
+  - `export` mode: samples train/dev sets for DSPy, exports full val inference_input.jsonl
+  - `analyze` mode: CER/WER analysis of DSPy-optimized corrections vs Phase 2
+- `scripts/dspy_optimize.py` — Kaggle script for DSPy BootstrapFewShot optimization
+  - `LocalTransformersLM` adapter: wraps Qwen3 for DSPy compatibility
+  - Runs optimization on small train/dev sets, then full inference with compiled program
+  - Outputs: `dspy_compiled.json`, `optimized_prompt.txt`, `corrections.jsonl`
+- `configs/config.yaml` — added `phase7:` config block (n_train, n_dev, optimizer settings)
+
+### Changed
+- **Phase 6 renamed to Phase 5**: all files, paths, config keys updated
+  - `pipelines/run_phase6.py` -> `pipelines/run_phase5.py`
+  - `results/phase6/` -> `results/phase5/`
+  - `config.yaml`: `phase6:` -> `phase5:`
+  - `PromptBuilder.COMBINED_PROMPT_VERSION`: `p6v2` -> `p5v1`
+- `pipelines/run_all.py` — updated `_ALL_PHASES`, `_PHASE_STEPS`, `_INFERENCE_IO` for Phase 5 rename + Phase 7
+- `src/core/prompt_builder.py` — Phase 6 references updated to Phase 5
+- `CLAUDE.md` — 8-phase table (added Phase 7: DSPy), updated knowledge sources
+
+### Removed
+- `pipelines/run_phase6.py` — replaced by `run_phase5.py`
+
 ## [0.8.0] - 2026-03-25 — Remove Phase 5 (RAG); fuse Phase 4D + 4E
 
 ### Removed

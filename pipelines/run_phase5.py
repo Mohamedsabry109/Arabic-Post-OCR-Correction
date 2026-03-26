@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 6: Combinations & Ablation Study.
+"""Phase 5: Combinations & Ablation Study.
 
 Tests combinations of knowledge sources from Phases 3-5 and measures each
 component's contribution via ablation.
@@ -21,49 +21,49 @@ Inference-based combos (need export -> Kaggle -> analyze):
   full_with_self     All 5 components (Full + Self-Reflective)
 
 CAMeL post-processing combos (local only, no Kaggle step):
-  pair_best_camel    Best pair (config.phase6.pair_best) + CAMeL revert
+  pair_best_camel    Best pair (config.phase5.pair_best) + CAMeL revert
   full_system        full_prompt + CAMeL revert
 
 Note: abl_no_camel == full_prompt (no separate run needed).
 
 Pipeline per inference combo
 -----------------------------
-  1. LOCAL:  python pipelines/run_phase6.py --combo pair_conf_rules --mode export
+  1. LOCAL:  python pipelines/run_phase5.py --combo pair_conf_rules --mode export
   2. REMOTE: python scripts/infer.py \\
-                 --input  results/phase6/pair_conf_rules/inference_input.jsonl \\
-                 --output results/phase6/pair_conf_rules/corrections.jsonl
-  3. LOCAL:  python pipelines/run_phase6.py --combo pair_conf_rules --mode analyze
+                 --input  results/phase5/pair_conf_rules/inference_input.jsonl \\
+                 --output results/phase5/pair_conf_rules/corrections.jsonl
+  3. LOCAL:  python pipelines/run_phase5.py --combo pair_conf_rules --mode analyze
 
 CAMeL combos (no Kaggle step):
-  python pipelines/run_phase6.py --combo full_system  --mode validate
-  python pipelines/run_phase6.py --combo pair_best_camel --mode validate
+  python pipelines/run_phase5.py --combo full_system  --mode validate
+  python pipelines/run_phase5.py --combo pair_best_camel --mode validate
 
 Cross-combo summary (after all combos analyzed/validated):
-  python pipelines/run_phase6.py --mode summarize
+  python pipelines/run_phase5.py --mode summarize
 
 Usage
 -----
     # Smoke test: export + infer + analyze one pair
-    python pipelines/run_phase6.py --combo pair_conf_rules --mode export \\
+    python pipelines/run_phase5.py --combo pair_conf_rules --mode export \\
         --datasets KHATT-train --limit 50
     python scripts/infer.py \\
-        --input  results/phase6/pair_conf_rules/inference_input.jsonl \\
-        --output results/phase6/pair_conf_rules/corrections.jsonl \\
+        --input  results/phase5/pair_conf_rules/inference_input.jsonl \\
+        --output results/phase5/pair_conf_rules/corrections.jsonl \\
         --datasets KHATT-train --limit 50
-    python pipelines/run_phase6.py --combo pair_conf_rules --mode analyze \\
+    python pipelines/run_phase5.py --combo pair_conf_rules --mode analyze \\
         --datasets KHATT-train
 
     # Run all inference combos in sequence:
-    python pipelines/run_phase6.py --combo all --mode export
+    python pipelines/run_phase5.py --combo all --mode export
     # (then run Kaggle for each combo)
-    python pipelines/run_phase6.py --combo all --mode analyze
+    python pipelines/run_phase5.py --combo all --mode analyze
 
     # After setting pair_best in config.yaml:
-    python pipelines/run_phase6.py --combo full_system     --mode validate
-    python pipelines/run_phase6.py --combo pair_best_camel --mode validate
+    python pipelines/run_phase5.py --combo full_system     --mode validate
+    python pipelines/run_phase5.py --combo pair_best_camel --mode validate
 
     # Final cross-combo analysis:
-    python pipelines/run_phase6.py --mode summarize
+    python pipelines/run_phase5.py --mode summarize
 """
 
 import argparse
@@ -152,7 +152,7 @@ COMBO_DESCRIPTIONS: dict[str, str] = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Phase 6: Combinations & Ablation Study"
+        description="Phase 5: Combinations & Ablation Study"
     )
     parser.add_argument(
         "--combo",
@@ -233,9 +233,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path("results/phase6"),
+        default=Path("results/phase5"),
         dest="results_dir",
-        help="Phase 6 results root directory.",
+        help="Phase 5 results root directory.",
     )
     return parser.parse_args()
 
@@ -245,7 +245,7 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
-def setup_logging(results_dir: Path, label: str = "phase6") -> None:
+def setup_logging(results_dir: Path, label: str = "phase5") -> None:
     """Configure logging to console (UTF-8) and log file."""
     results_dir.mkdir(parents=True, exist_ok=True)
     log_path = results_dir / f"{label}.log"
@@ -303,7 +303,7 @@ def make_meta(
 ) -> dict:
     model_cfg = config.get("model", {})
     meta = {
-        "phase":       "phase6",
+        "phase":       "phase5",
         "combo_id":    combo_id,
         "description": COMBO_DESCRIPTIONS.get(combo_id, combo_id),
         "components":  list(_active_component_names(combo_id)),
@@ -797,14 +797,14 @@ def process_dataset_analyze(
         comparison = {
             "meta": make_meta(
                 combo_id, dataset_key, n, config, limit,
-                extra={"comparison": f"phase6_{combo_id}_vs_phase2"},
+                extra={"comparison": f"phase5_{combo_id}_vs_phase2"},
             ),
             "phase2_baseline": {
                 "cer": round(p2_cer, 6),
                 "wer": round(p2_wer, 6),
                 "source": str(phase2_dir / dataset_key / "metrics.json"),
             },
-            f"phase6_{combo_id}_corrected": {
+            f"phase5_{combo_id}_corrected": {
                 "cer": round(corrected_result.cer, 6),
                 "wer": round(corrected_result.wer, 6),
             },
@@ -814,7 +814,7 @@ def process_dataset_analyze(
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
-            **(_nd_comparison_block(p2_nd, corrected_result_nd, f"phase6_{combo_id}")),
+            **(_nd_comparison_block(p2_nd, corrected_result_nd, f"phase5_{combo_id}")),
             "interpretation": (
                 f"CER {'reduced' if cer_delta >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
@@ -889,7 +889,7 @@ def run_export(
     combo_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("=" * 60)
-    logger.info("Phase 6 EXPORT: combo=%s  (%s)", combo_id, COMBO_DESCRIPTIONS[combo_id])
+    logger.info("Phase 5 EXPORT: combo=%s  (%s)", combo_id, COMBO_DESCRIPTIONS[combo_id])
     logger.info(
         "  Components: confusion=%s  rules=%s  fewshot=%s  self=%s",
         use_conf, use_rules, use_fewshot, use_self,
@@ -1057,7 +1057,7 @@ def run_export(
 
     logger.info("=" * 60)
     logger.info(
-        "Phase 6 export complete: %d new samples -> %s", total_written, output_path
+        "Phase 5 export complete: %d new samples -> %s", total_written, output_path
     )
     logger.info("")
     logger.info("NEXT STEPS:")
@@ -1067,7 +1067,7 @@ def run_export(
     logger.info("           --input  %s/inference_input.jsonl \\", combo_dir)
     logger.info("           --output %s/corrections.jsonl", combo_dir)
     logger.info("  3. Run analysis locally:")
-    logger.info("       python pipelines/run_phase6.py --combo %s --mode analyze", combo_id)
+    logger.info("       python pipelines/run_phase5.py --combo %s --mode analyze", combo_id)
     logger.info("=" * 60)
 
 
@@ -1215,7 +1215,7 @@ def process_dataset_validate(
 
     n = len(base_records)
     logger.info("=" * 60)
-    logger.info("Phase 6 VALIDATE: %s / %s  (%d samples)", combo_id, dataset_key, n)
+    logger.info("Phase 5 VALIDATE: %s / %s  (%d samples)", combo_id, dataset_key, n)
 
     corrected_samples: list[CorrectedSample] = []
     revert_results: list[TextCorrectionResult] = []
@@ -1325,10 +1325,10 @@ def process_dataset_validate(
         comparison = {
             "meta": make_meta(
                 combo_id, dataset_key, n, config, limit,
-                extra={"comparison": f"phase6_{combo_id}_vs_phase2"},
+                extra={"comparison": f"phase5_{combo_id}_vs_phase2"},
             ),
             "phase2_baseline": {"cer": round(p2_cer, 6), "wer": round(p2_wer, 6)},
-            f"phase6_{combo_id}_corrected": {
+            f"phase5_{combo_id}_corrected": {
                 "cer": round(corrected_result.cer, 6),
                 "wer": round(corrected_result.wer, 6),
             },
@@ -1338,7 +1338,7 @@ def process_dataset_validate(
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
-            **(_nd_comparison_block(p2_nd, corrected_result_nd, f"phase6_{combo_id}")),
+            **(_nd_comparison_block(p2_nd, corrected_result_nd, f"phase5_{combo_id}")),
             "interpretation": (
                 f"CER {'reduced' if cer_delta >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
@@ -1368,10 +1368,10 @@ def run_validate(
     if combo_id == "full_system":
         base_combo_id = "full_prompt"
     elif combo_id == "pair_best_camel":
-        base_combo_id = config.get("phase6", {}).get("pair_best")
+        base_combo_id = config.get("phase5", {}).get("pair_best")
         if not base_combo_id:
             logger.error(
-                "phase6.pair_best not set in config.yaml. "
+                "phase5.pair_best not set in config.yaml. "
                 "Review pair results and set it before running pair_best_camel."
             )
             sys.exit(1)
@@ -1383,7 +1383,7 @@ def run_validate(
     if not base_combo_dir.exists():
         logger.error(
             "Base combo directory not found: %s\n"
-            "Run: python pipelines/run_phase6.py --combo %s --mode analyze first.",
+            "Run: python pipelines/run_phase5.py --combo %s --mode analyze first.",
             base_combo_dir, base_combo_id,
         )
         sys.exit(1)
@@ -1392,7 +1392,7 @@ def run_validate(
     combo_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("=" * 60)
-    logger.info("Phase 6 VALIDATE: combo=%s (base=%s)", combo_id, base_combo_id)
+    logger.info("Phase 5 VALIDATE: combo=%s (base=%s)", combo_id, base_combo_id)
 
     # Initialise CAMeL validator once (match Phase 1 pattern)
     camel_cfg = config.get("camel", {})
@@ -1405,7 +1405,7 @@ def run_validate(
 
     if not analyzer.enabled:
         logger.error(
-            "Phase 6 validate requires camel_tools but it is not available.\n"
+            "Phase 5 validate requires camel_tools but it is not available.\n"
             "Install: pip install camel-tools && camel_data -i morphology-db-msa-r13\n"
             "Or disable with: camel.enabled: false in config.yaml"
         )
@@ -1527,7 +1527,7 @@ def aggregate_combo_results(
 
     output = {
         "meta": {
-            "phase":       "phase6",
+            "phase":       "phase5",
             "combo_id":    combo_id,
             "description": COMBO_DESCRIPTIONS.get(combo_id, combo_id),
             "components":  _active_component_names(combo_id),
@@ -1553,9 +1553,9 @@ def aggregate_combo_results(
     if all_comparisons:
         cmp_output = {
             "meta": {
-                "phase":   "phase6",
+                "phase":   "phase5",
                 "combo_id": combo_id,
-                "comparison": f"phase6_{combo_id}_vs_phase2",
+                "comparison": f"phase5_{combo_id}_vs_phase2",
                 "model":   config.get("model", {}).get("name", ""),
                 "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             },
@@ -1574,7 +1574,7 @@ def print_combo_summary(
 
     sep = "=" * 90
     row_sep = "  " + "-" * 82
-    title = f"PHASE6 [{combo_id}] -- {COMBO_DESCRIPTIONS.get(combo_id, combo_id)}"
+    title = f"PHASE5 [{combo_id}] -- {COMBO_DESCRIPTIONS.get(combo_id, combo_id)}"
 
     # Table 1: WITH DIACRITICS
     print("\n" + sep)
@@ -1709,10 +1709,10 @@ def run_summarize(
 ) -> None:
     """Cross-combo analysis: synergy, ablation, statistical tests, final comparison."""
     logger.info("=" * 60)
-    logger.info("Phase 6 SUMMARIZE")
+    logger.info("Phase 5 SUMMARIZE")
     logger.info("=" * 60)
 
-    p6_stats_cfg = config.get("phase6", {}).get("stats", {})
+    p6_stats_cfg = config.get("phase5", {}).get("stats", {})
     alpha = p6_stats_cfg.get("alpha", 0.05)
     n_bootstrap = p6_stats_cfg.get("n_bootstrap", 1000)
 
@@ -2009,9 +2009,9 @@ def run_summarize(
             if cer is not None:
                 final_systems[ph_key] = {"avg_cer": cer, "avg_wer": wer_v}
 
-    # Add Phase 6 combos
+    # Add Phase 5 combos
     for cid, m in combo_metrics.items():
-        final_systems[f"phase6_{cid}"] = {"avg_cer": m["avg_cer"], "avg_wer": m["avg_wer"]}
+        final_systems[f"phase5_{cid}"] = {"avg_cer": m["avg_cer"], "avg_wer": m["avg_wer"]}
 
     save_json(
         {
@@ -2039,7 +2039,7 @@ def run_summarize(
     )
 
     logger.info("=" * 60)
-    logger.info("Phase 6 SUMMARIZE complete. Results in: %s", results_dir)
+    logger.info("Phase 5 SUMMARIZE complete. Results in: %s", results_dir)
     logger.info("  combinations_summary.json")
     logger.info("  ablation_summary.json")
     logger.info("  synergy_analysis.json")
@@ -2056,7 +2056,7 @@ def _generate_paper_tables(
 ) -> None:
     """Write LaTeX-ready markdown table to paper_tables.md."""
     lines: list[str] = []
-    lines.append("# Phase 6: Paper Tables")
+    lines.append("# Phase 5: Paper Tables")
     lines.append(f"\nGenerated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
     lines.append("## Main Results Table")
@@ -2064,7 +2064,7 @@ def _generate_paper_tables(
     lines.append("| System | Avg CER | Avg WER |")
     lines.append("|--------|---------|---------|")
 
-    # Order: phase1 -> phase2 -> phases 3-4 -> phase6 combos
+    # Order: phase1 -> phase2 -> phases 3-4 -> phase5 combos
     system_order = [
         ("phase1_ocr",           "Phase 1 (OCR only)"),
         ("phase2_zero_shot",     "Phase 2 (Zero-shot)"),
@@ -2075,7 +2075,7 @@ def _generate_paper_tables(
         ("phase4d_self",         "Phase 4D (+Self-Reflective)"),
     ]
     for cid in INFERENCE_COMBOS + sorted(CAMEL_COMBOS):
-        system_order.append((f"phase6_{cid}", f"Phase 6: {COMBO_DESCRIPTIONS.get(cid, cid)}"))
+        system_order.append((f"phase5_{cid}", f"Phase 5: {COMBO_DESCRIPTIONS.get(cid, cid)}"))
 
     for key, label in system_order:
         if key not in final_systems:
@@ -2104,12 +2104,12 @@ def _generate_summary_report(
     results_dir: Path,
     config: dict,
 ) -> None:
-    """Write human-readable Phase 6 summary report."""
+    """Write human-readable Phase 5 summary report."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     model_name = config.get("model", {}).get("name", "unknown")
     lines: list[str] = []
 
-    lines.append("# Phase 6 Report: Combinations & Ablation Study")
+    lines.append("# Phase 5 Report: Combinations & Ablation Study")
     lines.append(f"\nGenerated: {now}")
     lines.append(f"Model: {model_name}")
     lines.append("")
@@ -2201,7 +2201,7 @@ def main() -> None:
     results_dir = args.results_dir
 
     setup_logging(results_dir)
-    logger.info("Phase 6: Combinations & Ablation Study  (mode=%s)", args.mode)
+    logger.info("Phase 5: Combinations & Ablation Study  (mode=%s)", args.mode)
     logger.info("Results dir: %s", results_dir)
 
     config = load_config(args.config)
@@ -2314,7 +2314,7 @@ def main() -> None:
             write_corrections_report(
                 corrections_path=combo_dir,
                 output_path=combo_dir / "sample_report.txt",
-                title=f"Phase 6 -- {combo_id}",
+                title=f"Phase 5 -- {combo_id}",
             )
             logger.info("[%s] complete. Results in: %s", combo_id, combo_dir)
 
@@ -2349,7 +2349,7 @@ def main() -> None:
             print_combo_summary(combo_id, all_corrected, all_comparisons, combo_dir)
             logger.info("[%s] validate complete. Results in: %s", combo_id, combo_dir)
 
-    logger.info("Phase 6 done.")
+    logger.info("Phase 5 done.")
 
 
 if __name__ == "__main__":

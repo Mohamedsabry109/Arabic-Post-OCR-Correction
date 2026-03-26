@@ -178,9 +178,9 @@ phase4:
     phase2_dir: "results/phase2" # source of corrections.jsonl for Phase 4C
 
 # ---------------------------------------------------------------------------
-# Phase 6 specific
+# Phase 5 specific (combinations & ablation — was Phase 6)
 # ---------------------------------------------------------------------------
-phase6:
+phase5:
   pair_best: null              # Set after reviewing pair results (e.g. "pair_conf_rules")
   analyze_errors: true
   max_retries: 2
@@ -206,6 +206,21 @@ phase4d:
   analyze_errors: true
   max_retries: 2
   prompt_version: "p4dv3"
+
+# ---------------------------------------------------------------------------
+# Phase 7 specific (DSPy automated prompt optimization)
+# ---------------------------------------------------------------------------
+phase7:
+  n_train: 50                    # training examples for DSPy optimization
+  n_dev: 20                      # dev examples for metric during optimization
+  optimizer: "BootstrapFewShot"  # "BootstrapFewShot" | "BootstrapFewShotWithRandomSearch"
+  max_bootstrapped_demos: 3      # max traces bootstrapped as few-shot demos
+  max_labeled_demos: 4           # max labeled examples included in prompt
+  max_rounds: 1                  # BootstrapFewShot max rounds (keep low for Kaggle)
+  seed: 42
+  source_datasets: null          # null = use all train datasets; or list of keys
+  analyze_errors: true
+  max_retries: 2
 
 # ---------------------------------------------------------------------------
 # Phase 2 specific

@@ -12,7 +12,7 @@
 - **Metrics**: CER (Character Error Rate), WER (Word Error Rate)
 - **Model**: Qwen3-4B-Instruct-2507 (primary)
 
-## Experimental Structure (7 Phases)
+## Experimental Structure (8 Phases)
 
 | Phase | Name | Research Question | Comparison |
 |-------|------|-------------------|------------|
@@ -23,9 +23,10 @@
 | **4B** | Few-Shot Learning | Do correction examples help? | vs Phase 2 (**isolated**) |
 | **4C** | CAMeL Validation | Does morphological post-processing help? | vs Phase 2 (**isolated**) |
 | **4D** | Self-Reflective + Word Pairs | Do error patterns + concrete examples help? | vs Phase 2 (**isolated**) |
-| **6** | Combinations + Ablation | What's optimal? What contributes? | Pairs + Full + Ablation |
+| **5** | Combinations + Ablation | What's optimal? What contributes? | Pairs + Full + Ablation |
+| **7** | DSPy Prompt Optimization | Can automated optimization beat hand-crafted prompts? | vs Phase 2 |
 
-**Key Design**: Phases 3-4 (including 4A-4D) are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests meaningful combinations before ablation.
+**Key Design**: Phases 3-4 (including 4A-4D) are **isolated experiments** comparing to Phase 2 baseline. Phase 5 tests meaningful combinations before ablation. Phase 7 uses DSPy to automatically discover optimal prompts.
 
 **Phase 4D pipeline**: `analyze-train` auto-generates both `insights/*.json` (error-type fix/intro rates) and `word_error_pairs.txt` (concrete OCR→GT word samples). Export mode uses both signals.
 
@@ -33,18 +34,18 @@
 
 | Source | Location | Used In |
 |--------|----------|---------|
-| Confusion Matrix | Generated in Phase 1 | Phase 3, 6 |
-| Arabic Rules | `./data/rules/` | Phase 4A, 6 |
-| QALB Corpus | `./data/QALB-*/` | Phase 4B, 6 |
-| CAMeL Tools | `pip install camel-tools` | Phase 1, 4C, 6 |
-| Phase 4D outputs | `results/phase4d/insights/` + `word_error_pairs.txt` | Phase 4D, 6 |
+| Confusion Matrix | Generated in Phase 1 | Phase 3, 5 |
+| Arabic Rules | `./data/rules/` | Phase 4A, 5 |
+| QALB Corpus | `./data/QALB-*/` | Phase 4B, 5 |
+| CAMeL Tools | `pip install camel-tools` | Phase 1, 4C, 5 |
+| Phase 4D outputs | `results/phase4d/insights/` + `word_error_pairs.txt` | Phase 4D, 5 |
 
 ### CAMeL Tools (Morphological Analysis)
 
 [CAMeL Tools](https://github.com/CAMeL-Lab/camel_tools) provides Arabic NLP utilities:
 - **Morphological Analyzer**: Validate word existence, extract root/pattern
 - **Disambiguator**: Context-aware analysis
-- **Use Cases**: Error categorization (Phase 1), **Isolated validation test (Phase 4C)**, Combined system (Phase 6)
+- **Use Cases**: Error categorization (Phase 1), **Isolated validation test (Phase 4C)**, Combined system (Phase 5)
 
 ## Project Structure
 
@@ -55,7 +56,7 @@ Arabic-Post-OCR-Correction/
 │   ├── linguistic/     # CAMeL Tools wrappers (MorphAnalyzer, WordValidator)
 │   ├── core/           # LLMCorrector, PromptBuilder
 │   └── analysis/       # Metrics, ErrorAnalyzer, StatsTester, Visualizer
-├── pipelines/          # run_phase1.py ... run_phase6.py, run_phase4d.py
+├── pipelines/          # run_phase1.py ... run_phase5.py, run_phase4d.py, run_phase7.py
 ├── configs/            # config.yaml
 ├── results/            # Phase outputs (gitignored)
 ├── docs/               # Architecture.md, Guidelines.md
@@ -125,4 +126,5 @@ See `docs/Guidelines.md` for full standards.
 - [x] Phase 4B: Few-Shot (QALB)
 - [x] Phase 4C: CAMeL Validation (isolated)
 - [x] Phase 4D: Self-Reflective + Word Pairs (isolated; fused from 4D+4E)
-- [x] Phase 6: Combinations + Ablation
+- [x] Phase 5: Combinations + Ablation (was Phase 6)
+- [x] Phase 7: DSPy Prompt Optimization

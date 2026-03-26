@@ -1,4 +1,4 @@
-"""Statistical tests for comparing OCR correction systems (Phase 6).
+"""Statistical tests for comparing OCR correction systems (Phase 5).
 
 Provides paired t-tests, Cohen's d effect sizes, Bonferroni correction,
 and bootstrap confidence intervals for CER/WER comparisons.

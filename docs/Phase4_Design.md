@@ -34,9 +34,9 @@ Phase 4 tests three independent ways to inject **Arabic linguistic knowledge** i
 
 ### 1.4 Downstream Use
 
-- **Phase 6**: 4A, 4B, 4C results feed into combination experiments
+- **Phase 5**: 4A, 4B, 4C results feed into combination experiments
 - **Paper**: Rows "4A: +Rules", "4B: +Few-shot", "4C: +CAMeL Validation" in the main results table
-- **Ablation (Phase 6)**: Each sub-phase's knowledge source is removed one at a time from the full system
+- **Ablation (Phase 5)**: Each sub-phase's knowledge source is removed one at a time from the full system
 
 ---
 

@@ -38,9 +38,9 @@ accuracy over zero-shot prompting?**
 
 ### 1.5 Downstream Use
 
-- **Phase 6**: Uses `metrics.json` as the "confusion matrix" component in combinations/ablation
+- **Phase 5**: Uses `metrics.json` as the "confusion matrix" component in combinations/ablation
 - **Paper**: "Phase 3: + Confusion Matrix" row in the main results table
-- **Phase 6 combinations**: Pair A (Confusion + Rules), Pair B (Confusion + Few-shot), etc.
+- **Phase 5 combinations**: Pair A (Confusion + Rules), Pair B (Confusion + Few-shot), etc.
 
 ### 1.6 Compute Environment
 
@@ -947,8 +947,8 @@ partially contaminated — log a prominent warning in the report.
 
 Convention: **negative delta = improvement** (consistent with Phase 2 convention).
 
-`"significant": null` — populated by Phase 6 statistical tests (t-test, effect size). Left
-null in Phase 3 output since statistical testing is deferred to Phase 6.
+`"significant": null` — populated by Phase 5 statistical tests (t-test, effect size). Left
+null in Phase 3 output since statistical testing is deferred to Phase 5.
 
 ### 10.5 `confusion_impact.json` (per dataset)
 

@@ -1,7 +1,7 @@
 """Tests for src/data/knowledge_base.py
 
-Covers ConfusionMatrixLoader, RulesLoader, QALBLoader, and
-OpenITILoader (static / pure methods only; full corpus load skipped).
+Covers ConfusionMatrixLoader, RulesLoader, QALBLoader,
+LLMInsightsLoader, and WordErrorPairsLoader.
 """
 
 import json
@@ -17,8 +17,6 @@ from src.data.knowledge_base import (
     RulesLoader,
     QALBLoader,
     QALBPair,
-    OpenITILoader,
-    CorpusSentence,
 )
 
 
@@ -367,139 +365,3 @@ class TestQALBLoader:
         assert "اكرم" in text
 
 
-# ===========================================================================
-# OpenITILoader (static methods + save/load corpus)
-# ===========================================================================
-
-
-class TestOpenITILoaderStatics:
-    def test_is_content_line_page_marker(self):
-        assert OpenITILoader._is_content_line("PageV01P001") is False
-
-    def test_is_content_line_section_marker(self):
-        assert OpenITILoader._is_content_line("### Section") is False
-        assert OpenITILoader._is_content_line("##") is False
-        assert OpenITILoader._is_content_line("#") is False
-
-    def test_is_content_line_meta(self):
-        assert OpenITILoader._is_content_line("#META#Header#End#") is False
-
-    def test_is_content_line_arabic_prefix(self):
-        assert OpenITILoader._is_content_line("# كتب العرب في العصر الحديث") is True
-
-    def test_is_content_line_poem_prefix(self):
-        assert OpenITILoader._is_content_line("~~بيت شعر عربي جميل") is True
-
-    def test_is_content_line_bare_arabic(self):
-        # Enough Arabic chars — treated as content
-        assert OpenITILoader._is_content_line("كتب العرب في العصر الحديث") is True
-
-    def test_is_content_line_too_few_arabic(self):
-        assert OpenITILoader._is_content_line("abc") is False
-
-    def test_clean_content_line_removes_prefix(self):
-        cleaned = OpenITILoader._clean_content_line("# كتب العرب في الكتاب")
-        assert not cleaned.startswith("# ")
-        assert "كتب العرب" in cleaned
-
-    def test_clean_content_line_removes_poem_prefix(self):
-        cleaned = OpenITILoader._clean_content_line("~~بيت شعر جميل")
-        assert not cleaned.startswith("~~")
-
-    def test_clean_content_line_removes_page_markers(self):
-        cleaned = OpenITILoader._clean_content_line("# نص PageV01P005 عربي")
-        assert "PageV01P005" not in cleaned
-
-    def test_clean_content_line_normalises_whitespace(self):
-        cleaned = OpenITILoader._clean_content_line("# كلمة   كلمة   كلمة")
-        assert "  " not in cleaned
-
-    def test_clean_content_line_removes_trailing_verse_number(self):
-        cleaned = OpenITILoader._clean_content_line("# بيت شعر جميل 42")
-        assert not cleaned.strip().endswith("42")
-
-
-class TestOpenITILoaderParseFile:
-    def test_parse_file_extracts_content_after_header(self, tmp_path):
-        content = "\n".join([
-            "##METADATA",
-            "#META#Header#End#",
-            "# كتب العرب في العصر الحديث وما تلاه من عصور",
-            "# نص عربي آخر مناسب للاختبار يحتوي على كلمات كثيرة",
-            "",
-        ])
-        p = tmp_path / "test.txt"
-        p.write_text(content, encoding="utf-8")
-        lines = OpenITILoader.parse_file(p)
-        assert len(lines) >= 1
-        assert any("كتب العرب" in line for line in lines)
-
-    def test_parse_file_skips_header(self, tmp_path):
-        content = "\n".join([
-            "##METADATA",
-            "title: some title",
-            "#META#Header#End#",
-            "# النص الفعلي للكتاب العربي يبدأ هنا",
-        ])
-        p = tmp_path / "test.txt"
-        p.write_text(content, encoding="utf-8")
-        lines = OpenITILoader.parse_file(p)
-        assert all("METADATA" not in line for line in lines)
-
-    def test_parse_file_skips_page_markers(self, tmp_path):
-        content = "\n".join([
-            "#META#Header#End#",
-            "PageV01P001",
-            "# نص عربي جيد للاختبار يحتوي على محتوى مفيد",
-        ])
-        p = tmp_path / "test.txt"
-        p.write_text(content, encoding="utf-8")
-        lines = OpenITILoader.parse_file(p)
-        assert all("PageV" not in line for line in lines)
-
-    def test_parse_file_empty_file_returns_empty(self, tmp_path):
-        p = tmp_path / "empty.txt"
-        p.write_text("", encoding="utf-8")
-        lines = OpenITILoader.parse_file(p)
-        assert lines == []
-
-
-class TestOpenITILoaderCorpus:
-    @pytest.fixture
-    def sentences(self) -> list[CorpusSentence]:
-        return [
-            CorpusSentence("جملة عربية صحيحة للاختبار", "uri_1", 400, 25, 0),
-            CorpusSentence("نص عربي آخر للاختبار والتحقق", "uri_2", 500, 28, 1),
-        ]
-
-    def test_save_and_load_corpus_roundtrip(self, tmp_path, sentences):
-        loader = OpenITILoader()
-        p = tmp_path / "corpus.jsonl"
-        loader.save_corpus(sentences, p)
-        loaded = loader.load_corpus(p)
-        assert len(loaded) == len(sentences)
-        assert loaded[0].text == sentences[0].text
-        assert loaded[1].source_uri == sentences[1].source_uri
-
-    def test_load_corpus_missing_file_raises(self, tmp_path):
-        loader = OpenITILoader()
-        with pytest.raises(FileNotFoundError):
-            loader.load_corpus(tmp_path / "missing.jsonl")
-
-    def test_save_creates_parent_dirs(self, tmp_path, sentences):
-        loader = OpenITILoader()
-        p = tmp_path / "subdir" / "corpus.jsonl"
-        loader.save_corpus(sentences, p)
-        assert p.exists()
-
-    def test_load_corpus_skips_malformed_lines(self, tmp_path):
-        loader = OpenITILoader()
-        p = tmp_path / "bad.jsonl"
-        p.write_text(
-            '{"text": "جملة صحيحة"}\n'
-            'bad json line\n'
-            '{"text": "جملة أخرى"}\n',
-            encoding="utf-8",
-        )
-        loaded = loader.load_corpus(p)
-        assert len(loaded) == 2
