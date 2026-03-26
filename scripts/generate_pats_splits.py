@@ -30,8 +30,8 @@ FONTS = [
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate PATS-A01 train/val splits")
-    parser.add_argument("--val-ratio", type=float, default=0.2,
-                        help="Fraction of samples for validation (default: 0.2)")
+    parser.add_argument("--val-ratio", type=float, default=0.15,
+                        help="Fraction of samples for validation (default: 0.15)")
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility (default: 42)")
     parser.add_argument("--ocr-root", type=Path, default=_DEFAULT_OCR_ROOT,
