@@ -446,23 +446,29 @@ def aggregate_metrics(
     save_json(output, results_dir / "baseline_metrics.json")
 
     # Print summary table
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 110)
     print("PHASE 1 SUMMARY -- Qaari OCR Baseline")
-    print("=" * 80)
-    print(f"{'Dataset':<28} {'CER(all)':>10} {'CER(norm)':>10} {'WER(norm)':>10} {'Runaway%':>9} {'N':>6}")
-    print("-" * 80)
+    print("=" * 110)
+    print(
+        f"{'Dataset':<28} {'CER(norm)':>10} {'CER(nd)':>10} {'WER(norm)':>10} {'WER(nd)':>10} "
+        f"{'Runaway%':>9} {'N':>6}"
+    )
+    print("-" * 110)
     for ds in all_results:
-        r_all = all_results[ds]
         r_norm = normal_results.get(ds)
+        r_nd = normal_nd_results.get(ds)
         dq = quality_stats.get(ds, {})
         norm_cer = f"{r_norm.cer*100:.2f}%" if r_norm else "N/A"
+        nd_cer = f"{r_nd.cer*100:.2f}%" if r_nd else "N/A"
         norm_wer = f"{r_norm.wer*100:.2f}%" if r_norm else "N/A"
+        nd_wer = f"{r_nd.wer*100:.2f}%" if r_nd else "N/A"
         runaway_pct = f"{dq.get('runaway_percentage', 0):.1f}%" if dq else "N/A"
+        n = all_results[ds].num_samples
         print(
-            f"{ds:<28} {r_all.cer*100:>9.2f}% {norm_cer:>10} {norm_wer:>10} "
-            f"{runaway_pct:>9} {r_all.num_samples:>6}"
+            f"{ds:<28} {norm_cer:>10} {nd_cer:>10} {norm_wer:>10} {nd_wer:>10} "
+            f"{runaway_pct:>9} {n:>6}"
         )
-    print("=" * 80)
+    print("=" * 110)
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +478,7 @@ def aggregate_metrics(
 
 def generate_report(
     all_results: dict[str, MetricResult],
+    all_nd_results: dict[str, MetricResult],
     results_dir: Path,
 ) -> None:
     """Write a human-readable Markdown report to results_dir/report.md."""
@@ -482,35 +489,51 @@ def generate_report(
     lines.append(f"\nGenerated: {now}")
     lines.append("\n## Summary\n")
     lines.append(
-        "> **Note**: 'Normal CER/WER' excludes samples where Qaari's OCR output is "
-        ">5× longer than GT (runaway repetition bug). Both numbers are reported.\n"
+        "> **Note**: 'Normal' excludes samples where Qaari's OCR output is "
+        ">5x longer than GT (runaway repetition bug). "
+        "'nd' = no-diacritics (diacritical marks stripped before comparison).\n"
     )
-    lines.append("| Dataset | CER (all) | CER (normal) | WER (normal) | Runaway% | Samples |")
-    lines.append("|---------|-----------|--------------|--------------|----------|---------|")
+    lines.append(
+        "| Dataset | CER (normal) | CER (nd) | WER (normal) | WER (nd) | Runaway% | Samples |"
+    )
+    lines.append(
+        "|---------|--------------|----------|--------------|----------|----------|---------|"
+    )
 
     # Load per-dataset quality stats from saved metrics.json files
     for ds, r in all_results.items():
         metrics_path = results_dir / ds / "metrics.json"
-        norm_cer = norm_wer = runaway_pct = "N/A"
+        norm_cer = norm_wer = nd_cer = nd_wer = runaway_pct = "N/A"
         if metrics_path.exists():
             with open(metrics_path, encoding="utf-8") as f:
                 mj = json.load(f)
             nr = mj.get("normal_samples_only", {})
+            nr_nd = mj.get("normal_samples_only_no_diacritics", {})
             dq = mj.get("data_quality", {})
             norm_cer = f"{nr.get('cer', 0)*100:.2f}%" if nr else "N/A"
             norm_wer = f"{nr.get('wer', 0)*100:.2f}%" if nr else "N/A"
+            nd_cer = f"{nr_nd.get('cer', 0)*100:.2f}%" if nr_nd else "N/A"
+            nd_wer = f"{nr_nd.get('wer', 0)*100:.2f}%" if nr_nd else "N/A"
             runaway_pct = f"{dq.get('runaway_percentage', 0):.1f}%" if dq else "N/A"
         lines.append(
-            f"| {ds} | {r.cer*100:.2f}% | {norm_cer} | {norm_wer} | {runaway_pct} | {r.num_samples:,} |"
+            f"| {ds} | {norm_cer} | {nd_cer} | {norm_wer} | {nd_wer} "
+            f"| {runaway_pct} | {r.num_samples:,} |"
         )
 
     lines.append("\n## Metric Details\n")
     for ds, r in all_results.items():
+        r_nd = all_nd_results.get(ds)
         lines.append(f"### {ds}\n")
         lines.append(f"- **CER**: {r.cer*100:.2f}% (std: {r.cer_std*100:.2f}%, "
                      f"median: {r.cer_median*100:.2f}%, p95: {r.cer_p95*100:.2f}%)")
+        if r_nd:
+            lines.append(f"- **CER (no diacritics)**: {r_nd.cer*100:.2f}% (std: {r_nd.cer_std*100:.2f}%, "
+                         f"median: {r_nd.cer_median*100:.2f}%, p95: {r_nd.cer_p95*100:.2f}%)")
         lines.append(f"- **WER**: {r.wer*100:.2f}% (std: {r.wer_std*100:.2f}%, "
                      f"median: {r.wer_median*100:.2f}%, p95: {r.wer_p95*100:.2f}%)")
+        if r_nd:
+            lines.append(f"- **WER (no diacritics)**: {r_nd.wer*100:.2f}% (std: {r_nd.wer_std*100:.2f}%, "
+                         f"median: {r_nd.wer_median*100:.2f}%, p95: {r_nd.wer_p95*100:.2f}%)")
         lines.append(f"- Total GT characters: {r.num_chars_ref:,}")
         lines.append(f"- Total GT words: {r.num_words_ref:,}\n")
 
@@ -593,6 +616,15 @@ def generate_report(
         )
         lines.append(
             f"- Lowest CER: **{best_cer[0]}** at {best_cer[1].cer*100:.2f}%"
+        )
+    if all_nd_results:
+        worst_nd = max(all_nd_results.items(), key=lambda x: x[1].cer)
+        best_nd = min(all_nd_results.items(), key=lambda x: x[1].cer)
+        lines.append(
+            f"- Highest CER (no diacritics): **{worst_nd[0]}** at {worst_nd[1].cer*100:.2f}%"
+        )
+        lines.append(
+            f"- Lowest CER (no diacritics): **{best_nd[0]}** at {best_nd[1].cer*100:.2f}%"
         )
 
     lines.append(
@@ -788,7 +820,7 @@ def main() -> None:
     aggregate_metrics(all_metric_results, normal_metric_results,
                       all_nd_results, normal_nd_results,
                       all_quality_stats, config, results_dir, limit)
-    generate_report(all_metric_results, results_dir)
+    generate_report(all_metric_results, all_nd_results, results_dir)
 
     logger.info("Phase 1 complete. Results in: %s", results_dir)
 

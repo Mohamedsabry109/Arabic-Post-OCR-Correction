@@ -19,19 +19,29 @@ Usage
     # Local — subset / smoke test
     python scripts/infer.py --datasets KHATT-train --limit 50
 
-    # Kaggle (with HF sync for resume across sessions)
+    # Phase 3 with HF sync (auto-derives HF path from --output)
     python scripts/infer.py \\
-        --input  /kaggle/input/your-dataset/inference_input.jsonl \\
-        --output /kaggle/working/corrections.jsonl \\
-        --model  Qwen/Qwen3-4B-Instruct-2507 \\
-        --hf-repo  user/arabic-ocr-corrections \\
+        --input  results/phase3/inference_input.jsonl \\
+        --output results/phase3/corrections.jsonl \\
+        --hf-repo user/arabic-ocr-corrections \\
         --hf-token hf_xxx --sync-every 100
+    # -> syncs to HF as: phase3/corrections.jsonl
 
-    # Colab (output to Drive)
+    # Phase 5 combo (each combo gets its own HF path)
     python scripts/infer.py \\
-        --input  /content/drive/MyDrive/arabic-ocr/inference_input.jsonl \\
-        --output /content/drive/MyDrive/arabic-ocr/corrections.jsonl \\
-        --model  Qwen/Qwen3-4B-Instruct-2507
+        --input  results/phase5/full_prompt/inference_input.jsonl \\
+        --output results/phase5/full_prompt/corrections.jsonl \\
+        --hf-repo user/arabic-ocr-corrections \\
+        --hf-token hf_xxx
+    # -> syncs to HF as: phase5/full_prompt/corrections.jsonl
+
+    # Kaggle with explicit HF path override
+    python scripts/infer.py \\
+        --input  /kaggle/working/inference_input.jsonl \\
+        --output /kaggle/working/corrections.jsonl \\
+        --hf-repo user/arabic-ocr-corrections \\
+        --hf-path phase2/corrections.jsonl \\
+        --hf-token hf_xxx
 """
 
 import argparse
@@ -126,6 +136,14 @@ def parse_args() -> argparse.Namespace:
         "--sync-every", type=int, default=100,
         help="Push to HF every N samples (default: 100).",
     )
+    parser.add_argument(
+        "--hf-path", type=str, default=None,
+        help=(
+            "Override path_in_repo for HF sync. "
+            "Default: auto-derived from --output relative to results/ "
+            "(e.g. results/phase3/corrections.jsonl -> phase3/corrections.jsonl)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -134,18 +152,50 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
-def hf_pull(hf_repo: str, token: str, output_path: Path) -> set[str]:
+def _resolve_hf_path(output_path: Path, hf_path: Optional[str] = None) -> str:
+    """Derive the path_in_repo for HF from the local output path.
+
+    If --hf-path is explicitly provided, use that. Otherwise, derive it
+    from the output path relative to a 'results/' parent directory.
+
+    Examples:
+        results/phase2/corrections.jsonl       -> phase2/corrections.jsonl
+        results/phase3/corrections.jsonl       -> phase3/corrections.jsonl
+        results/phase5/full_prompt/corrections.jsonl -> phase5/full_prompt/corrections.jsonl
+        results/phase7/corrections.jsonl       -> phase7/corrections.jsonl
+
+    This ensures each phase (and each Phase 5 combo) gets its own file
+    in the HF repo, preventing cross-phase overwrites.
+    """
+    if hf_path:
+        return hf_path
+
+    parts = output_path.resolve().parts
+    # Find the 'results' directory in the path and take everything after it
+    for i, part in enumerate(parts):
+        if part == "results" and i + 1 < len(parts):
+            return "/".join(parts[i + 1:])
+
+    # Fallback: use the filename only
+    return output_path.name
+
+
+def hf_pull(
+    hf_repo: str, token: str, output_path: Path,
+    hf_path: Optional[str] = None,
+) -> set[str]:
     """Pull existing corrections from HF and merge into output_path.
 
     Remote records win on sample_id conflicts.
     Returns the set of sample_ids now in the file.
     """
+    path_in_repo = _resolve_hf_path(output_path, hf_path)
     try:
         from huggingface_hub import hf_hub_download
-        logger.info("HF pull: downloading from %s ...", hf_repo)
+        logger.info("HF pull: %s/%s ...", hf_repo, path_in_repo)
         tmp = hf_hub_download(
             repo_id=hf_repo,
-            filename="corrections.jsonl",
+            filename=path_in_repo,
             repo_type="dataset",
             token=token,
         )
@@ -184,24 +234,28 @@ def hf_pull(hf_repo: str, token: str, output_path: Path) -> set[str]:
         for r in merged.values():
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-    logger.info("HF pull complete: %d records in %s", len(merged), output_path)
+    logger.info("HF pull complete: %d records (%s)", len(merged), path_in_repo)
     return set(merged.keys())
 
 
-def hf_push(hf_repo: str, token: str, output_path: Path) -> None:
-    """Push corrections.jsonl to HF dataset repo."""
+def hf_push(
+    hf_repo: str, token: str, output_path: Path,
+    hf_path: Optional[str] = None,
+) -> None:
+    """Push corrections JSONL to HF dataset repo at the correct path."""
     if not output_path.exists():
         return
+    path_in_repo = _resolve_hf_path(output_path, hf_path)
     try:
         from huggingface_hub import HfApi
         HfApi().upload_file(
             path_or_fileobj=str(output_path),
-            path_in_repo="corrections.jsonl",
+            path_in_repo=path_in_repo,
             repo_id=hf_repo,
             repo_type="dataset",
             token=token,
         )
-        logger.info("HF push: uploaded %s to %s", output_path, hf_repo)
+        logger.info("HF push: %s -> %s/%s", output_path.name, hf_repo, path_in_repo)
     except Exception as exc:
         logger.warning("HF push failed: %s", exc)
 
@@ -304,6 +358,10 @@ def main() -> None:
     use_hf = bool(args.hf_repo and token)
     if args.hf_repo and not token:
         logger.warning("--hf-repo provided but no HF token found. HF sync disabled.")
+    if use_hf:
+        hf_remote_path = _resolve_hf_path(args.output, args.hf_path)
+        logger.info("HF sync: %s -> %s/%s (every %d samples)",
+                     args.output.name, args.hf_repo, hf_remote_path, args.sync_every)
 
     # Determine completed sample_ids
     if args.force:
@@ -311,7 +369,7 @@ def main() -> None:
         if args.output.exists():
             args.output.write_text("", encoding="utf-8")  # truncate
     elif use_hf:
-        completed = hf_pull(args.hf_repo, token, args.output)  # type: ignore[arg-type]
+        completed = hf_pull(args.hf_repo, token, args.output, args.hf_path)  # type: ignore[arg-type]
     else:
         completed = _read_completed_ids(args.output)
         if completed:
@@ -505,7 +563,7 @@ def main() -> None:
 
             # Periodic HF push
             if use_hf and (i + 1 - pushed_at) >= args.sync_every:
-                hf_push(args.hf_repo, token, args.output)  # type: ignore[arg-type]
+                hf_push(args.hf_repo, token, args.output, args.hf_path)  # type: ignore[arg-type]
                 pushed_at = i + 1
 
     # Final HF push
