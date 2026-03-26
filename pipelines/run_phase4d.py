@@ -1222,16 +1222,16 @@ def _write_paper_tables(
     results_dir: Path,
 ) -> None:
     """Write a markdown file with ready-to-paste paper tables."""
-    lines: list[str] = [
-        "# Phase 4D Results — Self-Reflective Prompting",
-        "",
-        "## Per-Dataset Metrics",
-        "",
-        "| Dataset | CER (%) | WER (%) | ND CER (%) | ND WER (%) | vs Phase 2 CER | vs Phase 2 WER |",
-        "|---------|---------|---------|------------|------------|----------------|----------------|",
-    ]
-
     nd_data = _load_nd_results(all_corrected, results_dir)
+
+    lines: list[str] = [
+        "# Phase 4D Results -- Self-Reflective Prompting",
+        "",
+        "## Per-Dataset Metrics (With Diacritics)",
+        "",
+        "| Dataset | CER (%) | WER (%) | vs Phase 2 CER | vs Phase 2 WER |",
+        "|---------|---------|---------|----------------|----------------|",
+    ]
 
     for ds_key in sorted(all_corrected.keys()):
         r = all_corrected[ds_key]
@@ -1241,13 +1241,32 @@ def _write_paper_tables(
         wer_rel = delta.get("wer_relative_pct", "N/A")
         cer_rel_str = f"{cer_rel:+.1f}%" if isinstance(cer_rel, (int, float)) else "N/A"
         wer_rel_str = f"{wer_rel:+.1f}%" if isinstance(wer_rel, (int, float)) else "N/A"
-        nd = nd_data.get(ds_key, {})
-        nd_cer_str = f"{nd.get('cer', 0)*100:.2f}" if nd else "N/A"
-        nd_wer_str = f"{nd.get('wer', 0)*100:.2f}" if nd else "N/A"
         lines.append(
             f"| {ds_key} | {r.cer*100:.2f} | {r.wer*100:.2f} "
-            f"| {nd_cer_str} | {nd_wer_str} "
             f"| {cer_rel_str} | {wer_rel_str} |"
+        )
+
+    lines.extend([
+        "",
+        "## Per-Dataset Metrics (No Diacritics)",
+        "",
+        "| Dataset | ND CER (%) | ND WER (%) | vs Phase 2 ND CER | vs Phase 2 ND WER |",
+        "|---------|------------|------------|-------------------|-------------------|",
+    ])
+
+    for ds_key in sorted(all_corrected.keys()):
+        nd = nd_data.get(ds_key, {})
+        cmp = all_comparisons.get(ds_key, {})
+        delta_nd = cmp.get("delta_no_diacritics", {})
+        nd_cer_str = f"{nd.get('cer', 0)*100:.2f}" if nd else "N/A"
+        nd_wer_str = f"{nd.get('wer', 0)*100:.2f}" if nd else "N/A"
+        nd_cer_rel = delta_nd.get("cer_relative_pct", "N/A")
+        nd_wer_rel = delta_nd.get("wer_relative_pct", "N/A")
+        nd_cer_rel_str = f"{nd_cer_rel:+.1f}%" if isinstance(nd_cer_rel, (int, float)) else "N/A"
+        nd_wer_rel_str = f"{nd_wer_rel:+.1f}%" if isinstance(nd_wer_rel, (int, float)) else "N/A"
+        lines.append(
+            f"| {ds_key} | {nd_cer_str} | {nd_wer_str} "
+            f"| {nd_cer_rel_str} | {nd_wer_rel_str} |"
         )
 
     out_path = results_dir / "paper_tables.md"

@@ -1651,13 +1651,22 @@ def _load_combo_avg_metrics(
     cers = [v.get("cer", 0.0) for v in results.values()]
     wers = [v.get("wer", 0.0) for v in results.values()]
 
-    return {
+    # No-diacritics variant
+    nd_results = data.get("results_no_diacritics", {})
+    nd_cers = [v.get("cer", 0.0) for v in nd_results.values()] if nd_results else []
+    nd_wers = [v.get("wer", 0.0) for v in nd_results.values()] if nd_results else []
+
+    out: dict = {
         "avg_cer":     round(sum(cers) / len(cers), 6),
         "avg_wer":     round(sum(wers) / len(wers), 6),
         "n_datasets":  len(results),
         "by_dataset":  {k: {"cer": v.get("cer", 0.0), "wer": v.get("wer", 0.0)}
                         for k, v in results.items()},
     }
+    if nd_cers:
+        out["avg_cer_nd"] = round(sum(nd_cers) / len(nd_cers), 6)
+        out["avg_wer_nd"] = round(sum(nd_wers) / len(nd_wers), 6)
+    return out
 
 
 def _load_isolated_phase_avg_cer(
@@ -1995,23 +2004,53 @@ def run_summarize(
                     pass
         else:
             cer = _load_isolated_phase_avg_cer(ph_dir)
-            # Also get WER
+            # Also get WER and ND variants
             m_path = ph_dir / "metrics.json"
             wer_v = None
+            cer_nd = None
+            wer_nd = None
             if m_path.exists():
                 try:
                     with open(m_path, encoding="utf-8") as f:
                         d = json.load(f)
                     wers = [v.get("wer", 0.0) for v in d.get("results", {}).values()]
                     wer_v = round(sum(wers) / len(wers), 6) if wers else None
+                    # No-diacritics from results_no_diacritics or per-dataset corrected_no_diacritics
+                    nd_block = d.get("results_no_diacritics", {})
+                    if not nd_block:
+                        # Fallback: aggregate corrected_no_diacritics from nested results
+                        nd_block = {}
+                        for ds_key, ds_dir in [(k, ph_dir / k) for k in d.get("results", {})]:
+                            ds_metrics = ds_dir / "metrics.json"
+                            if ds_metrics.exists():
+                                try:
+                                    with open(ds_metrics, encoding="utf-8") as ndf:
+                                        nd_d = json.load(ndf).get("corrected_no_diacritics", {})
+                                    if nd_d:
+                                        nd_block[ds_key] = nd_d
+                                except (json.JSONDecodeError, OSError):
+                                    pass
+                    if nd_block:
+                        nd_cers = [v.get("cer", 0.0) for v in nd_block.values()]
+                        nd_wers = [v.get("wer", 0.0) for v in nd_block.values()]
+                        cer_nd = round(sum(nd_cers) / len(nd_cers), 6) if nd_cers else None
+                        wer_nd = round(sum(nd_wers) / len(nd_wers), 6) if nd_wers else None
                 except (json.JSONDecodeError, OSError):
                     pass
             if cer is not None:
-                final_systems[ph_key] = {"avg_cer": cer, "avg_wer": wer_v}
+                entry = {"avg_cer": cer, "avg_wer": wer_v}
+                if cer_nd is not None:
+                    entry["avg_cer_nd"] = cer_nd
+                    entry["avg_wer_nd"] = wer_nd
+                final_systems[ph_key] = entry
 
     # Add Phase 5 combos
     for cid, m in combo_metrics.items():
-        final_systems[f"phase5_{cid}"] = {"avg_cer": m["avg_cer"], "avg_wer": m["avg_wer"]}
+        entry: dict = {"avg_cer": m["avg_cer"], "avg_wer": m["avg_wer"]}
+        if "avg_cer_nd" in m:
+            entry["avg_cer_nd"] = m["avg_cer_nd"]
+            entry["avg_wer_nd"] = m["avg_wer_nd"]
+        final_systems[f"phase5_{cid}"] = entry
 
     save_json(
         {
@@ -2059,10 +2098,6 @@ def _generate_paper_tables(
     lines.append("# Phase 5: Paper Tables")
     lines.append(f"\nGenerated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
-    lines.append("## Main Results Table")
-    lines.append("")
-    lines.append("| System | Avg CER | Avg WER |")
-    lines.append("|--------|---------|---------|")
 
     # Order: phase1 -> phase2 -> phases 3-4 -> phase5 combos
     system_order = [
@@ -2077,15 +2112,40 @@ def _generate_paper_tables(
     for cid in INFERENCE_COMBOS + sorted(CAMEL_COMBOS):
         system_order.append((f"phase5_{cid}", f"Phase 5: {COMBO_DESCRIPTIONS.get(cid, cid)}"))
 
+    # Table 1: With Diacritics
+    lines.append("## Main Results Table (With Diacritics)")
+    lines.append("")
+    lines.append("| System | Avg CER | Avg WER |")
+    lines.append("|--------|---------|---------|")
+
     for key, label in system_order:
         if key not in final_systems:
             continue
         s = final_systems[key]
-        cer_s = f"{s['avg_cer']*100:.2f}%" if s.get("avg_cer") is not None else "—"
-        wer_s = f"{s['avg_wer']*100:.2f}%" if s.get("avg_wer") is not None else "—"
+        cer_s = f"{s['avg_cer']*100:.2f}%" if s.get("avg_cer") is not None else "--"
+        wer_s = f"{s['avg_wer']*100:.2f}%" if s.get("avg_wer") is not None else "--"
         lines.append(f"| {label} | {cer_s} | {wer_s} |")
 
     lines.append("")
+
+    # Table 2: No Diacritics
+    has_nd = any(s.get("avg_cer_nd") is not None for s in final_systems.values())
+    if has_nd:
+        lines.append("## Main Results Table (No Diacritics)")
+        lines.append("")
+        lines.append("| System | Avg CER (ND) | Avg WER (ND) |")
+        lines.append("|--------|--------------|--------------|")
+
+        for key, label in system_order:
+            if key not in final_systems:
+                continue
+            s = final_systems[key]
+            cer_nd = f"{s['avg_cer_nd']*100:.2f}%" if s.get("avg_cer_nd") is not None else "--"
+            wer_nd = f"{s['avg_wer_nd']*100:.2f}%" if s.get("avg_wer_nd") is not None else "--"
+            lines.append(f"| {label} | {cer_nd} | {wer_nd} |")
+
+        lines.append("")
+
     lines.append("> avg_cer / avg_wer = macro-average across all evaluated datasets.")
     lines.append("")
 

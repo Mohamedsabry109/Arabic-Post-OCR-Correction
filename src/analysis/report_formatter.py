@@ -134,6 +134,7 @@ class _SampleResult:
     ocr_text: str
     corrected_text: str
     gt_text: str
+    # Primary metrics (diacritics stripped — used for ranking & categorisation)
     cer_ocr: float
     wer_ocr: float
     cer_llm: float
@@ -141,6 +142,11 @@ class _SampleResult:
     cer_delta: float   # positive = improvement
     outcome: str       # "improved" | "regressed" | "unchanged"
     category: str
+    # Raw metrics (with diacritics — for dual reporting)
+    cer_ocr_raw: float = 0.0
+    wer_ocr_raw: float = 0.0
+    cer_llm_raw: float = 0.0
+    wer_llm_raw: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -187,11 +193,18 @@ def _compute_results(records: list[dict]) -> list[_SampleResult]:
         if not gt:
             continue
 
+        # Primary metrics: diacritics stripped (used for ranking/categorisation)
         cer_ocr = calculate_cer(gt, ocr, strip_diacritics=True)
         wer_ocr = calculate_wer(gt, ocr, strip_diacritics=True)
         cer_llm = calculate_cer(gt, corrected, strip_diacritics=True)
         wer_llm = calculate_wer(gt, corrected, strip_diacritics=True)
         cer_delta = cer_ocr - cer_llm
+
+        # Raw metrics: with diacritics (for dual reporting)
+        cer_ocr_raw = calculate_cer(gt, ocr, strip_diacritics=False)
+        wer_ocr_raw = calculate_wer(gt, ocr, strip_diacritics=False)
+        cer_llm_raw = calculate_cer(gt, corrected, strip_diacritics=False)
+        wer_llm_raw = calculate_wer(gt, corrected, strip_diacritics=False)
 
         if cer_delta > 1e-6:
             outcome = "improved"
@@ -215,12 +228,16 @@ def _compute_results(records: list[dict]) -> list[_SampleResult]:
             cer_delta=cer_delta,
             outcome=outcome,
             category=category,
+            cer_ocr_raw=cer_ocr_raw,
+            wer_ocr_raw=wer_ocr_raw,
+            cer_llm_raw=cer_llm_raw,
+            wer_llm_raw=wer_llm_raw,
         ))
     return results
 
 
 def _fmt_sample(sr: _SampleResult, index: int) -> str:
-    """Format one sample as a multi-line block."""
+    """Format one sample as a multi-line block with dual metrics."""
     if sr.outcome == "improved":
         delta_str = f"+{sr.cer_delta * 100:.1f}pp better"
         tag = "IMPROVED"
@@ -236,16 +253,21 @@ def _fmt_sample(sr: _SampleResult, index: int) -> str:
         f"dataset={sr.dataset}  "
         f"{tag}  category={sr.category}"
     )
-    metrics = (
-        f"      CER: {sr.cer_ocr * 100:5.1f}%  ->  {sr.cer_llm * 100:5.1f}%  "
+    metrics_stripped = (
+        f"      CER (no diac): {sr.cer_ocr * 100:5.1f}%  ->  {sr.cer_llm * 100:5.1f}%  "
         f"({delta_str})   "
         f"WER: {sr.wer_ocr * 100:5.1f}%  ->  {sr.wer_llm * 100:5.1f}%"
+    )
+    metrics_raw = (
+        f"      CER (raw)    : {sr.cer_ocr_raw * 100:5.1f}%  ->  {sr.cer_llm_raw * 100:5.1f}%  "
+        f"               "
+        f"WER: {sr.wer_ocr_raw * 100:5.1f}%  ->  {sr.wer_llm_raw * 100:5.1f}%"
     )
     ocr_line  = f"      OCR: {_truncate(sr.ocr_text)}"
     llm_line  = f"      LLM: {_truncate(sr.corrected_text)}"
     gt_line   = f"       GT: {_truncate(sr.gt_text)}"
 
-    return "\n".join([header, metrics, ocr_line, llm_line, gt_line])
+    return "\n".join([header, metrics_stripped, metrics_raw, ocr_line, llm_line, gt_line])
 
 
 # ---------------------------------------------------------------------------
@@ -296,11 +318,21 @@ def build_report(
     for r in results:
         d = ds_data.setdefault(r.dataset, {
             "improved": 0, "regressed": 0, "unchanged": 0,
-            "cer_ocr_sum": 0.0, "cer_llm_sum": 0.0, "n": 0,
+            "cer_ocr_sum": 0.0, "cer_llm_sum": 0.0,
+            "wer_ocr_sum": 0.0, "wer_llm_sum": 0.0,
+            "cer_ocr_raw_sum": 0.0, "cer_llm_raw_sum": 0.0,
+            "wer_ocr_raw_sum": 0.0, "wer_llm_raw_sum": 0.0,
+            "n": 0,
         })
         d[r.outcome] += 1
         d["cer_ocr_sum"] += r.cer_ocr
         d["cer_llm_sum"] += r.cer_llm
+        d["wer_ocr_sum"] += r.wer_ocr
+        d["wer_llm_sum"] += r.wer_llm
+        d["cer_ocr_raw_sum"] += r.cer_ocr_raw
+        d["cer_llm_raw_sum"] += r.cer_llm_raw
+        d["wer_ocr_raw_sum"] += r.wer_ocr_raw
+        d["wer_llm_raw_sum"] += r.wer_llm_raw
         d["n"] += 1
 
     W = 88
@@ -319,21 +351,40 @@ def build_report(
     ]
 
     # ------------------------------------------------------------------
-    # Overall summary
+    # Overall summary (dual metrics)
     # ------------------------------------------------------------------
     avg_cer_ocr = sum(r.cer_ocr for r in results) / n
     avg_cer_llm = sum(r.cer_llm for r in results) / n
+    avg_wer_ocr = sum(r.wer_ocr for r in results) / n
+    avg_wer_llm = sum(r.wer_llm for r in results) / n
     net = avg_cer_ocr - avg_cer_llm
     net_dir = "better" if net > 0 else "worse"
+
+    avg_cer_ocr_raw = sum(r.cer_ocr_raw for r in results) / n
+    avg_cer_llm_raw = sum(r.cer_llm_raw for r in results) / n
+    avg_wer_ocr_raw = sum(r.wer_ocr_raw for r in results) / n
+    avg_wer_llm_raw = sum(r.wer_llm_raw for r in results) / n
+    net_raw = avg_cer_ocr_raw - avg_cer_llm_raw
+    net_raw_dir = "better" if net_raw > 0 else "worse"
+
     lines += [
         "OVERALL",
         THIN,
-        f"  Samples   : {n}",
-        f"  Avg CER   : {avg_cer_ocr * 100:.2f}%  ->  {avg_cer_llm * 100:.2f}%  "
+        f"  Samples       : {n}",
+        "",
+        f"  -- Diacritics stripped (primary) --",
+        f"  Avg CER       : {avg_cer_ocr * 100:.2f}%  ->  {avg_cer_llm * 100:.2f}%  "
         f"({net_dir} by {abs(net) * 100:.2f}pp)",
-        f"  Improved  : {len(improved):>4}  ({len(improved) / n * 100:.1f}%)",
-        f"  Regressed : {len(regressed):>4}  ({len(regressed) / n * 100:.1f}%)",
-        f"  Unchanged : {len(unchanged):>4}  ({len(unchanged) / n * 100:.1f}%)",
+        f"  Avg WER       : {avg_wer_ocr * 100:.2f}%  ->  {avg_wer_llm * 100:.2f}%",
+        "",
+        f"  -- Raw (with diacritics) --",
+        f"  Avg CER       : {avg_cer_ocr_raw * 100:.2f}%  ->  {avg_cer_llm_raw * 100:.2f}%  "
+        f"({net_raw_dir} by {abs(net_raw) * 100:.2f}pp)",
+        f"  Avg WER       : {avg_wer_ocr_raw * 100:.2f}%  ->  {avg_wer_llm_raw * 100:.2f}%",
+        "",
+        f"  Improved      : {len(improved):>4}  ({len(improved) / n * 100:.1f}%)",
+        f"  Regressed     : {len(regressed):>4}  ({len(regressed) / n * 100:.1f}%)",
+        f"  Unchanged     : {len(unchanged):>4}  ({len(unchanged) / n * 100:.1f}%)",
         "",
     ]
 
@@ -341,21 +392,42 @@ def build_report(
     # Dataset summary table
     # ------------------------------------------------------------------
     lines += [
-        "DATASET SUMMARY",
+        "DATASET SUMMARY (diacritics stripped)",
         THIN,
-        f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} "
+        f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} {'OCR WER':>8} {'LLM WER':>8} "
         f"{'Improved':>9} {'Regressed':>10} {'Unchanged':>9}",
         THIN,
     ]
     for ds, d in sorted(ds_data.items()):
         dn = d["n"]
-        avg_o = d["cer_ocr_sum"] / dn
-        avg_l = d["cer_llm_sum"] / dn
+        avg_cer_o = d["cer_ocr_sum"] / dn
+        avg_cer_l = d["cer_llm_sum"] / dn
+        avg_wer_o = d["wer_ocr_sum"] / dn
+        avg_wer_l = d["wer_llm_sum"] / dn
         lines.append(
-            f"  {ds:<34} {avg_o * 100:>7.1f}%  {avg_l * 100:>7.1f}%"
+            f"  {ds:<34} {avg_cer_o * 100:>7.1f}%  {avg_cer_l * 100:>7.1f}%"
+            f"  {avg_wer_o * 100:>7.1f}%  {avg_wer_l * 100:>7.1f}%"
             f"  {d['improved']:>4} ({d['improved'] / dn * 100:>3.0f}%)"
             f"  {d['regressed']:>4} ({d['regressed'] / dn * 100:>3.0f}%)"
             f"  {d['unchanged']:>4}"
+        )
+    lines += [THIN, ""]
+
+    lines += [
+        "DATASET SUMMARY (raw / with diacritics)",
+        THIN,
+        f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} {'OCR WER':>8} {'LLM WER':>8}",
+        THIN,
+    ]
+    for ds, d in sorted(ds_data.items()):
+        dn = d["n"]
+        avg_cer_o = d["cer_ocr_raw_sum"] / dn
+        avg_cer_l = d["cer_llm_raw_sum"] / dn
+        avg_wer_o = d["wer_ocr_raw_sum"] / dn
+        avg_wer_l = d["wer_llm_raw_sum"] / dn
+        lines.append(
+            f"  {ds:<34} {avg_cer_o * 100:>7.1f}%  {avg_cer_l * 100:>7.1f}%"
+            f"  {avg_wer_o * 100:>7.1f}%  {avg_wer_l * 100:>7.1f}%"
         )
     lines += [THIN, ""]
 
@@ -466,11 +538,20 @@ def write_corrections_report(
     n_unc = n - n_imp - n_reg
     cat_counts: Counter[str] = Counter(r.category for r in results)
 
+    avg_cer_s = sum(r.cer_llm for r in results) / n
+    avg_cer_r = sum(r.cer_llm_raw for r in results) / n
+    avg_wer_s = sum(r.wer_llm for r in results) / n
+    avg_wer_r = sum(r.wer_llm_raw for r in results) / n
+
     print()
     print("  Sample report saved:", output_path)
     print(f"  Improved={n_imp} ({n_imp/n*100:.1f}%)  "
           f"Regressed={n_reg} ({n_reg/n*100:.1f}%)  "
           f"Unchanged={n_unc} ({n_unc/n*100:.1f}%)")
+    print(f"  LLM CER (no diac): {avg_cer_s*100:.2f}%  "
+          f"WER: {avg_wer_s*100:.2f}%")
+    print(f"  LLM CER (raw)    : {avg_cer_r*100:.2f}%  "
+          f"WER: {avg_wer_r*100:.2f}%")
     print("  Categories:")
     for cat in CATEGORY_ORDER:
         count = cat_counts.get(cat, 0)

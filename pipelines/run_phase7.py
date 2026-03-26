@@ -502,16 +502,15 @@ def _write_paper_tables(
     comparisons: dict[str, dict],
     strip_diac: bool,
 ) -> None:
-    """Generate paper_tables.md with Phase 7 results."""
+    """Generate paper_tables.md with Phase 7 results (both metric variants)."""
     lines = [
         "# Phase 7: DSPy Automated Prompt Optimization -- Results",
         "",
-        "## CER/WER Comparison vs Phase 2 (Zero-Shot Baseline)",
+        "## CER/WER Comparison vs Phase 2 (With Diacritics)",
         "",
         "| Dataset | Phase 2 CER | Phase 7 CER | Delta | Improved? |",
         "|---------|-------------|-------------|-------|-----------|",
     ]
-    metric_key = "corrected_no_diacritics" if strip_diac else "corrected"
 
     for ds_key, comp in sorted(comparisons.items()):
         improved = "Yes" if comp["improved"] else "No"
@@ -520,16 +519,31 @@ def _write_paper_tables(
             f"| {comp['delta_cer']:+.4f} | {improved} |"
         )
 
-    lines.extend(["", "## Full Metrics", ""])
+    # Full metrics — WITH DIACRITICS
+    lines.extend(["", "## Full Metrics (With Diacritics)", ""])
     lines.append("| Dataset | CER | WER | CER_std | N |")
     lines.append("|---------|-----|-----|---------|---|")
 
     for ds_key, m in sorted(all_metrics.items()):
-        md = m.get(metric_key, {})
+        md = m.get("corrected", {})
         lines.append(
             f"| {ds_key} | {md.get('cer', 0):.4f} | {md.get('wer', 0):.4f} "
             f"| {md.get('cer_std', 0):.4f} | {md.get('num_samples', 0)} |"
         )
+
+    # Full metrics — NO DIACRITICS
+    has_nd = any(m.get("corrected_no_diacritics") for m in all_metrics.values())
+    if has_nd:
+        lines.extend(["", "## Full Metrics (No Diacritics)", ""])
+        lines.append("| Dataset | CER | WER | CER_std | N |")
+        lines.append("|---------|-----|-----|---------|---|")
+
+        for ds_key, m in sorted(all_metrics.items()):
+            md = m.get("corrected_no_diacritics", {})
+            lines.append(
+                f"| {ds_key} | {md.get('cer', 0):.4f} | {md.get('wer', 0):.4f} "
+                f"| {md.get('cer_std', 0):.4f} | {md.get('num_samples', 0)} |"
+            )
 
     with open(results_dir / "paper_tables.md", "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")

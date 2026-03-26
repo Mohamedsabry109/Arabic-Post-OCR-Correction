@@ -1705,10 +1705,13 @@ def generate_report(
     lines.append(f"Model: {model_name}")
     lines.append("")
 
-    # Comparison table vs Phase 2
+    nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
+
+    # Comparison table vs Phase 2 — WITH DIACRITICS
     lines.append("## Results vs Phase 2 (Zero-Shot Baseline)\n")
     lines.append("> Isolated comparison. This phase vs Phase 2 only.\n")
     if all_comparisons:
+        lines.append("### With Diacritics\n")
         lines.append(
             "| Dataset | Phase 2 CER | This CER | Delta CER | "
             "Phase 2 WER | This WER | Delta WER |"
@@ -1730,12 +1733,38 @@ def generate_report(
                 f"| {p4.get('wer', 0)*100:.2f}% "
                 f"| {d.get('wer_relative_pct', 0):+.1f}% |"
             )
+        lines.append("")
+
+        # Comparison table — NO DIACRITICS
+        lines.append("### No Diacritics\n")
+        lines.append(
+            "| Dataset | Phase 2 CER | This CER | Delta CER | "
+            "Phase 2 WER | This WER | Delta WER |"
+        )
+        lines.append(
+            "|---------|-------------|----------|-----------|"
+            "-------------|----------|-----------|"
+        )
+        for ds, cmp in all_comparisons.items():
+            p2_nd = cmp.get("phase2_baseline_no_diacritics", {})
+            p4_nd = cmp.get(f"{phase_label}_corrected_no_diacritics", {})
+            d_nd  = cmp.get("delta_no_diacritics", {})
+            lines.append(
+                f"| {ds} "
+                f"| {p2_nd.get('cer', 0)*100:.2f}% "
+                f"| {p4_nd.get('cer', 0)*100:.2f}% "
+                f"| {d_nd.get('cer_relative_pct', 0):+.1f}% "
+                f"| {p2_nd.get('wer', 0)*100:.2f}% "
+                f"| {p4_nd.get('wer', 0)*100:.2f}% "
+                f"| {d_nd.get('wer_relative_pct', 0):+.1f}% |"
+            )
     else:
         lines.append("*Phase 2 baseline not available -- run Phase 2 first.*")
     lines.append("")
 
-    # Absolute metrics
+    # Absolute metrics — WITH DIACRITICS
     lines.append("## Post-Correction Metrics\n")
+    lines.append("### With Diacritics\n")
     lines.append(
         "| Dataset | CER | WER | CER Median | WER Median | CER p95 | Samples |"
     )
@@ -1751,6 +1780,18 @@ def generate_report(
             f"| {r.num_samples:,} |"
         )
     lines.append("")
+
+    # Absolute metrics — NO DIACRITICS
+    if nd_results:
+        lines.append("### No Diacritics\n")
+        lines.append("| Dataset | CER | WER |")
+        lines.append("|---------|-----|-----|")
+        for ds in all_corrected:
+            nd = nd_results.get(ds, {})
+            nd_cer = f"{nd.get('cer', 0)*100:.2f}%" if nd else "N/A"
+            nd_wer = f"{nd.get('wer', 0)*100:.2f}%" if nd else "N/A"
+            lines.append(f"| {ds} | {nd_cer} | {nd_wer} |")
+        lines.append("")
 
     # Error change summary (4A / 4B only — 4C does not have error_changes.json)
     any_ec = False

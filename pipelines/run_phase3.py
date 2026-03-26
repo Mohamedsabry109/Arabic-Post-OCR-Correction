@@ -1334,10 +1334,13 @@ def generate_report(
     lines.append(f"Prompt: OCR-Aware (p3v1) — Top-{top_n} confusions, {format_style} format")
     lines.append("")
 
-    # Comparison table vs Phase 2
+    nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
+
+    # Comparison table vs Phase 2 — WITH DIACRITICS
     lines.append("## Results vs Phase 2 (Zero-Shot Baseline)\n")
     lines.append("> Isolated comparison. Phase 3 vs Phase 2 only.\n")
     if all_comparisons:
+        lines.append("### With Diacritics\n")
         lines.append(
             "| Dataset | Phase 2 CER | Phase 3 CER | Delta CER | "
             "Phase 2 WER | Phase 3 WER | Delta WER |"
@@ -1359,12 +1362,38 @@ def generate_report(
                 f"| {p3.get('wer', 0)*100:.2f}% "
                 f"| {d.get('wer_relative_pct', 0):+.1f}% |"
             )
+        lines.append("")
+
+        # Comparison table — NO DIACRITICS
+        lines.append("### No Diacritics\n")
+        lines.append(
+            "| Dataset | Phase 2 CER | Phase 3 CER | Delta CER | "
+            "Phase 2 WER | Phase 3 WER | Delta WER |"
+        )
+        lines.append(
+            "|---------|-------------|-------------|-----------|"
+            "-------------|-------------|-----------|"
+        )
+        for ds, cmp in all_comparisons.items():
+            p2_nd = cmp.get("phase2_baseline_no_diacritics", {})
+            p3_nd = cmp.get("phase3_corrected_no_diacritics", {})
+            d_nd  = cmp.get("delta_no_diacritics", {})
+            lines.append(
+                f"| {ds} "
+                f"| {p2_nd.get('cer', 0)*100:.2f}% "
+                f"| {p3_nd.get('cer', 0)*100:.2f}% "
+                f"| {d_nd.get('cer_relative_pct', 0):+.1f}% "
+                f"| {p2_nd.get('wer', 0)*100:.2f}% "
+                f"| {p3_nd.get('wer', 0)*100:.2f}% "
+                f"| {d_nd.get('wer_relative_pct', 0):+.1f}% |"
+            )
     else:
-        lines.append("*Phase 2 baseline not available — run Phase 2 first.*")
+        lines.append("*Phase 2 baseline not available -- run Phase 2 first.*")
     lines.append("")
 
-    # Phase 3 absolute metrics
+    # Phase 3 absolute metrics — WITH DIACRITICS
     lines.append("## Phase 3 Post-Correction Metrics\n")
+    lines.append("### With Diacritics\n")
     lines.append(
         "| Dataset | CER | WER | CER Median | WER Median | CER p95 | Samples |"
     )
@@ -1380,6 +1409,18 @@ def generate_report(
             f"| {r.num_samples:,} |"
         )
     lines.append("")
+
+    # Phase 3 absolute metrics — NO DIACRITICS
+    if nd_results:
+        lines.append("### No Diacritics\n")
+        lines.append("| Dataset | CER | WER |")
+        lines.append("|---------|-----|-----|")
+        for ds in all_corrected:
+            nd = nd_results.get(ds, {})
+            nd_cer = f"{nd.get('cer', 0)*100:.2f}%" if nd else "N/A"
+            nd_wer = f"{nd.get('wer', 0)*100:.2f}%" if nd else "N/A"
+            lines.append(f"| {ds} | {nd_cer} | {nd_wer} |")
+        lines.append("")
 
     # Confusion impact summary (load from saved files)
     lines.append("## Confusion Impact per Injected Pair\n")
