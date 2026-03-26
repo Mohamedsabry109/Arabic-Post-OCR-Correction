@@ -211,7 +211,7 @@ __marimo__/
 
 # Results directory (generated output)
 results/
-results_/
+results_*/
 
 # Data directory (user-specific data)
 data/
