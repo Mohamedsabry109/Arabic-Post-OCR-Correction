@@ -161,9 +161,13 @@ All experiments use two complementary Arabic OCR benchmarks.
 \textbf{PATS-A01}~\cite{pats} is a typewritten Arabic dataset covering eight
 font families: Akhbar, Andalus, Arial, Naskh, Simplified, Tahoma, Thuluth,
 and Traditional. Each font subset contains synthetic document images with
-known ground-truth text. We use an 80/20 train/validation split per font
-(seed=42), yielding 553 validation samples per font. Training splits are used
-for self-reflective analysis (Phase~4D); validation splits are used for all
+known ground-truth text rendered in a different typeface. We use an 85/15
+train/validation split (seed=42), yielding 415 validation samples per font
+from a shared pool of 2{,}766 text lines. Crucially, the split is
+\textit{aligned} across fonts: every font's validation set contains the same
+text content, so that differences in CER across fonts can be attributed
+solely to the typeface, not the text. Training splits are used for
+self-reflective analysis (Phase~4D); validation splits are used for all
 reported metrics.
 
 \textbf{KHATT}~\cite{khatt} is a handwritten Arabic dataset with real-world
@@ -183,14 +187,14 @@ rendered in different typefaces. KHATT is a separate handwritten corpus.}
 \toprule
 \textbf{Dataset} & \textbf{Type} & \textbf{Val. samples} \\
 \midrule
-PATS-A01-Akhbar       & Typewritten & 553 \\
-PATS-A01-Andalus      & Typewritten & 553 \\
-PATS-A01-Arial        & Typewritten & 553 \\
-PATS-A01-Naskh        & Typewritten & 553 \\
-PATS-A01-Simplified   & Typewritten & 553 \\
-PATS-A01-Tahoma       & Typewritten & 553 \\
-PATS-A01-Thuluth      & Typewritten & 553 \\
-PATS-A01-Traditional  & Typewritten & 553 \\
+PATS-A01-Akhbar       & Typewritten & 415 \\
+PATS-A01-Andalus      & Typewritten & 415 \\
+PATS-A01-Arial        & Typewritten & 415 \\
+PATS-A01-Naskh        & Typewritten & 415 \\
+PATS-A01-Simplified   & Typewritten & 415 \\
+PATS-A01-Tahoma       & Typewritten & 415 \\
+PATS-A01-Thuluth      & Typewritten & 415 \\
+PATS-A01-Traditional  & Typewritten & 415 \\
 KHATT-validation      & Handwritten & \tbd \\
 \bottomrule
 \end{tabular}
@@ -389,7 +393,9 @@ KHATT-validation      & \tbd & \tbd \\
 \end{center}
 \end{table}
 
-%% NOTES FOR FILLING IN: Training-split results suggest the following ordering
+%% NOTES FOR FILLING IN: Numbers below are from OLD training-split runs with
+%% MISALIGNED per-font splits. Re-run with aligned splits before using.
+%% Training-split results suggest the following ordering
 %% (CER, no diacritics): Akhbar (~4.4%), Simplified (~7.8%), Thuluth (~11.9%),
 %% Traditional (~14.0%), Arial (~14.1%), Andalus (~14.6%), Tahoma (~20.1%),
 %% Naskh (~23.7%), KHATT (~44.3%). Validation results may differ.
@@ -438,7 +444,8 @@ KHATT-val         & \tbd & \tbd & \tbd \\
 \end{center}
 \end{table}
 
-%% NOTES FOR FILLING IN: Training-split results show strong font dependence:
+%% NOTES FOR FILLING IN: (OLD misaligned splits — indicative only, re-run needed)
+%% Training-split results show strong font dependence:
 %% Traditional: 14.0% -> 2.5% (82% improvement — dramatic)
 %% Naskh: 23.7% -> 20.9% (12% improvement)
 %% Thuluth: 11.9% -> 11.1% (7% improvement)
@@ -472,8 +479,9 @@ separately.
 
 \begin{table}[t]
 \caption{Isolated augmentation strategies vs.\ Phase 2 zero-shot baseline.
-CER is reported as macro-average across PATS-A01 fonts and separately for
-KHATT (diacritics stripped). Best LLM result per column in \textbf{bold}.}
+PATS-A01 CER is the unweighted mean across all eight fonts (each font
+contributes equally). KHATT is reported separately. Diacritics stripped.
+Best LLM result per column in \textbf{bold}.}
 \label{tab:isolated}
 \begin{center}
 \small
