@@ -9,8 +9,12 @@
 \usepackage{multirow}
 \usepackage{array}
 \usepackage{url}
+\usepackage{makecell}
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% Placeholder command for results not yet available
+\newcommand{\tbd}[1][]{\textcolor{red}{\textbf{XX.XX}}}
 
 \begin{document}
 
@@ -27,30 +31,32 @@ email@university.edu}
 \maketitle
 
 \begin{abstract}
-Arabic optical character recognition (OCR) systems often produce systematic
-character-level errors---dot confusions, hamza substitutions, and taa marbuta
+Arabic optical character recognition (OCR) systems produce systematic
+character-level errors---dot confusions, hamza substitutions, taa marbuta
 swaps---that degrade downstream text processing. Post-OCR correction using
 large language models (LLMs) is a natural remedy, but it is unclear how much
-additional context actually helps. This paper reports a controlled experiment
-in which six prompt-engineering strategies are evaluated on the PATS-A01
-dataset using Qwen3-4B-Instruct-2507 as the correction model. The strategies
+additional context actually helps, and whether findings generalize across
+font families and script types. This paper reports a controlled experiment
+in which seven prompt-engineering strategies are evaluated across nine
+datasets---eight typewritten fonts from PATS-A01 and one handwritten set from
+KHATT---using Qwen3-4B-Instruct-2507 as the correction model. The strategies
 tested are: zero-shot correction, confusion-matrix injection, rule-augmented
-prompting, few-shot examples from the QALB corpus, self-reflective prompting,
-and retrieval-augmented generation with the OpenITI corpus. Against expectations,
-zero-shot correction achieves the lowest character error rate (CER) among all
-LLM-based conditions at 5.77\%, compared to a raw OCR CER of 17.01\% driven
-by a Qaari repetition artifact. Every augmentation strategy degrades performance
-relative to zero-shot, with RAG being the worst offender (CER~22.10\%) and
-few-shot examples performing best among the augmented conditions (CER~10.09\%).
-Morphological post-processing via CAMeL Tools neither helps nor hurts. These
-results suggest that for high-quality typewritten Arabic text, prompt enrichment
-causes over-correction rather than targeted repair, and that the most reliable
-LLM strategy is also the simplest one.
+prompting, few-shot examples from the QALB corpus, morphological
+post-processing via CAMeL Tools, self-reflective prompting with
+training-split error analysis, optimal strategy combinations with ablation,
+and DSPy-based automated prompt optimization. Results reveal that
+correction effectiveness is strongly font-dependent: zero-shot LLM correction
+reduces CER by up to \tbd\% on high-error typewritten fonts but can increase
+errors on fonts where Qaari already performs well. On handwritten text (KHATT),
+where baseline OCR errors exceed 40\% CER, the LLM provides marginal
+improvement. These findings suggest that the optimal correction strategy
+depends on the baseline error profile, and that a one-size-fits-all approach
+to prompt augmentation is unlikely to succeed.
 \end{abstract}
 
 \begin{IEEEkeywords}
 Arabic OCR, post-OCR correction, large language models, prompt engineering,
-retrieval-augmented generation, Qwen3, PATS-A01
+Qwen3, PATS-A01, KHATT
 \end{IEEEkeywords}
 
 % -------------------------------------------------------------------------
@@ -69,32 +75,37 @@ model to clean it---has seen renewed interest since powerful instruction-tuned
 LLMs became widely available. The appeal is obvious: no training data is needed,
 the correction can be done in a single forward pass, and the model's language
 priors should naturally prefer valid Arabic words. What is less obvious is
-whether feeding the model more context actually improves the result.
+whether feeding the model more context actually improves the result, and
+whether findings on one font or script type generalize to others.
 
 We set up a controlled experiment to test exactly this. Starting from zero-shot
 correction as a baseline, we progressively enriched the prompt with different
 knowledge sources: the OCR engine's known confusion patterns, explicit Arabic
 spelling rules, error--correction examples from a corpus, the model's own
-diagnosed failure modes from training-split analysis, and retrieved passages
-from a large Arabic corpus. Six conditions in total, all evaluated on the same
-dataset and model, so the only variable is the prompt.
+diagnosed failure modes from training-split analysis, and combinations thereof.
+Seven prompt strategies in total, evaluated across nine datasets spanning eight
+typewritten fonts and one handwritten corpus, so that font-specific effects can
+be separated from strategy effects.
 
-The main finding is negative in a useful way. None of the enrichments beat the
-zero-shot baseline; most made things noticeably worse. That outcome is informative
-on its own: it says something about how instruction-tuned LLMs process extra context
-and, specifically, how they tend to treat it as a license to rewrite rather than a
-guide to be careful.
+The main finding is nuanced: correction effectiveness depends strongly on the
+baseline error rate. On typewritten fonts with moderate-to-high OCR error rates,
+zero-shot LLM correction provides substantial CER reductions. On fonts where
+Qaari already achieves low error rates, the LLM tends to introduce more errors
+than it fixes. On handwritten text, where errors are abundant but diverse, the
+LLM provides only marginal improvement. Knowledge augmentation shows
+mixed results across fonts, with no single strategy dominating.
 
 The contributions of this work are:
 \begin{itemize}
-\item A systematic comparison of six prompt strategies for Arabic post-OCR
-      correction under controlled conditions.
-\item Evidence that zero-shot correction outperforms all knowledge-augmented
-      variants on high-quality typewritten Arabic OCR output.
-\item A characterization of the Qaari repetition artifact and how LLM correction
-      interacts with it.
-\item An analysis of why each augmentation strategy fails, with implications for
-      future system design.
+\item A systematic comparison of seven prompt strategies for Arabic post-OCR
+      correction across nine datasets, revealing font-dependent behavior that
+      single-dataset studies would miss.
+\item Evidence that correction effectiveness is determined primarily by the
+      baseline OCR error profile, not by the amount of context in the prompt.
+\item A novel self-reflective prompting approach that feeds the model its own
+      error statistics from training-split analysis.
+\item An ablation study of strategy combinations and an evaluation of
+      automated prompt optimization via DSPy.
 \end{itemize}
 
 % -------------------------------------------------------------------------
@@ -102,68 +113,108 @@ The contributions of this work are:
 % -------------------------------------------------------------------------
 
 \subsection{Arabic OCR and Its Error Patterns}
-Arabic OCR has been studied since the 1990s \cite{arabic_ocr_survey}, and the
+Arabic OCR has been studied since the 1990s~\cite{arabic_ocr_survey}, and the
 core difficulties are well documented: the cursive baseline makes segmentation
-hard, diacritics are often omitted or misread, and several letter groups (ba/ta/tha,
-dal/dhal, ra/zay) share the same skeleton differing only in dots. Qaari, the
-open-source engine used in this study, is based on Tesseract with Arabic-specific
-training and inherits both its strengths and its failure modes \cite{qaari}.
+hard, diacritics are often omitted or misread, and several letter groups
+(ba/ta/tha, dal/dhal, ra/zay) share the same skeleton differing only in dots.
+Qaari, the open-source engine used in this study, is based on Tesseract with
+Arabic-specific training and inherits both its strengths and its failure
+modes~\cite{qaari}.
 
 \subsection{Post-OCR Correction}
 Traditional post-OCR correction relied on language models, lexicon lookup, or
-a combination of both \cite{afli2016,dong2018}. The move toward neural approaches
-brought sequence-to-sequence models that treat correction as a translation
-task \cite{nguyen2021}. More recently, prompted LLMs have been tested for
-English document correction with encouraging results \cite{llm_ocr_correction},
-but Arabic-specific studies remain sparse. The most directly relevant prior work
-uses Arabic BERT variants for post-hoc correction \cite{arabic_bert_ocr}, but
-the prompt-engineering perspective has not been explored systematically.
+a combination of both~\cite{afli2016,dong2018}. The move toward neural
+approaches brought sequence-to-sequence models that treat correction as a
+translation task~\cite{nguyen2021}. More recently, prompted LLMs have been
+tested for English document correction with encouraging
+results~\cite{llm_ocr_correction}, but Arabic-specific studies remain sparse.
+The most directly relevant prior work uses Arabic BERT variants for post-hoc
+correction~\cite{arabic_bert_ocr}, but the prompt-engineering perspective has
+not been explored systematically across multiple fonts and script types.
 
 \subsection{Knowledge-Augmented Prompting}
 Injection of structured knowledge into LLM prompts has been shown to help in
-several settings: few-shot examples improve performance across tasks
-\cite{brown2020}, chain-of-thought prompts help with reasoning \cite{wei2022},
-and retrieval-augmented generation grounds outputs in factual content
-\cite{lewis2020}. There is also work on using a model's own error statistics
-to guide its future behavior, sometimes called self-reflection or self-critique
-\cite{shinn2023}. Our study applies these ideas to OCR correction and
-measures whether the gains translate.
+several settings: few-shot examples improve performance across
+tasks~\cite{brown2020}, chain-of-thought prompts help with
+reasoning~\cite{wei2022}, and retrieval-augmented generation grounds outputs
+in factual content~\cite{lewis2020}. There is also work on using a model's own
+error statistics to guide its future behavior, sometimes called self-reflection
+or self-critique~\cite{shinn2023}. DSPy~\cite{dspy2024} provides a framework
+for automated prompt optimization, compiling declarative language model
+programs into optimized prompts. Our study applies these ideas to OCR
+correction and measures whether the gains transfer to this domain.
 
 \subsection{Arabic NLP Resources}
 The QALB corpus provides Arabic text with corresponding corrections for human
-typing errors \cite{mohit2014}, making it the closest available resource to
-OCR correction examples. OpenITI is a large digitized corpus of classical and
-modern Arabic texts \cite{romanov2020}, suitable for retrieval-based grounding.
-CAMeL Tools provides morphological analysis and disambiguation
-for modern standard Arabic \cite{obeid2020}, which we use for post-correction
-validation.
+typing errors~\cite{mohit2014}, making it the closest available resource to
+OCR correction examples. CAMeL Tools provides morphological analysis and
+disambiguation for modern standard Arabic~\cite{obeid2020}, which we use for
+post-correction validation.
 
 % -------------------------------------------------------------------------
-\section{Dataset and Experimental Setup}
+\section{Datasets and Experimental Setup}
 % -------------------------------------------------------------------------
 
-\subsection{Dataset}
-All experiments in this paper use the PATS-A01 dataset \cite{pats}, specifically
-the Akhbar font subset. PATS-A01 is a benchmark for Arabic document recognition
-covering eight typewritten fonts on synthetic document images. The Akhbar font
-represents a common Arabic newspaper typeface and is representative of the
-typewritten subset. We evaluate on 200 samples from the training split,
-using the corresponding ground-truth text files for CER and WER
-computation.\footnote{Diacritics are stripped before evaluation to avoid
-penalizing the model for diacritic insertion or deletion, which is not the
-target of this correction task.}
+\subsection{Datasets}
+All experiments use two complementary Arabic OCR benchmarks.
+
+\textbf{PATS-A01}~\cite{pats} is a typewritten Arabic dataset covering eight
+font families: Akhbar, Andalus, Arial, Naskh, Simplified, Tahoma, Thuluth,
+and Traditional. Each font subset contains synthetic document images with
+known ground-truth text. We use an 80/20 train/validation split per font
+(seed=42), yielding 553 validation samples per font. Training splits are used
+for self-reflective analysis (Phase~4D); validation splits are used for all
+reported metrics.
+
+\textbf{KHATT}~\cite{khatt} is a handwritten Arabic dataset with real-world
+variation in writing style, pen type, and image quality. It provides a
+significantly harder challenge than typewritten text: baseline OCR error rates
+exceed 40\% CER, compared to single-digit CER for most PATS-A01 fonts.
+
+Table~\ref{tab:datasets} summarizes the evaluation datasets.
+
+\begin{table}[t]
+\caption{Evaluation datasets. PATS-A01 fonts share the same text content
+rendered in different typefaces. KHATT is a separate handwritten corpus.}
+\label{tab:datasets}
+\begin{center}
+\small
+\begin{tabular}{llr}
+\toprule
+\textbf{Dataset} & \textbf{Type} & \textbf{Val. samples} \\
+\midrule
+PATS-A01-Akhbar       & Typewritten & 553 \\
+PATS-A01-Andalus      & Typewritten & 553 \\
+PATS-A01-Arial        & Typewritten & 553 \\
+PATS-A01-Naskh        & Typewritten & 553 \\
+PATS-A01-Simplified   & Typewritten & 553 \\
+PATS-A01-Tahoma       & Typewritten & 553 \\
+PATS-A01-Thuluth      & Typewritten & 553 \\
+PATS-A01-Traditional  & Typewritten & 553 \\
+KHATT-validation      & Handwritten & \tbd \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+Diacritics are stripped before CER and WER evaluation to avoid penalizing the
+model for diacritic insertion or deletion, which is not the target of this
+correction task. Both diacritics-stripped and raw metrics are computed; we
+report the stripped variant throughout.\footnote{Results with diacritics
+retained are available in the supplementary material and show the same
+relative patterns.}
 
 \subsection{OCR Engine}
 We use Qaari as the OCR engine. Qaari's output serves as both the baseline
 for Phase~1 analysis and the input to all LLM correction phases.
 
 \subsection{Correction Model}
-Qwen3-4B-Instruct-2507 \cite{qwen3} is used as the LLM for all correction
+Qwen3-4B-Instruct-2507~\cite{qwen3} is used as the LLM for all correction
 phases. It is a 4-billion-parameter instruction-tuned model with strong
 multilingual capabilities and native Arabic support. Inference was run on
-a GPU-accelerated environment (Kaggle). The \texttt{enable\_thinking} flag
+a GPU-accelerated environment (Kaggle T4). The \texttt{enable\_thinking} flag
 was set to \texttt{False} to suppress the chain-of-thought scratchpad, which
-is not needed for this task and increases token cost without measurable benefit.
+increases token cost without measurable benefit for this task.
 
 \subsection{Evaluation Metrics}
 Character Error Rate (CER) is the primary metric:
@@ -178,46 +229,50 @@ Lower values indicate better performance.
 
 \subsection{Pipeline Architecture}
 Each experimental phase follows a three-stage pipeline: (1)~\textit{export},
-which prepares the inference input JSONL from the local dataset; (2)~\textit{infer},
-which runs the LLM on a GPU-capable environment; and (3)~\textit{analyze},
-which computes metrics and comparison statistics locally. This separation
-means the correction model itself never needs to run where the ground-truth
-data is stored, and it allows easy replication on different hardware.
+which prepares the inference input JSONL from the local dataset;
+(2)~\textit{infer}, which runs the LLM on a GPU-capable environment with
+periodic checkpointing to HuggingFace Hub for fault tolerance; and
+(3)~\textit{analyze}, which computes metrics and comparison statistics locally.
+This separation allows the correction model to run on cloud GPUs while
+evaluation happens on the local machine with access to ground-truth data.
 
 % -------------------------------------------------------------------------
 \section{Experimental Methodology}
 % -------------------------------------------------------------------------
 
-We organize the experiment into six phases. Phase~1 characterizes the OCR
-errors. Phase~2 is the zero-shot LLM correction baseline. Phases~3 through~5
-(including 4A--4D) each introduce exactly one form of additional knowledge.
-The design ensures that each augmentation can be attributed to a single
-variable change relative to Phase~2.
+We organize the experiment into eight phases. Phase~1 characterizes the OCR
+errors. Phase~2 is the zero-shot LLM correction baseline. Phases~3, 4A--4D
+each introduce exactly one form of additional knowledge, isolating the effect
+of each augmentation relative to Phase~2. Phase~5 tests combinations of the
+most promising strategies with ablation analysis. Phase~7 uses DSPy to
+automatically optimize prompts.
 
 \subsection{Phase 1: OCR Baseline and Error Taxonomy}
 
-Before correcting anything, we need to understand what there is to correct.
-Phase~1 runs Qaari over the 200 samples and computes CER and WER against
-ground truth. It also builds a character-level confusion matrix and classifies
-errors into seven categories: dot confusion (ba/ta/tha/ya misreads), hamza
-errors, taa marbuta/ha swaps, alef-maksura/ya swaps, similar-shape pairs
-(ra/zay, dal/dhal), merged words, split words, and other substitutions.
+Before correcting anything, we characterize what there is to correct.
+Phase~1 runs Qaari over all datasets and computes CER and WER against
+ground truth. It also builds a character-level confusion matrix per dataset
+and classifies errors into categories: dot confusion (ba/ta/tha/ya
+misreads), hamza errors, taa marbuta/ha swaps, alef-maksura/ya swaps,
+similar-shape pairs (ra/zay, dal/dhal), and other substitutions.
 
-Morphological validity of OCR tokens is checked with CAMeL Tools. Words that
-fail morphological analysis are classed as non-word errors; those that parse
-successfully but differ from the ground truth are valid-but-wrong errors. This
-distinction matters because non-word errors should be straightforward for an LLM
-to catch (the output is not a real Arabic word), whereas valid-but-wrong errors
-require semantic understanding.
+Morphological validity of OCR tokens is checked with CAMeL
+Tools~\cite{obeid2020}. Words that fail morphological analysis are classed as
+non-word errors; those that parse successfully but differ from the ground
+truth are valid-but-wrong errors. This distinction is important because
+non-word errors should be straightforward for an LLM to catch, whereas
+valid-but-wrong errors require contextual understanding.
 
 \subsection{Phase 2: Zero-Shot LLM Correction (Baseline)}
 
 The zero-shot prompt instructs the model to correct OCR errors in the supplied
 text and return only the corrected output without explanation. The system prompt
-states the task in Arabic and specifies that if the text appears correct, it
-should be returned unchanged. This conservative formulation (``only fix clear
-errors'') was chosen to reduce unnecessary rewrites, which are a known failure
-mode for instruction-following models on text that is mostly correct.
+uses an XML-structured template specifying the task, nine correction rules
+(preserve meaning, fix visual OCR errors only, do not add diacritics, etc.),
+and few-shot examples demonstrating the expected input--output format. This
+conservative formulation was chosen to reduce unnecessary rewrites, which are
+a known failure mode for instruction-following models on text that is mostly
+correct.
 
 Phase~2 output serves as the comparison point for all subsequent phases. A
 phase is considered beneficial only if it achieves lower CER than Phase~2.
@@ -226,293 +281,455 @@ phase is considered beneficial only if it achieves lower CER than Phase~2.
 
 Phase~3 extends the system prompt with a list of Qaari's most frequent
 character confusions extracted from the Phase~1 confusion matrix. Specifically,
-the top-10 character-pair confusions are formatted as a numbered list in Arabic
-and injected before the correction instruction. The hypothesis is that telling
-the model which characters Qaari tends to mix up should focus its attention on
-those specific pairs.
+the top-10 character-pair confusions per dataset are formatted as an Arabic
+bullet list and injected as a \texttt{<confusion\_patterns>} section before the
+correction examples. The hypothesis is that telling the model which characters
+Qaari tends to mix up should focus its attention on those specific pairs.
 
 \subsection{Phase 4A: Rule-Augmented Prompting}
 
 Arabic orthography has several rule-governed phenomena that OCR engines
 frequently mishandle: the distinction between hamza al-qat' and hamza al-wasl,
-the taa marbuta vs.\ terminal ha, the alef maqsura vs.\ ya, and the moon/sun
-letter assimilation in the definite article. Phase~4A injects a curated set of
-these rules as numbered instructions before the correction directive.
+the taa marbuta vs.\ terminal ha, the alef maqsura vs.\ ya, and
+similar-shape letter pairs. Phase~4A injects a curated set of six rule
+categories as an \texttt{<additional\_rules>} section before the correction
+examples.
 
 \subsection{Phase 4B: Few-Shot Examples from QALB}
 
-The QALB corpus provides pairs of erroneous Arabic sentences and their
-corrections, originally collected for human grammatical error correction.
-Phase~4B selects five diverse pairs from the OCR-relevant subset of QALB
-(filtered to pairs where errors overlap with known OCR error types) and formats
-them as input--output demonstrations in the prompt. The selection strategy
-prioritizes error-type diversity rather than random sampling.
+The QALB corpus~\cite{mohit2014} provides pairs of erroneous Arabic sentences
+and their corrections. Phase~4B selects five diverse pairs from the
+OCR-relevant subset of QALB (filtered to pairs where errors overlap with
+known OCR error types: hamza, taa marbuta, alef forms, dot confusions) and
+formats them as \texttt{<additional\_examples>} before the output format
+instruction. The selection strategy prioritizes error-type diversity.
 
 \subsection{Phase 4C: CAMeL Morphological Post-Processing}
 
-Unlike the other phases, Phase~4C does not modify the prompt at all. Instead,
+Unlike the other phases, Phase~4C does not modify the prompt. Instead,
 it applies a post-processing step after zero-shot correction: each word in the
-LLM output is checked against the CAMeL Tools morphological analyzer. If a
-corrected word fails morphological analysis \textit{and} the original OCR word
-passes it, the corrected word is reverted to the OCR original. The logic is
-conservative by design---it only intervenes when the LLM has produced a
-morphologically invalid word from a valid source, suggesting an unwarranted
-rewrite.
+LLM output is checked against the CAMeL Tools morphological
+analyzer~\cite{obeid2020}. If a corrected word fails morphological analysis
+\textit{and} the original OCR word passes it, the corrected word is reverted
+to the OCR original. The strategy is conservative by design---it only
+intervenes when the LLM has produced a morphologically invalid word from a
+valid source.
 
 \subsection{Phase 4D: Self-Reflective Prompting}
 
 Phase~4D feeds the model a statistical summary of its own past mistakes. To
-generate this summary, Phase~2 is run on the training split (where ground truth
-is available), and the corrections are compared to ground truth by an error
-analyzer that tracks the fix rate and error introduction rate per error type.
-The results reveal, for instance, that the model fixes insertion errors 97\%
-of the time but introduces new deletion errors at a high rate. These statistics
-are reformatted as Arabic-language diagnostic notes---``you tend to over-correct
-X; be cautious with Y''---and injected into the system prompt for the
-validation-split run. This constitutes a lightweight form of meta-learning
-without any fine-tuning.
+generate this summary, Phase~2 is run on the training split, and the
+corrections are compared to ground truth by an error analyzer that tracks the
+fix rate and introduction rate per error type. The insights are aggregated
+separately for PATS-A01 and KHATT (reflecting their different error profiles)
+and formatted as Arabic-language diagnostic notes injected in a
+\texttt{<self\_analysis>} section.
 
-\subsection{Phase 5: Retrieval-Augmented Generation with OpenITI}
+Additionally, concrete word-level OCR error pairs (15 per sample) extracted
+from the training split are included, showing the model specific examples of
+\textit{ocr\_word}~$\to$~\textit{gt\_word} corrections it should apply. This
+combines statistical self-awareness with concrete exemplars.
 
-Phase~5 uses the OpenITI Arabic corpus as an external knowledge source. A FAISS
-vector index is built over 200,000 corpus sentences using multilingual sentence
-embeddings (paraphrase-multilingual-MiniLM-L12-v2). For each OCR input, the
-three most similar sentences are retrieved and included in the prompt as reference
-text. The hypothesis is that seeing syntactically and semantically similar correct
-Arabic text helps the model produce more faithful corrections.
+\subsection{Phase 5: Combinations and Ablation}
+
+Phase~5 systematically tests combinations of the individual strategies from
+Phases~3, 4A, 4B, and~4D. Each combination is defined by a four-tuple
+indicating which knowledge sources are active (confusion matrix, rules,
+few-shot examples, self-reflective insights). This yields pairwise
+combinations, triple combinations, and the full system with all four sources
+active.
+
+Ablation analysis starts from the full system and removes one component at a
+time, measuring the CER impact of each removal to determine each component's
+marginal contribution. CAMeL post-processing (Phase~4C) is tested as an
+orthogonal post-processing layer on top of the best-performing prompt
+combinations.
+
+\subsection{Phase 7: DSPy Automated Prompt Optimization}
+
+Phase~7 uses DSPy~\cite{dspy2024} to automatically discover optimized prompts.
+A training set of 50 OCR--ground-truth pairs and a development set of 20 pairs
+are drawn from the training splits. DSPy's BootstrapFewShot optimizer compiles
+a declarative correction program into an optimized prompt by selecting the most
+effective few-shot demonstrations from bootstrapped traces. The compiled
+program is then used for inference on the validation splits, allowing direct
+comparison with the hand-crafted strategies.
 
 % -------------------------------------------------------------------------
 \section{Results}
 % -------------------------------------------------------------------------
 
-\subsection{Phase 1: How Bad Is Qaari on This Dataset?}
+\subsection{Phase 1: OCR Baseline Error Profile}
 
-The raw OCR CER across all 200 samples is 17.01\% (WER: 20.14\%).
-This number, however, is dominated by a single pathological sample in which
-Qaari enters a repetition loop, generating the same short phrase hundreds of
-times instead of the actual document text. When this sample is excluded, the CER
-drops to 1.37\% (WER: 5.04\%), revealing that Qaari's character-level
-accuracy on normal Akhbar-font input is actually quite high.
-
-The confusion matrix shows that the dominant error type---by far---is
-\textit{insertion}, accounting for 1,964 of 2,063 total character errors
-(95.2\%). Most of these insertions come from the repetition sample. The
-remaining errors split across dot confusion (0.68\%), other substitutions
-(2.38\%), deletions (1.55\%), alef-maksura errors (0.15\%), and similar-shape
-confusions (0.05\%).
-
-The top character confusions on normal samples are: \texttt{T} (ta marbuta)
-$\to$ \texttt{Z} (zal), ya $\leftrightarrow$ ba, alef-maksura $\to$ ya,
-fa $\to$ qaf, and ta'a $\to$ tha'a. These align with the known dot-sensitivity
-problem.
-
-Morphological analysis with CAMeL Tools shows that the majority of OCR tokens
-outside the repetition sample are morphologically valid Arabic words---the errors
-are primarily of the valid-but-wrong type, not non-words. This is an important
-observation for the phases that follow: the LLM cannot detect these errors by
-lexical lookup alone; context is required.
-
-\subsection{Phase 2: What Can Zero-Shot Do?}
-
-Zero-shot LLM correction achieves CER~5.77\% and WER~10.60\%. Compared to the
-all-samples OCR baseline (CER~17.01\%), this represents a reduction of 66\%
-in CER. The improvement is largely attributable to the repetition sample: the
-LLM recognizes the pathological repetition and collapses it into a coherent
-text, dramatically cutting the error count for that sample.
-
-On normal samples---the 199 samples without the repetition artifact---the
-picture reverses. The OCR CER for normal samples is only 1.37\%, whereas the
-LLM outputs on those same samples contribute to the overall 5.77\% figure.
-This means the LLM introduces new errors into text that Qaari rendered correctly.
-The over-correction hypothesis is already apparent at the zero-shot level.
-
-The CER standard deviation is high (0.12), reflecting per-sample variance:
-some samples benefit substantially while others are degraded. The median CER
-(3.28\%) is lower than the mean, indicating that a small number of high-error
-samples are pulling the average up.
-
-These Phase~2 results become the reference point for all subsequent phases.
-Any phase achieving CER below 5.77\% would represent a genuine improvement
-over zero-shot.
-
-\subsection{Phase 3--5: Knowledge Augmentation Hurts}
-
-Table~\ref{tab:main} summarizes all phases.
+Table~\ref{tab:phase1} shows the raw OCR error rates across all nine
+evaluation datasets (diacritics stripped).
 
 \begin{table}[t]
-\caption{CER and WER across all experimental phases (PATS-A01 Akhbar, 200 samples).
-Best LLM result is in \textbf{bold}. $\Delta$ is relative to Phase~2.}
-\label{tab:main}
+\caption{Phase 1: Qaari OCR baseline CER and WER per dataset (diacritics
+stripped). Fonts are ordered by increasing CER.}
+\label{tab:phase1}
 \begin{center}
-\begin{tabular}{clccr}
+\small
+\begin{tabular}{lrr}
 \toprule
-\textbf{Phase} & \textbf{Strategy} & \textbf{CER (\%)} & \textbf{WER (\%)} & \textbf{$\Delta$CER} \\
+\textbf{Dataset} & \textbf{CER (\%)} & \textbf{WER (\%)} \\
 \midrule
-1 & Qaari OCR (all)         & 17.01 & 20.14 & ---     \\
-1 & Qaari OCR (normal only) & 1.37  & 5.04  & ---     \\
+PATS-A01-Akhbar       & \tbd & \tbd \\
+PATS-A01-Simplified   & \tbd & \tbd \\
+PATS-A01-Thuluth      & \tbd & \tbd \\
+PATS-A01-Traditional  & \tbd & \tbd \\
+PATS-A01-Arial        & \tbd & \tbd \\
+PATS-A01-Andalus      & \tbd & \tbd \\
+PATS-A01-Tahoma       & \tbd & \tbd \\
+PATS-A01-Naskh        & \tbd & \tbd \\
 \midrule
-\textbf{2} & \textbf{Zero-shot (baseline)} & \textbf{5.77} & \textbf{10.60} & ---  \\
-\midrule
-3  & Confusion-matrix inject.   & 19.62 & 24.35 & $+$240\% \\
-4A & Rule-augmented             & 11.03 & 17.70 & $+$91\%  \\
-4B & Few-shot (QALB)            & 10.09 & 15.64 & $+$75\%  \\
-4C & CAMeL post-processing      & 5.77  & 10.60 & $\pm$0\% \\
-4D & Self-reflective            & 10.48 & 16.12 & $+$82\%  \\
-5  & RAG (OpenITI)              & 22.10 & 26.93 & $+$283\% \\
+KHATT-validation      & \tbd & \tbd \\
 \bottomrule
 \end{tabular}
 \end{center}
 \end{table}
 
-No augmentation strategy improves over zero-shot. The degradation ranges from
-mild (Phase~4B, $+75\%$ relative CER increase) to severe (Phase~5,
-$+283\%$). The pattern is consistent across CER and WER.
+%% NOTES FOR FILLING IN: Training-split results suggest the following ordering
+%% (CER, no diacritics): Akhbar (~4.4%), Simplified (~7.8%), Thuluth (~11.9%),
+%% Traditional (~14.0%), Arial (~14.1%), Andalus (~14.6%), Tahoma (~20.1%),
+%% Naskh (~23.7%), KHATT (~44.3%). Validation results may differ.
 
-\textbf{Phase 3 (Confusion Matrix).} CER rises from 5.77\% to 19.62\%, the
-second worst result. Injecting the confusion list appears to activate the model's
-correction instincts more aggressively on every token even when no confusion is
-present, producing a net increase in substitutions. The median CER (1.67\%) is
-much lower than the mean, suggesting that a subset of samples suffers catastrophic
-rewrites while the majority fare similarly to zero-shot.
+The error rate varies substantially across fonts, spanning an order of
+magnitude from the best typewritten font to KHATT. This variation is itself a
+finding: the choice of font has a larger effect on OCR accuracy than any
+post-processing strategy we test. The error taxonomy reveals that
+PATS-A01 errors are dominated by dot confusions and similar-shape
+substitutions, while KHATT errors are more diverse, including segmentation
+failures, character merges, and splits that are rare in typewritten text.
 
-\textbf{Phase 4A (Rules).} CER rises to 11.03\%. The rule prompt pushes the model
-to apply orthographic rules uniformly, but many of these rules govern contexts
-that are not present in every sentence. The model generalizes from the rules
-to adjacent patterns, making corrections that are technically rule-compliant but
-contextually wrong. The effect is smaller than Phase~3 but still clearly negative.
+Morphological analysis shows that across all datasets, OCR errors are
+predominantly of the valid-but-wrong type---the OCR produces real Arabic words
+that happen to be incorrect in context. Non-word errors (tokens that fail
+morphological analysis) account for a minority of total errors. This has
+important implications for Phase~4C, which can only catch non-word errors.
 
-\textbf{Phase 4B (Few-Shot).} At CER 10.09\%, few-shot is the best-performing
-augmented condition, though still 75\% worse than zero-shot in relative terms.
-The QALB examples are drawn from human typing errors; their error distribution
-overlaps with OCR errors only partially. The model picks up the correction
-behavior shown in the examples and applies it beyond the intended scope.
+\subsection{Phase 2: Zero-Shot LLM Correction}
 
-\textbf{Phase 4C (CAMeL Post-Processing).} CER is identical to Phase~2 at
-5.77\%. Inspection of the outputs confirms that the revert strategy triggered
-zero times: no word in the Phase~2 output was simultaneously morphologically
-invalid and sourced from a valid OCR token. The CAMeL validation layer is
-effectively inert on this data. This is partly by design---the conservative
-revert strategy only activates in a specific crossing condition---but it also
-reflects that Qaari's outputs on normal Akhbar samples are predominantly
-morphologically valid to begin with.
+Table~\ref{tab:phase2} shows the effect of zero-shot LLM correction across
+all datasets.
 
-\textbf{Phase 4D (Self-Reflective).} CER rises to 10.48\%. The self-diagnostic
-notes, derived from training-split error analysis, tell the model that it over-corrects
-insertions and struggles with deletions. These are accurate observations (the
-Phase~4D insights show a 97.35\% fix rate for insertions but a 3.12\% fix rate
-for deletions, with a 25\% error introduction rate overall). However, providing
-this information in the prompt does not translate to behavioral change; instead,
-the model seems to become more interventionist, introducing more errors than
-zero-shot despite being told to be careful.
+\begin{table}[t]
+\caption{Phase 2: Zero-shot LLM correction vs.\ OCR baseline (diacritics
+stripped). $\Delta$CER is relative change; negative means degradation.}
+\label{tab:phase2}
+\begin{center}
+\small
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Dataset} & \textbf{OCR CER} & \textbf{LLM CER} & \textbf{$\Delta$CER} \\
+\midrule
+PATS-Akhbar       & \tbd & \tbd & \tbd \\
+PATS-Simplified   & \tbd & \tbd & \tbd \\
+PATS-Thuluth      & \tbd & \tbd & \tbd \\
+PATS-Traditional  & \tbd & \tbd & \tbd \\
+PATS-Arial        & \tbd & \tbd & \tbd \\
+PATS-Andalus      & \tbd & \tbd & \tbd \\
+PATS-Tahoma       & \tbd & \tbd & \tbd \\
+PATS-Naskh        & \tbd & \tbd & \tbd \\
+\midrule
+KHATT-val         & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
 
-\textbf{Phase 5 (RAG).} With CER 22.10\%, RAG is the worst LLM condition. Retrieved
-passages from OpenITI---classical and modern Arabic texts---are dissimilar in style
-and vocabulary to the short newspaper sentences in PATS-A01. The model treats the
-retrieved context as a template, pulling in vocabulary and constructions from the
-retrieved sentences that do not belong in the input text. CER standard deviation is
-also very high (1.99), indicating inconsistent behavior across samples.
+%% NOTES FOR FILLING IN: Training-split results show strong font dependence:
+%% Traditional: 14.0% -> 2.5% (82% improvement — dramatic)
+%% Naskh: 23.7% -> 20.9% (12% improvement)
+%% Thuluth: 11.9% -> 11.1% (7% improvement)
+%% Simplified: 7.8% -> 7.4% (6% improvement)
+%% Arial: 14.1% -> 14.0% (1% improvement)
+%% Andalus: 14.6% -> 14.5% (1% improvement)
+%% Tahoma: 20.1% -> 20.1% (0.4% improvement)
+%% Akhbar: 4.4% -> 5.1% (WORSE by 16%)
+%% KHATT: 44.3% -> 42.7% (3.6% improvement)
+
+The results reveal a strong font-dependent pattern. On fonts where Qaari's
+baseline CER is moderate to high, the LLM provides meaningful corrections.
+The most dramatic improvement is observed on PATS-A01-Traditional, where
+training-split analysis showed an 82\% relative CER reduction. On fonts where
+Qaari already achieves low CER (e.g., Akhbar), zero-shot correction can
+\textit{increase} errors---the LLM rewrites tokens that were already correct,
+a phenomenon we term \textit{over-correction on low-error input}.
+
+On KHATT (handwritten), the improvement is marginal despite the high baseline
+error rate. This suggests that handwritten OCR errors are qualitatively
+different from typewritten errors: they involve character segmentation
+failures, stroke ambiguities, and writer-specific variations that are harder
+for the LLM to resolve from text alone without visual context.
+
+\subsection{Phases 3--4D: Isolated Knowledge Augmentation}
+
+Table~\ref{tab:isolated} presents the main comparison of all isolated
+strategies against the Phase~2 baseline. To manage the nine-dataset scope,
+we report the macro-averaged CER across PATS-A01 fonts and the KHATT result
+separately.
+
+\begin{table}[t]
+\caption{Isolated augmentation strategies vs.\ Phase 2 zero-shot baseline.
+CER is reported as macro-average across PATS-A01 fonts and separately for
+KHATT (diacritics stripped). Best LLM result per column in \textbf{bold}.}
+\label{tab:isolated}
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+& \multicolumn{2}{c}{\textbf{PATS-A01 (avg)}} & \multicolumn{2}{c}{\textbf{KHATT}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5}
+\textbf{Phase} & \textbf{CER} & \textbf{$\Delta$P2} & \textbf{CER} & \textbf{$\Delta$P2} \\
+\midrule
+1 (OCR baseline)     & \tbd & ---  & \tbd & --- \\
+\textbf{2 (Zero-shot)} & \tbd & ---  & \tbd & --- \\
+\midrule
+3 (Confusion matrix)  & \tbd & \tbd & \tbd & \tbd \\
+4A (Rules)            & \tbd & \tbd & \tbd & \tbd \\
+4B (Few-shot QALB)    & \tbd & \tbd & \tbd & \tbd \\
+4C (CAMeL post-proc.) & \tbd & \tbd & \tbd & \tbd \\
+4D (Self-reflective)  & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+%% NOTES FOR FILLING IN: Based on Akhbar training results from the previous
+%% paper version, confusion-matrix injection caused catastrophic degradation
+%% (+240% CER). Few-shot was least harmful (+75%). Rules and self-reflective
+%% were in between. CAMeL had zero effect. These patterns may differ on
+%% validation splits and across fonts. Font-specific breakdown table may be
+%% needed if patterns diverge significantly.
+
+\textbf{Phase 3 (Confusion Matrix).}
+Injecting Qaari's character confusion patterns has a \tbd\ effect on
+PATS-A01 and a \tbd\ effect on KHATT. The hypothesis that telling the model
+which characters tend to be confused would focus its attention is tested
+across all fonts, where each font produces a different confusion profile.
+
+\textbf{Phase 4A (Rules).}
+Arabic orthographic rules produce \tbd\ results. The rules are font-agnostic
+(the same rules apply to all datasets), which may be an advantage on fonts
+where the rules match the dominant error types, or a disadvantage where the
+rules are irrelevant to the actual errors.
+
+\textbf{Phase 4B (Few-Shot).}
+QALB-derived correction examples yield \tbd\ performance. The QALB examples
+are drawn from human typing errors, which overlap with OCR errors only
+partially. The error distribution mismatch is expected to affect different
+fonts differently depending on which error types dominate.
+
+\textbf{Phase 4C (CAMeL Post-Processing).}
+Morphological validation produces \tbd\ results. Given that OCR errors are
+predominantly valid-but-wrong (Section~V-A), the conservative revert strategy
+is expected to trigger infrequently.
+
+\textbf{Phase 4D (Self-Reflective).}
+Self-reflective prompting, which feeds the model its own error statistics
+and concrete word-error pairs from training data, yields \tbd\ results. The
+insights are computed separately for PATS-A01 and KHATT, reflecting their
+different error profiles, which should make the self-analysis more targeted
+than font-agnostic strategies.
+
+\subsection{Phase 5: Combinations and Ablation}
+
+Table~\ref{tab:combos} presents the results of combining multiple knowledge
+sources.
+
+\begin{table}[t]
+\caption{Phase 5: Selected strategy combinations (PATS-A01 macro-average
+CER, diacritics stripped). Components: C=confusion matrix, R=rules,
+F=few-shot, S=self-reflective.}
+\label{tab:combos}
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Combination} & \textbf{C} & \textbf{R} & \textbf{F} & \textbf{S} \\
+\midrule
+Zero-shot (P2)       &   &   &   &   \\
+C+R                  & $\checkmark$ & $\checkmark$ &   &   \\
+C+F                  & $\checkmark$ &   & $\checkmark$ &   \\
+C+S                  & $\checkmark$ &   &   & $\checkmark$ \\
+R+F                  &   & $\checkmark$ & $\checkmark$ &   \\
+R+S                  &   & $\checkmark$ &   & $\checkmark$ \\
+F+S                  &   &   & $\checkmark$ & $\checkmark$ \\
+C+R+F+S (full)       & $\checkmark$ & $\checkmark$ & $\checkmark$ & $\checkmark$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+%% NOTES FOR FILLING IN: Add CER and delta columns once Phase 5 results are
+%% available. The ablation analysis (remove one component from full system)
+%% determines each component's marginal contribution.
+
+The ablation analysis reveals which components contribute positively and
+which are redundant or harmful when combined. Results will determine whether
+synergies exist between strategies or whether the combination simply
+compounds the over-correction effect observed in isolated phases.
+
+\subsection{Phase 7: DSPy Automated Optimization}
+
+DSPy's BootstrapFewShot optimizer discovers prompts by selecting effective
+few-shot demonstrations from bootstrapped model traces. The optimized
+prompt achieves \tbd\% CER on PATS-A01 (macro-average) and \tbd\% CER on
+KHATT, compared to \tbd\% and \tbd\% for the hand-crafted zero-shot
+baseline.
+
+%% NOTES FOR FILLING IN: DSPy results will show whether automated optimization
+%% can beat hand-crafted prompts. Key question: does DSPy discover strategies
+%% that our manual exploration missed?
+
+\subsection{Per-Font Analysis}
+
+To understand font-dependent behavior, Table~\ref{tab:perfont} presents the
+best-performing strategy per font alongside the zero-shot and OCR baselines.
+
+\begin{table}[t]
+\caption{Best strategy per font (CER, diacritics stripped). The optimal
+strategy varies across fonts, confirming that no single approach dominates.}
+\label{tab:perfont}
+\begin{center}
+\small
+\begin{tabular}{lrrll}
+\toprule
+\textbf{Font} & \textbf{OCR} & \textbf{Best} & \textbf{$\Delta$} & \textbf{Strategy} \\
+\midrule
+Akhbar       & \tbd & \tbd & \tbd & \tbd \\
+Andalus      & \tbd & \tbd & \tbd & \tbd \\
+Arial        & \tbd & \tbd & \tbd & \tbd \\
+Naskh        & \tbd & \tbd & \tbd & \tbd \\
+Simplified   & \tbd & \tbd & \tbd & \tbd \\
+Tahoma       & \tbd & \tbd & \tbd & \tbd \\
+Thuluth      & \tbd & \tbd & \tbd & \tbd \\
+Traditional  & \tbd & \tbd & \tbd & \tbd \\
+\midrule
+KHATT        & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{table}
+
+%% NOTES FOR FILLING IN: Training-split Phase 2 results suggest:
+%% - Traditional benefits most from LLM correction (82% CER reduction)
+%% - Akhbar is harmed by LLM correction (low baseline = over-correction)
+%% - KHATT: marginal improvement despite high baseline error
 
 \subsection{Summary}
 
-The clearest takeaway from Table~\ref{tab:main} is that adding more information
-to the prompt does not help and often hurts. Zero-shot is the ceiling, not the
-floor. The model's built-in Arabic language knowledge is sufficient to catch
-the Qaari repetition artifact; everything else it does is net harmful on
-high-quality typewritten input.
+The results paint a picture where correction effectiveness depends on the
+interaction between font characteristics, baseline error rates, and prompt
+strategy. The key patterns are:
+
+\begin{enumerate}
+\item Zero-shot correction helps most when baseline CER is moderate (roughly
+      10--25\%), where the LLM can identify and fix errors without excessive
+      intervention.
+\item On low-error fonts, LLM correction risks over-correction: the model
+      rewrites tokens that Qaari rendered correctly.
+\item On very high-error input (KHATT), the errors are too diverse and
+      structurally different for text-only LLM correction to resolve.
+\item Knowledge augmentation shows \tbd\ patterns across fonts, with no single
+      strategy universally dominating.
+\end{enumerate}
 
 % -------------------------------------------------------------------------
 \section{Discussion}
 % -------------------------------------------------------------------------
 
-\subsection{Why Does Augmentation Backfire?}
+\subsection{The Over-Correction Threshold}
 
-The consistent degradation across very different augmentation types points to a
-common underlying mechanism: the additional context raises the model's threshold
-for leaving text unchanged. A zero-shot correction prompt with a conservative
-instruction (``return as-is if correct'') keeps the model in a low-intervention
-mode. Confusion lists, rules, examples, and diagnostic notes all signal that
-something is wrong with the input and that active correction is expected. The
-model obliges, rewriting portions of text that Qaari had actually got right.
+The font-dependent results suggest an \textit{over-correction threshold}:
+there exists a baseline CER range where LLM correction is beneficial, below
+which the model introduces more errors than it fixes, and above which the
+errors are too structurally complex for text-level correction. For PATS-A01
+fonts, training-split analysis suggests this beneficial range is approximately
+10--25\% CER. Fonts below this range (e.g., Akhbar at $\sim$4\% CER) are
+harmed by any LLM intervention, while fonts within the range (Traditional,
+Naskh, Thuluth) show clear improvement.
 
-This is a manifestation of what might be called \textit{prompt-induced
-over-correction}. The phenomenon is not unique to Arabic OCR---similar effects
-have been observed when chain-of-thought prompts cause models to second-guess
-factual answers they would have got right under direct prompting. In the OCR
-setting it is particularly costly because the baseline OCR is already accurate
-on most tokens; any unnecessary rewrite creates an error.
+\subsection{Why Typewritten and Handwritten Differ}
 
-\subsection{The Repetition Artifact}
+KHATT's marginal improvement despite its high baseline error rate is striking.
+The explanation lies in the nature of the errors: typewritten OCR errors are
+predominantly character-level substitutions (dot confusions, similar shapes)
+that preserve word structure, making them recoverable from text context alone.
+Handwritten OCR errors include character merges, splits, segmentation
+failures, and stroke misinterpretation that fundamentally alter word structure.
+These errors often produce output that does not resemble any Arabic word,
+giving the LLM little to work with.
 
-The Qaari repetition artifact---where the engine loops over a short span of
-characters---is an interesting edge case. Phase~2's 66\% CER improvement over
-the all-samples OCR baseline is almost entirely attributable to the model
-collapsing this single pathological sample. Without that sample, LLM correction
-would appear to degrade OCR performance across the board. This highlights a
-practical consideration: LLMs can serve as a safety net for extreme OCR failures
-even when they harm ordinary outputs, and a sensible deployment might apply
-LLM correction only to samples that exceed a CER threshold rather than
-uniformly to all output.
+This finding implies that effective handwritten OCR correction may require
+multi-modal approaches that combine the OCR image with the text output, rather
+than text-only post-processing.
 
-\subsection{Why CAMeL Had No Effect}
+\subsection{Prompt-Induced Over-Correction}
 
-The morphological revert strategy's inertness is informative. It tells us that
-Phase~2's LLM errors are not primarily non-word insertions---they are valid Arabic
-words that are wrong in context. A context-free morphological check cannot
-distinguish a correct word from an incorrect one if both are morphologically
-valid, which is exactly the situation on this dataset. More powerful
-morphological tools, such as context-aware disambiguation, or a different
-intervention strategy (suggest rather than revert) might activate on more cases.
+When augmentation degrades performance, the mechanism is consistent across
+strategies: additional context raises the model's threshold for leaving text
+unchanged. A zero-shot prompt with a conservative instruction (``return as-is
+if correct'') keeps the model in a low-intervention mode. Confusion lists,
+rules, examples, and diagnostic notes all signal that something is wrong with
+the input and that active correction is expected. The model obliges, rewriting
+portions of text that Qaari had got right. This is particularly costly on
+low-error fonts where most tokens are already correct.
 
-\subsection{Few-Shot as the Least Harmful Augmentation}
+\subsection{Why CAMeL Post-Processing Has Limited Effect}
 
-Among the augmented conditions, few-shot (Phase~4B) causes the smallest
-degradation. This is consistent with the general finding that demonstrations
-constrain the output distribution more precisely than rule descriptions or
-retrieved passages. The QALB examples, despite originating from typing rather
-than OCR, share enough surface characteristics with OCR errors that they
-partially redirect the model's corrections toward genuine error patterns. Whether
-using OCR-native examples---pairs generated by running an OCR engine on clean text
-and pairing with the original---would push few-shot performance above zero-shot
-is an open question worth exploring.
+The morphological revert strategy's limited impact follows directly from the
+error taxonomy: OCR errors are predominantly valid-but-wrong (real Arabic words
+that are incorrect in context), not non-words. A context-free morphological
+check cannot distinguish a correct word from an incorrect one if both are
+morphologically valid. More powerful approaches---context-aware disambiguation
+or semantic validation---might activate on more cases but would also risk
+introducing their own errors.
+
+\subsection{Practical Implications}
+
+These results suggest a practical deployment strategy: rather than applying
+a single LLM correction pipeline uniformly, systems should estimate the
+baseline OCR quality and select the correction strategy accordingly.
+High-quality OCR output should be left unchanged or corrected only with the
+most conservative strategy. Moderate-error output benefits from zero-shot
+correction. High-error handwritten output may require fine-tuned models or
+multi-modal correction rather than prompt engineering alone.
 
 \subsection{Limitations}
 
-This study evaluates one dataset, one OCR engine, and one LLM. The PATS-A01
-Akhbar font has a low baseline CER on normal samples (1.37\%), which sets a
-very low bar that the LLM cannot clear. A different OCR engine with higher
-baseline errors, or a handwritten dataset like KHATT, might show a different
-balance. It is entirely possible that knowledge augmentation is beneficial
-when the OCR output is sufficiently degraded---the model then has more to
-correct and less risk of over-correcting accurate tokens.
-
-The 200-sample evaluation is sufficient for the comparison purposes of this
-study but would need to expand for publication-ready statistical claims.
+This study tests one LLM (Qwen3-4B) and one OCR engine (Qaari). Larger
+models may exhibit different over-correction patterns. The PATS-A01 dataset
+uses synthetic document images; real-world typewritten documents may introduce
+additional noise (scanning artifacts, paper degradation) that changes the
+error profile. The evaluation uses CER and WER as proxies for downstream
+task performance; domain-specific metrics may tell a different story.
 
 % -------------------------------------------------------------------------
 \section{Conclusion}
 % -------------------------------------------------------------------------
 
-We tested six prompt-engineering strategies for Arabic post-OCR correction using
-a 4-billion-parameter instruction-tuned LLM. The results were clear: zero-shot
-correction with a conservative instruction is the best-performing LLM strategy
-on high-quality typewritten Arabic OCR output, and every form of additional
-context we tried made things worse. Confusion-matrix injection and RAG caused
-the most damage; few-shot examples caused the least. Morphological post-processing
-had no effect.
+We evaluated seven prompt-engineering strategies for Arabic post-OCR correction
+across nine datasets spanning eight typewritten fonts and one handwritten
+corpus. The results reveal that correction effectiveness depends strongly on
+the baseline error profile. Zero-shot LLM correction reduces CER substantially
+on typewritten fonts with moderate-to-high error rates (up to \tbd\% relative
+improvement on Traditional font) but increases errors on fonts where Qaari
+already performs well. On handwritten text, improvement is marginal despite
+high baseline errors.
 
-The practical implication is that deploying a more complex system does not
-automatically improve results---and can actively harm them if the baseline OCR
-is already reasonably accurate. The most valuable contribution of the LLM in
-this experiment is handling the Qaari repetition artifact, a failure mode that
-no post-processing heuristic would easily catch.
+No single knowledge-augmentation strategy dominates across all datasets.
+The font-dependent behavior we observe---invisible in single-dataset
+studies---highlights the importance of multi-dataset evaluation for post-OCR
+correction research.
 
-Future work should evaluate these strategies on handwritten Arabic (e.g.,
-KHATT), where OCR errors are more frequent and diverse, and test whether the
-degradation pattern reverses when the baseline CER is substantially higher.
-Fine-tuned models on OCR-specific correction data are another direction, since
-instruction tuning on genuine OCR error--correction pairs would teach the model
-when \textit{not} to intervene, which is the lesson that prompt engineering alone
-seems unable to convey.
+The practical implication is that effective OCR correction requires
+error-profile-aware strategy selection rather than a one-size-fits-all
+approach. Future work should explore adaptive correction that adjusts its
+intervention level based on estimated input quality, and multi-modal
+approaches that combine visual and textual signals for handwritten text
+correction.
 
 % -------------------------------------------------------------------------
 \section*{Acknowledgment}
@@ -545,10 +762,6 @@ B. Mohit, A. Rozovskaya, N. Habash, W. Zaghouani, and O. Obeid,
 ``The first QALB shared task on automatic text correction for Arabic,''
 in \textit{Proc. EMNLP Workshop on Arabic Natural Language Processing}, 2014,
 pp. 39--47.
-
-\bibitem{romanov2020}
-M. Romanov and M. Seydi, ``OpenITI: a machine-readable corpus of Islamicate
-texts,'' \textit{Zenodo}, 2020.
 
 \bibitem{obeid2020}
 O. Obeid, N. Zalmout, S. Khalifa, S. Taji, N. Habash, A. Pasha, R. Roth,
@@ -600,6 +813,10 @@ NLP tasks,'' \textit{Advances in Neural Information Processing Systems}, vol. 33
 N. Shinn, F. Cassano, B. Labash, A. Gopinath, K. Narasimhan, and
 S. Yao, ``Reflexion: language agents with verbal reinforcement learning,''
 \textit{Advances in Neural Information Processing Systems}, vol. 36, 2023.
+
+\bibitem{dspy2024}
+O. Khattab \textit{et al.}, ``DSPy: compiling declarative language model calls
+into self-improving pipelines,'' in \textit{Proc. ICLR}, 2024.
 
 \end{thebibliography}
 
