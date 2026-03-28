@@ -22,9 +22,9 @@ their position in the word (isolated, initial, medial, or final). There are
 no clear boundaries between characters within a word, so segmentation and
 recognition are tightly coupled --- a segmentation error directly produces a
 recognition error. Many Arabic letters share the same base skeleton and
-differ only in the number and placement of small dots: the pair \RL{»}/\RL{Ì}
+differ only in the number and placement of small dots: the pair \RL{ÿ®}/\RL{Ÿä}
 (ba/ya) differs only in whether the dot is below or above the baseline;
-\RL{›}/\RL{ﬁ} (fa/qaf) differs only in having one or two dots above. Ink
+\RL{ŸÅ}/\RL{ŸÇ} (fa/qaf) differs only in having one or two dots above. Ink
 irregularities, low scan resolution, or font variation can shift a dot from
 its correct position and cause the OCR engine to output the wrong letter.
 
@@ -108,7 +108,7 @@ no task-specific training, no labelled correction pairs, and no model
 fine-tuning. The question is whether such a model --- given only a prompt
 and the OCR text --- can correct Arabic OCR errors effectively, and whether
 injecting additional knowledge into the prompt (error patterns, orthographic
-rules, examples, retrieved context) can further improve performance.
+rules, examples) can further improve performance.
 
 %----------------------------------------------------------------------------
 \section{Research Questions}
@@ -118,11 +118,12 @@ rules, examples, retrieved context) can further improve performance.
 This thesis investigates the following research questions.
 
 \textbf{RQ1:} What are the characteristics of errors produced by Qaari on
-Arabic typewritten text? What error types dominate, and how severe is the
-overall degradation?
+Arabic typewritten and handwritten text? How do error profiles differ across
+fonts and script types?
 
 \textbf{RQ2:} Can a zero-shot instruction-tuned LLM correct Arabic OCR errors
-without any task-specific guidance?
+without any task-specific guidance? How does correction effectiveness vary
+across fonts with different baseline error rates?
 
 \textbf{RQ3:} Does injecting OCR-specific error knowledge (character confusion
 matrix) into the prompt improve correction beyond zero-shot?
@@ -141,18 +142,19 @@ quality of corrected text?
 summaries of the model's own correction failures, derived from a training
 split --- improve correction on a held-out evaluation set?
 
-\textbf{RQ8:} Does retrieval-augmented generation (RAG) grounded in the
-OpenITI classical Arabic corpus improve correction?
+\textbf{RQ8:} Can automated prompt optimisation via DSPy discover prompts
+that outperform hand-crafted strategies?
 
 \textbf{RQ9 (overarching):} Which combination of knowledge augmentation
 strategies produces the best correction quality, and what does each component
 individually contribute in ablation?
 
 RQ1 is answered in Chapter~\ref{ch_results}, Section~\ref{sec:res_phase1}.
-RQ2--RQ8 are each answered by a corresponding isolated experiment
-(Phases 2--5). RQ9 is answered by the combination and ablation study
-(Phase~6), results for which are pending. Research questions RQ2--RQ9 all
-take Phase~2 zero-shot correction as their reference point for comparison.
+RQ2--RQ7 are each answered by a corresponding isolated experiment
+(Phases~2--4D). RQ8 is answered by Phase~7 (DSPy optimisation). RQ9 is
+answered by the combination and ablation study (Phase~5). Research questions
+RQ2--RQ9 all take Phase~2 zero-shot correction as their reference point for
+comparison.
 
 %----------------------------------------------------------------------------
 \section{Contributions}
@@ -163,12 +165,14 @@ This thesis makes the following contributions.
 
 \begin{enumerate}
 
-  \item \textbf{A systematic evaluation framework for Arabic post-OCR
-  correction.} Six isolated knowledge augmentation conditions are evaluated
-  on a common benchmark (PATS-A01 Akhbar, 200 samples, Qwen3-4B), each
-  changing exactly one variable relative to the zero-shot baseline. This
-  isolation design enables direct attribution of observed CER changes to
-  individual knowledge sources.
+  \item \textbf{A systematic multi-dataset evaluation framework for Arabic
+  post-OCR correction.} Seven prompt-engineering strategies are evaluated
+  across nine datasets (eight PATS-A01 typewritten fonts and KHATT
+  handwritten text) using aligned train/validation splits, each changing
+  exactly one variable relative to the zero-shot baseline. This isolation
+  design enables direct attribution of observed CER changes to individual
+  knowledge sources, and the multi-font evaluation reveals font-dependent
+  effects invisible in single-dataset studies.
 
   \item \textbf{A three-stage export--infer--analyse pipeline.} The
   experimental infrastructure separates local data preparation from GPU
@@ -186,21 +190,25 @@ This thesis makes the following contributions.
   self-diagnostic statistics as prompt augmentation for Arabic OCR
   correction.
 
-  \item \textbf{An empirical finding on the over-correction problem.}
-  Zero-shot LLM correction is the best-performing strategy for high-quality
-  typewritten Arabic OCR, outperforming all six knowledge-augmented
-  variants. The primary failure mode of all augmented conditions is
-  over-correction: a 25.06\% error introduction rate means the LLM corrupts
-  1 in 4 previously correct tokens. Every augmentation element tested
-  increases this rate rather than reducing it.
+  \item \textbf{An aligned multi-font evaluation design.} All eight PATS-A01
+  fonts share 2,766 text lines drawn from the same underlying content, with
+  an aligned 85/15 split (seed 42) ensuring identical 415-sample validation
+  sets across fonts. This controlled design isolates font as the sole
+  variable, enabling principled cross-font comparisons of both OCR quality
+  and LLM correction effectiveness.
 
-  \item \textbf{An error taxonomy for Qaari on PATS-A01 Akhbar.}
-  Phase~1 produces a character-level confusion matrix, an eight-category
-  error taxonomy (dot confusion, alef maqsura, similar shape, hamza, taa
-  marbuta, insertion, deletion, other substitution), and a CAMeL Tools
-  morphological analysis confirming that 100\% of Qaari errors on this
-  corpus are valid-but-wrong substitutions, not morphologically invalid
-  non-words.
+  \item \textbf{An empirical characterisation of the over-correction problem.}
+  Zero-shot LLM correction effectiveness depends strongly on the baseline
+  error rate. On low-error fonts, the LLM introduces more errors than it
+  fixes; on high-error fonts, the net effect is positive. This
+  font-dependent over-correction threshold is quantified across all eight
+  typewritten fonts.
+
+  \item \textbf{A comprehensive error taxonomy for Qaari across multiple
+  fonts.} Phase~1 produces per-font character-level confusion matrices,
+  error taxonomies, and morphological analyses, revealing how error profiles
+  shift across fonts --- from dot confusion on clean fonts to more diverse
+  error distributions on visually complex typefaces.
 
   \item \textbf{Open-source code and reproducible configuration.}
   All pipelines, prompt templates, knowledge base loaders, and evaluation
@@ -222,42 +230,46 @@ builds the necessary foundations. It covers the Arabic language and script,
 the evolution of OCR from template matching through deep learning to
 vision--language models, the development of large language models and
 instruction tuning, prompt engineering strategies (zero-shot, few-shot,
-chain-of-thought, RAG, self-reflective), and a survey of related work on
+chain-of-thought, self-reflective), and a survey of related work on
 post-OCR correction and Arabic NLP. A reader familiar with any of these
 topics may skip the corresponding subsection.
 
 \textbf{Chapter~\ref{ch_system} --- System Design and Datasets}
 describes the experimental infrastructure. It introduces the PATS-A01 and
-KHATT datasets, explains the three-stage export--infer--analyse pipeline,
-defines the text normalisation and CER/WER evaluation protocol, and
-documents each knowledge base component (confusion matrix loader, rules
-loader, QALB loader, OpenITI/FAISS retriever, CAMeL Tools integration, and
-LLM insights loader). The LLM correction module and PromptBuilder class
-hierarchy are also described here.
+KHATT datasets, explains the aligned multi-font train/validation split
+design, the three-stage export--infer--analyse pipeline, defines the text
+normalisation and CER/WER evaluation protocol, and documents each knowledge
+base component (confusion matrix loader, rules loader, QALB loader, CAMeL
+Tools integration, and LLM insights loader). The LLM correction module and
+PromptBuilder class hierarchy are also described here.
 
 \textbf{Chapter~\ref{ch_methodology} --- Experimental Methodology}
 describes each experimental phase as a self-contained experiment with a
-stated hypothesis, method, and expected output. Phases 1 through 6 are
-covered, with particular attention to the isolation principle that ensures
-each augmentation condition can be attributed to a single knowledge source.
+stated hypothesis, method, and expected output. Phases~1 through~4D are
+covered as isolated experiments, followed by Phase~5 (combinations and
+ablation) and Phase~7 (DSPy optimisation), with particular attention to the
+isolation principle that ensures each augmentation condition can be attributed
+to a single knowledge source.
 
 \textbf{Chapter~\ref{ch_results} --- Results and Analysis}
-reports all numerical results for Phases 1--5 and the Phase~6 design.
-Every result is stated in a table and interpreted in prose. The chapter
-answers RQ1--RQ8 and characterises the over-correction problem
-quantitatively.
+reports all numerical results across the nine evaluation datasets.
+Per-font Phase~1 baselines establish the OCR error landscape, Phase~2
+reveals font-dependent correction effectiveness, Phases~3--4D quantify
+the impact of each knowledge source, Phase~5 tests combinations and
+ablation, and Phase~7 evaluates automated prompt optimisation. Every result
+is stated in a table and interpreted in prose.
 
 \textbf{Chapter~\ref{ch_conc} --- Discussion and Conclusion}
-interprets the findings, develops the over-correction problem as a unified
-theoretical argument, discusses the conditions under which the results
-would likely reverse, states practical system design recommendations,
-enumerates limitations, and charts future research directions. A reader
-primarily interested in conclusions and implications may begin with this
-chapter.
+interprets the findings, develops the font-dependent over-correction
+threshold as a unified theoretical argument, discusses the conditions under
+which the results would likely differ, states practical system design
+recommendations, enumerates limitations, and charts future research
+directions. A reader primarily interested in conclusions and implications
+may begin with this chapter.
 
 The appendices provide supporting material: Appendix~A contains the full
 prompt templates for all phases in both Arabic and English; Appendix~B
 contains the Phase~4D Arabic-language diagnostic text generated from
 training-split analysis; Appendix~C contains the relevant sections of the
-configuration file; and Appendix~D contains a representative table of
-OCR error examples from Phase~1.
+configuration file; and Appendix~D contains representative tables of
+OCR error examples from Phase~1 across multiple fonts.

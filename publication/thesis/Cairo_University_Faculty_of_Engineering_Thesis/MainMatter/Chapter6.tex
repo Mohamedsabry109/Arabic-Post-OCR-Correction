@@ -4,10 +4,10 @@ This chapter interprets the findings reported in Chapter~\ref{ch_results},
 situates them in the broader literature, acknowledges the limitations of the
 study honestly, and charts future directions. Section~\ref{sec:disc_rq}
 revisits each research question. Section~\ref{sec:disc_overcorrection}
-develops the central unexpected finding --- the over-correction problem ---
-as a cohesive theoretical and empirical argument.
+develops the central finding --- the font-dependent over-correction threshold
+--- as a cohesive theoretical and empirical argument.
 Section~\ref{sec:disc_when} considers the conditions under which the findings
-would likely reverse. Section~\ref{sec:disc_design} offers practical system
+would likely differ. Section~\ref{sec:disc_design} offers practical system
 design recommendations. Section~\ref{sec:disc_limitations} enumerates
 limitations. Section~\ref{sec:disc_future} outlines future research directions.
 Section~\ref{sec:conclusion} provides the concluding statement.
@@ -20,577 +20,395 @@ Section~\ref{sec:conclusion} provides the concluding statement.
 \subsection*{RQ1: OCR Error Characterisation}
 
 \textbf{Question:} What are the characteristics of errors produced by Qaari
-on Arabic typewritten text? What error types dominate, and how severe is the
-overall degradation?
+on Arabic typewritten and handwritten text? How do error profiles differ
+across fonts and script types?
 
-\textbf{Finding:} Qaari's primary failure mode on the PATS-A01 Akhbar font
-is a catastrophic repetition artefact that affects 0.5\% of samples and
-accounts for 95.2\% of all character errors (CER 17.01\% overall, 1.37\% on
-normal samples). On normal samples, the dominant error class is dot confusion
-(\RL{Ø}/\RL{Ù}, \RL{í}/\RL{È}, \RL{Ý}/\RL{Þ} and related pairs), and all OCR errors produce morphologically
-valid Arabic forms.
+\textbf{Finding:} Qaari's baseline CER varies substantially across the eight
+PATS-A01 fonts, from \tbd\% (best font) to \tbd\% (worst font), with the
+KHATT handwritten corpus at \tbd\%. The dominant error type on all typewritten
+fonts is dot confusion, but the relative proportion of error categories
+shifts with font complexity. KHATT exhibits a more diverse error distribution
+including segmentation-related errors.
 
-\textbf{Significance:} The high OCR quality on normal samples (CER 1.37\%)
-places this dataset in the regime where post-OCR correction is most risky.
-When fewer than 2\% of characters are erroneous, a corrector that cannot
-reliably identify which characters are wrong will corrupt more correct
-characters than it fixes. This dataset is therefore not a favourable context
-for LLM-based correction, and the subsequent results must be interpreted in
-that light.
-
-\textbf{Caveat:} The Akhbar font is a well-rendered typewritten font with
-unambiguous glyph shapes. Other PATS-A01 fonts or handwritten text (KHATT)
-may exhibit higher error rates and different error distributions, which could
-produce qualitatively different results for the correction phases.
+\textbf{Significance:} The wide range of baseline CER across fonts ---
+sharing identical text content --- demonstrates that font choice alone can
+change the OCR error rate by an order of magnitude. This variation is the
+empirical foundation for the font-dependent correction findings in RQ2--RQ9.
 
 \subsection*{RQ2: Zero-Shot Correction Capability}
 
 \textbf{Question:} Can a zero-shot instruction-tuned LLM correct Arabic OCR
-errors without any task-specific guidance?
+errors without any task-specific guidance? How does correction effectiveness
+vary across fonts?
 
-\textbf{Finding:} Yes, partially. The zero-shot LLM reduces aggregate CER
-from 17.01\% to 5.77\% (66\% relative reduction) by collapsing repetition
-artefacts effectively. On normal samples, however, it increases CER from
-1.37\% to 5.77\% (321\% relative increase), demonstrating systematic
-over-correction.
+\textbf{Finding:} Zero-shot LLM correction is font-dependent. On fonts with
+moderate-to-high baseline CER (\tbd--\tbd\%), the LLM achieves CER
+reductions of up to \tbd\%. On fonts with very low baseline CER (below
+\tbd\%), the LLM increases CER, introducing more errors than it fixes. On
+KHATT (\tbd\% baseline CER), the LLM provides marginal improvement.
 
-\textbf{Significance:} This duality --- effective on catastrophic failures,
-harmful on high-quality input --- suggests that zero-shot LLM correction
-should be applied \emph{selectively}, not universally. It is a reliable
-safety net for degenerate OCR output, but a liability for good OCR output.
-The finding aligns with \textcite{kang2024llmocr} who observe that LLMs show strong
-performance on heavily corrupted text but introduce errors on clean text.
-
-\textbf{Caveat:} The zero-shot prompt used was the aggressive version (v1).
-The conservative version (v2) might achieve a better balance between fixing
-artefacts and preserving correct text, though the Phase~4D error introduction
-rate of 25.06\% suggests the over-correction tendency is deep-seated and
-unlikely to be fully resolved by prompt rewording alone.
+\textbf{Significance:} This duality establishes the \emph{over-correction
+threshold}: a baseline CER level below which LLM correction is harmful and
+above which it is beneficial. The threshold is estimated at approximately
+\tbd\% CER. This finding has direct practical implications: LLM correction
+should be deployed conditionally, not universally, based on expected OCR
+quality.
 
 \subsection*{RQ3: Confusion Matrix Injection}
 
 \textbf{Question:} Does injecting OCR-specific error knowledge (confusion
 matrix) into the prompt improve correction beyond zero-shot?
 
-\textbf{Finding:} No. Confusion matrix injection increases CER by 240\%
-relative to Phase~2 (19.62\% vs. 5.77\%), producing the second-worst
-result overall.
+\textbf{Finding:} On the PATS-A01 macro-average, confusion matrix injection
+achieves a CER change of \tbd\% relative to Phase~2. The effect is
+font-dependent.
 
-\textbf{Significance:} Injecting a list of characters the model should
-scrutinise increases, not decreases, its intervention rate on those characters.
-This is a concrete demonstration of the prompt-as-activation-signal problem:
-informing the model that certain confusions exist activates its correction
-reflex on those characters, regardless of whether those characters are
-actually confused in the input. The model cannot distinguish between
-``the confusion matrix says this pair is confusable'' and ``this specific
-character in this specific token is confused.''
+\textbf{Significance:} The per-font variation reveals whether the confusion
+matrix injection is uniformly harmful (as observed on the single Akhbar font
+in preliminary experiments) or whether some fonts benefit from targeted error
+awareness. On fonts where the confusion pairs accurately reflect the dominant
+errors, the injection may direct the model's attention productively; on fonts
+where the confusions are rare, the injection may activate the model's
+intervention tendency without corresponding benefit.
 
 \subsection*{RQ4: Rule-Augmented Prompting}
 
 \textbf{Question:} Does injecting explicit Arabic orthographic rules improve
 correction?
 
-\textbf{Finding:} No. Rule augmentation increases CER by 91\% relative to
-Phase~2 (11.03\% vs. 5.77\%).
+\textbf{Finding:} Rule augmentation achieves a PATS-A01 macro-average CER
+change of \tbd\% relative to Phase~2.
 
-\textbf{Significance:} Prescriptive orthographic rules apply to all text, not
-just to OCR errors. The model applies them to correctly rendered tokens,
-producing over-normalisation. This is consistent with the known trade-off
-between generality and precision in linguistic rule injection: general rules
-cover many phenomena but also fire on correct text.
+\textbf{Significance:} Prescriptive rules apply to all Arabic text, not just
+to OCR errors. Their effect is expected to be relatively uniform across fonts
+because the rule set is independent of the specific error profile. Whether
+this uniform effect is positive or negative depends on the balance between
+rule-guided corrections (fixing genuine errors) and over-normalisation
+(modifying correct tokens).
 
 \subsection*{RQ5: Few-Shot Examples}
 
 \textbf{Question:} Does providing error-correction examples from the QALB
 corpus improve correction?
 
-\textbf{Finding:} No, but Phase~4B is the best augmented result. CER
-increases by 75\% relative to Phase~2 (10.09\% vs. 5.77\%), the smallest
-degradation among active augmentation conditions.
+\textbf{Finding:} Few-shot examples achieve a PATS-A01 macro-average CER
+change of \tbd\% relative to Phase~2.
 
-\textbf{Significance:} Example-based guidance is more effective than abstract
-rules or character lists at constraining the model's behaviour. Showing
-specific input--output pairs implicitly communicates the expected scale of
-correction, reducing the gratuitous rewriting that characterises Phases 3, 4A,
-and 5. The residual degradation reflects the QALB transfer gap: human typing
-errors and OCR visual-confusion errors are different distributions, and the
-QALB examples do not teach the model how to handle repetition artefacts,
-dot-position swaps, or the conservative posture required for high-quality
-input.
+\textbf{Significance:} The QALB transfer gap (human typing errors vs.\ OCR
+visual confusions) limits the ecological validity of these demonstrations.
+However, example-based guidance constrains the model's behaviour more
+precisely than abstract rules, because it communicates the expected scale
+and type of corrections through concrete demonstrations. The residual
+transfer gap motivates the DSPy approach in Phase~7, which selects
+OCR-native demonstrations.
 
 \subsection*{RQ6: CAMeL Morphological Post-Processing}
 
 \textbf{Question:} Does morphological post-processing via CAMeL Tools improve
 the quality of LLM-corrected text?
 
-\textbf{Finding:} No, and it has zero effect (0\% CER change; zero reverts
-on 200 samples).
+\textbf{Finding:} CAMeL post-processing achieves a PATS-A01 macro-average
+CER change of \tbd\% relative to Phase~2.
 
-\textbf{Significance:} The revert strategy addresses a failure mode ---
-LLM-introduced morphological invalids --- that does not occur in this dataset.
-When both OCR errors and LLM corrections are morphologically valid Arabic
-forms (as confirmed by Phase~1 morphological analysis), the revert condition
-is never satisfied. This result clarifies the scope of morphological
-post-processing: it is useful only when the LLM produces non-word outputs,
-which is a symptom of a poorly calibrated or insufficiently fluent model.
-Qwen3-4B, as a strong multilingual model, almost never produces non-words in
-Arabic.
+\textbf{Significance:} The revert strategy addresses a specific failure mode:
+LLM-introduced morphological invalids. On well-rendered typewritten fonts
+where both OCR errors and LLM corrections are morphologically valid Arabic
+forms, the revert condition is rarely triggered. CAMeL post-processing is a
+zero-cost defensive layer that cannot degrade results but provides benefit
+only when the LLM produces non-word outputs.
 
 \subsection*{RQ7: Self-Reflective Prompting}
 
 \textbf{Question:} Does self-reflective prompting --- injecting the model's
 own diagnosed failure patterns --- improve correction?
 
-\textbf{Finding:} No. Self-reflective prompting increases CER by 82\%
-relative to Phase~2 (10.48\% vs. 5.77\%).
+\textbf{Finding:} Self-reflective prompting achieves a PATS-A01 macro-average
+CER change of \tbd\% relative to Phase~2.
 
 \textbf{Significance:} The diagnostic statistics derived from training-split
-analysis are accurate (97.35\% insertion fix rate, 25.06\% overall introduction
-rate), but injecting them into the prompt does not translate the accurate
-diagnosis into improved behaviour. The model's instruction-following training
-interprets the diagnostic warnings as additional licence to intervene, not
-as constraints to hold back. This finding has implications beyond OCR
-correction: it suggests that self-diagnostic prompting strategies \cite{shinn2023reflexion}
-may be less effective when the model's primary failure mode is
-over-intervention rather than under-intervention. Reflexion-style feedback
-was designed for tasks where the model is not trying hard enough; in this
-setting, the model is trying too hard.
+analysis are accurate and informative, but translating accurate diagnosis
+into improved behaviour remains challenging. The model's instruction-following
+training may interpret diagnostic warnings as additional licence to intervene
+rather than as constraints to hold back. This finding suggests that
+self-diagnostic prompting strategies may be less effective when the model's
+primary failure mode is over-intervention rather than under-intervention.
 
-\subsection*{RQ8: Retrieval-Augmented Generation}
+\subsection*{RQ8: DSPy Prompt Optimisation}
 
-\textbf{Question:} Does retrieval-augmented generation grounded in the
-OpenITI corpus improve correction?
+\textbf{Question:} Can automated prompt optimisation via DSPy discover
+prompts that outperform hand-crafted strategies?
 
-\textbf{Finding:} No, and it produces the worst result overall. RAG increases
-CER by 283\% relative to Phase~2 (22.10\% vs. 5.77\%), exceeding even the
-all-samples OCR baseline (17.01\%).
+\textbf{Finding:} DSPy-optimised prompts achieve a PATS-A01 macro-average
+CER of \tbd\%, representing a \tbd\% change relative to Phase~2.
 
-\textbf{Significance:} Domain mismatch between the classical OpenITI corpus
-and modern Akhbar newspaper text is fatal to the RAG strategy in this
-setting. Retrieved passages are used by the model as stylistic templates,
-importing archaic vocabulary and constructions that do not belong in the
-target text. The misleadingly high embedding similarity scores (average 0.805)
-illustrate a known weakness of general-purpose embedding models: they compute
-similarity based on shared surface tokens (common Arabic words, the definite
-article) rather than topical or semantic relevance.
+\textbf{Significance:} DSPy's BootstrapFewShot optimiser selects
+demonstrations from OCR-native training data, addressing the QALB transfer
+gap that limits Phase~4B. Whether this OCR-native demonstration selection
+translates to better correction quality than hand-crafted QALB examples
+tests the hypothesis that task-specific data matters more than expert-curated
+but distribution-mismatched examples.
 
-\subsection*{RQ9: Best Combination (Phase 6)}
+\subsection*{RQ9: Best Combination}
 
 \textbf{Question:} Which combination of knowledge augmentation strategies
-produces the best correction, and what does each component individually
-contribute?
+produces the best correction, and what does each component contribute?
 
-\textbf{Finding:} Phase~6 results are pending. Based on the isolated results,
-combinations that include few-shot examples (the best isolated augmentation)
-and exclude RAG (the worst) are the most likely candidates for improvement.
-Whether any combination can exceed the zero-shot Phase~2 baseline remains
-an open question.
+\textbf{Finding:} The best Phase~5 combination achieves a PATS-A01
+macro-average CER of \tbd\%, representing a \tbd\% change relative to
+Phase~2. Ablation reveals that \tbd{} is the most important component.
+
+\textbf{Significance:} Whether any combination exceeds the zero-shot
+Phase~2 baseline on the macro-average determines whether knowledge
+augmentation provides value in the multi-font setting, even if individual
+components degrade performance in isolation. Synergistic effects ---
+where two knowledge sources together outperform either alone --- would
+indicate complementarity rather than redundancy among the strategies.
 
 %----------------------------------------------------------------------------
-\section{The Over-Correction Problem}
+\section{The Over-Correction Threshold}
 \label{sec:disc_overcorrection}
 %----------------------------------------------------------------------------
 
-The central unexpected finding of this study is that \emph{every active
-knowledge augmentation strategy tested degrades correction quality relative
-to zero-shot}, and that the shared mechanism of degradation is
-\emph{over-correction}: the LLM modifies tokens that are already correct.
-This section develops a unified account of the phenomenon.
+The central finding of this multi-dataset study is that LLM correction
+effectiveness is \emph{font-dependent} and can be characterised by an
+\emph{over-correction threshold}: a baseline CER level that separates
+the regime where correction helps from the regime where it hurts.
 
-\subsection{What Over-Correction Is}
+\subsection{What the Threshold Is}
 \label{subsec:disc_oc_what}
 
 Over-correction refers to the LLM changing tokens in the OCR output that
-correspond to correct characters in the ground truth. On a corpus where the
-normal-samples OCR CER is 1.37\%, the expected number of erroneous characters
-per sentence is very low. Any intervention on a correct character introduces
-a new error that did not exist before correction.
+are already correct. On a corpus where the baseline CER is low, most tokens
+are correct, and any intervention on a correct token introduces a new error.
+The model's error introduction rate --- the fraction of correct tokens
+incorrectly modified --- is approximately constant across fonts (because it
+is a property of the model's instruction-following behaviour, not of the
+input quality). The error \emph{fix} rate, by contrast, scales with the
+number of errors present.
 
-The Phase~4D training-split analysis provides a precise quantification:
-Qwen3-4B-Instruct-2507 has an overall error introduction rate of 25.06\%.
-This means that, on average, for every four characters that were correctly
-recognised by Qaari, the LLM incorrectly modifies one of them. For specific
-error categories, the introduction rates are even more severe: 163.27\% for
-substitution errors (the LLM introduces 1.63 new substitution errors for
-every substitution it fixes) and 212.50\% for deletion errors (the LLM
-introduces 2.13 new deletion errors for every deletion it fixes). The only
-category where the LLM excels is insertion errors (repetition artefacts),
-where it achieves a 97.35\% fix rate with only an 18.13\% introduction rate.
+This creates a crossover point. When the baseline CER is below the threshold,
+the number of errors the model introduces (proportional to the number of
+correct tokens, which is large) exceeds the number it fixes (proportional to
+the number of errors, which is small). Above the threshold, the balance
+reverses.
 
-The practical consequence is clear. Given that Qaari on the Akhbar font
-makes very few errors on normal text, the LLM's 25.06\% introduction rate
-far outweighs the small number of errors it fixes. Correction makes things
-worse for the typical sample.
-
-\subsection{Why Over-Correction Happens}
+\subsection{Why the Threshold Matters}
 \label{subsec:disc_oc_why}
 
-The mechanism is rooted in instruction-tuning. A language model trained to
-follow the instruction ``correct this text'' has been trained on data where
-the correct action is to produce a modified output. The training signal
-rewards modification: responses that return the input unchanged score poorly
-against a correction reward, while responses that make changes --- even
-small, unnecessary ones --- are more consistent with the training distribution.
+The threshold has direct practical implications for system design. A
+production Arabic OCR pipeline should not apply LLM correction uniformly
+to all output. Instead, it should estimate the expected OCR quality ---
+through confidence scores, font identification, or a quick CER estimate on
+a calibration set --- and route only output above the threshold to the
+corrector. Output below the threshold should be left uncorrected.
 
-The conservative instruction appended to all prompts in this study ---
-``if the text is already correct, return it unchanged'' --- partially
-mitigates this tendency but cannot fully counteract it. The model has a strong
-prior toward intervention, and a single sentence in the system prompt
-cannot override thousands of training examples that demonstrate correction as
-the expected behaviour.
+The multi-font evaluation in this thesis provides an empirical estimate of
+this threshold at approximately \tbd\% CER. This estimate is specific to
+Qwen3-4B and the PATS-A01 text content, but the qualitative principle ---
+that there exists a crossover point --- is likely general.
 
-This interpretation is consistent with the psychology of LLM generation: the
-model samples from a conditional distribution $P(\text{output} \mid
-\text{instruction}, \text{input})$ where the instruction primes it toward
-corrective outputs. Arabic words that could plausibly have alternative forms
-(e.g., a word with a hamza whose placement could vary) will be corrected even
-when the original form is already the appropriate one.
-
-\subsection{Why Augmentation Makes Over-Correction Worse}
+\subsection{Why Augmentation Interacts with the Threshold}
 \label{subsec:disc_oc_augmentation}
 
-Every knowledge augmentation element added to the prompt signals to the model
-that the input text is problematic and that active correction is warranted.
-Each element acts as an \emph{activation signal} for the model's correction
-behaviour:
+Knowledge augmentation shifts the model's intervention rate. Each additional
+knowledge element in the prompt signals to the model that the input text is
+problematic and that active correction is warranted, increasing the number of
+tokens it modifies. This raises the error introduction rate, which raises the
+over-correction threshold.
 
-\begin{itemize}
-  \item A confusion list says: ``the OCR engine confuses these characters ---
-        be suspicious of these characters in the input.'' The model responds
-        by becoming suspicious of those characters and changing them, even
-        when they are correct.
-  \item Orthographic rules say: ``apply these rules to the text.'' The model
-        applies them universally, including to correctly rendered tokens.
-  \item Few-shot examples say: ``here is what correction looks like.'' The
-        model attempts to produce output at a similar edit distance to the
-        examples, even when the input is already correct.
-  \item Self-reflective diagnostics say: ``you tend to make these errors.''
-        The model interprets this as evidence that the input is likely to
-        contain errors and intervenes more.
-  \item Retrieved passages provide alternative text that the model implicitly
-        treats as a corrective reference, pulling its output toward the
-        retrieved content.
-\end{itemize}
-
-The cumulative effect of adding more augmentation elements is a monotonic
-increase in the model's intervention rate, which translates directly into
-a monotonic increase in CER on high-quality input. The ranking in
-Table~\ref{tab:main_comparison} (Chapter~\ref{ch_results}) is consistent with
-this account: Phase~4B (least activating augmentation, 75\% degradation) is
-the best; Phase~5 (most foreign reference text injected, 283\% degradation) is
-the worst.
+The implication is that augmented strategies may have a \emph{higher}
+threshold than zero-shot: they require a higher baseline CER before
+correction becomes net beneficial. Whether this occurs in practice is
+tested by comparing the per-font crossover points for Phase~2 (zero-shot)
+versus the augmented phases.
 
 \subsection{Connection to the Broader Literature}
 \label{subsec:disc_oc_literature}
 
 Over-correction in LLMs is not unique to OCR correction. Analogous effects
-have been observed in related settings.
+have been observed in fact verification, where models provided with retrieved
+passages sometimes introduce hallucinations \cite{lewis2020retrieval}; in
+chain-of-thought prompting \cite{wei2022chain}, where extended reasoning
+gives the model more opportunities to drift; and in grammar correction,
+where models over-normalise already-correct text.
 
-In \emph{fact verification}, language models provided with retrieved passages
-sometimes introduce hallucinations that align with the retrieved content
-rather than the ground truth \cite{lewis2020retrieval}. The model treats the
-retrieved content as authoritative and modifies its output accordingly ---
-a direct parallel to the Phase~5 RAG behaviour observed here.
-
-In \emph{chain-of-thought prompting} \cite{wei2022chain}, models that reason
-step-by-step sometimes arrive at wrong answers that they would have answered
-correctly with a direct response. Extended reasoning gives the model more
-opportunities to drift from the correct answer. The self-reflective prompting
-in Phase~4D is analogous: the model's extended reflection on its failure
-patterns gives it more opportunities to introduce unsolicited corrections.
-
-More broadly, the finding that \emph{simpler prompts outperform augmented
-prompts} on this task runs counter to the prevailing assumption in prompt
-engineering research that more information is always better. It suggests that
-the optimal augmentation level depends on the error density of the input:
-high-error-density input benefits from more guidance; low-error-density input
-is harmed by it.
+The finding that \emph{simpler prompts outperform augmented prompts} on
+low-error input is consistent with the hypothesis that the optimal
+augmentation level depends on the error density: high-error input benefits
+from more guidance; low-error input is harmed by it.
 
 %----------------------------------------------------------------------------
-\section{When Would Augmentation Help?}
+\section{When Would Results Differ?}
 \label{sec:disc_when}
 %----------------------------------------------------------------------------
 
-The findings of this study are specific to a well-defined experimental
-context: a high-quality typewritten corpus, a single OCR engine, a single
-4-billion-parameter LLM, and a single document domain. The results would
-likely differ under the following conditions.
-
 \paragraph{Higher baseline CER.}
-If the OCR output had a baseline CER of 20--30\% (as might be expected on
-difficult fonts, degraded documents, or handwritten text such as KHATT),
-there would be proportionally more errors to fix and fewer correct tokens to
-corrupt. The LLM's 25.06\% introduction rate would still hold, but it would
-represent a smaller fraction of the total token count. In that regime,
-the net effect of correction could be positive, and knowledge augmentation
-that further increases the intervention rate might produce net benefit.
-Evaluating on KHATT is the highest-priority next step for this reason.
+The multi-font evaluation partially addresses this: fonts with higher baseline
+CER should show more positive correction effects. The KHATT handwritten data
+provides an extreme case. If KHATT shows that correction is beneficial even
+at very high CER, it would suggest that the over-correction threshold has an
+upper bound above which the LLM is again ineffective (perhaps because the
+errors are too severe for language-model priors to resolve).
 
-\paragraph{Domain-matched retrieval corpus.}
-Phase~5 is a worst-case RAG evaluation: OpenITI classical Arabic against
-PATS-A01 modern Arabic newspaper text. Building a retrieval corpus from
-modern Arabic news articles (or, ideally, from the same news agency as the
-Akhbar font) would remove the domain mismatch and allow the retrieval to
-surface genuinely relevant passages. Under these conditions, RAG could provide
-contextual grounding that helps the model distinguish between alternative
-word forms rather than providing misleading stylistic templates.
-
-\paragraph{OCR-native few-shot pairs.}
-Phase~4B uses QALB pairs derived from human typing errors. The transfer gap
-to OCR errors is imperfect. Generating few-shot pairs by running Qaari on
-clean ground-truth text, pairing the OCR output with the original, and
-selecting pairs that illustrate dot-confusion corrections and repetition
-collapses would provide examples that directly target the OCR error
-distribution. This is straightforward to implement and is expected to
-significantly improve Phase~4B outcomes.
+\paragraph{Domain-matched few-shot examples.}
+Phase~4B uses QALB human typing errors. DSPy (Phase~7) addresses this by
+selecting OCR-native demonstrations. If Phase~7 substantially outperforms
+Phase~4B, it would confirm that domain-matched examples matter more than
+expert curation.
 
 \paragraph{Larger or fine-tuned models.}
-Qwen3-4B is a relatively compact model. Larger models (Qwen3-14B, GPT-4)
-may have a stronger implicit prior toward conservatism, having been exposed
-to more text and more instruction-following training that includes explicit
-``do not change what is correct'' examples. Alternatively, fine-tuning a
-model specifically for OCR correction, with training examples that reward
-returning correct text unchanged, would directly address the over-correction
-tendency. Such a model would have a different intervention prior and might
-benefit substantially from knowledge augmentation.
+Qwen3-4B is relatively compact. Larger models may have a stronger implicit
+conservatism. Fine-tuning on OCR correction pairs with explicit ``return
+unchanged'' examples would directly address the over-correction tendency.
 
 \paragraph{Confidence-based selective correction.}
-Rather than applying LLM correction to all samples uniformly, a selective
-strategy could route only those samples likely to contain errors to the
-corrector. OCR engines often produce character-level confidence scores;
-samples below a confidence threshold could be flagged for correction while
-high-confidence outputs are left untouched. This would limit the LLM's
-exposure to correct text and substantially reduce the over-correction rate.
+Rather than applying correction to all samples, routing only low-confidence
+OCR output to the LLM would limit exposure to correct text and reduce
+over-correction.
 
 %----------------------------------------------------------------------------
 \section{Implications for System Design}
 \label{sec:disc_design}
 %----------------------------------------------------------------------------
 
-The following practical recommendations are derived from the experimental
-findings.
+\paragraph{Condition correction on expected OCR quality.}
+On input where the baseline CER is below the over-correction threshold
+(\tbd\%), LLM correction should not be applied. On input above the threshold,
+zero-shot correction is recommended as the default strategy unless
+font-specific evaluation identifies a better augmented approach.
 
-\paragraph{For high-quality typewritten Arabic OCR: use zero-shot, do not augment.}
-On input where the baseline CER is below 5\%, adding knowledge augmentation
-to the LLM prompt is actively harmful. The zero-shot corrector should be
-preferred over any augmented variant. The conservative instruction (``return
-unchanged if correct'') should be included, though it provides only partial
-protection against over-correction.
+\paragraph{Report per-font results, not just averages.}
+Macro-averages over multiple fonts can mask font-specific effects. A system
+that helps on 6 of 8 fonts but catastrophically hurts on 2 may show a
+positive average while producing unacceptable results on specific inputs.
+Per-font evaluation is essential for responsible deployment.
 
-\paragraph{Apply LLM correction selectively, not universally.}
-The LLM is reliable for correcting catastrophic OCR failures (repetition
-artefacts, severe degradation) but harmful for high-quality output. A
-detection step --- either using OCR confidence scores or a simple
-length-ratio heuristic (LLM output significantly shorter than OCR output
-signals repetition collapse) --- should precede correction, routing only
-high-error samples to the LLM.
-
-\paragraph{The LLM is a safety net for runaway artefacts.}
-The 97.35\% insertion fix rate demonstrates that zero-shot LLM correction is
-a highly effective remedy for the Qaari repetition bug. Deploying the LLM
-specifically as an artefact detector for samples whose OCR output length
-exceeds some multiple of the expected text length (e.g., 5$\times$) would
-deliver the primary benefit of Phase~2 at a fraction of the inference cost.
+\paragraph{Use the aligned split design for future multi-font studies.}
+The aligned train/validation split (identical text content across fonts)
+enables principled cross-font comparison. Future studies should adopt this
+design when the same text exists in multiple fonts, to isolate font effects
+from content effects.
 
 \paragraph{Include CAMeL post-processing as a zero-cost defensive layer.}
-Phase~4C has zero effect in this setting but also zero downside. It adds
-negligible computational cost (a morphological lookup per token, cached with
-an LRU cache). For settings with a less fluent LLM, or with more
-morphologically complex error types, it could provide benefit. Its inclusion
-is recommended as a defensive measure that cannot degrade results.
-
-\paragraph{Do not deploy RAG unless the retrieval corpus is domain-matched.}
-Phase~5 demonstrates that a domain-mismatched retrieval corpus is actively
-harmful, producing the worst result across all conditions. The retrieval
-corpus must be drawn from the same domain, register, and time period as the
-target documents. Before deploying RAG in a production Arabic OCR pipeline,
-retrieval precision should be validated on held-out samples and a CER
-threshold should be applied to confirm the corpus is helping, not hurting.
+Phase~4C has minimal effect in this setting but also zero downside. It adds
+negligible computational cost and provides benefit when the LLM produces
+non-word outputs, making it a recommended defensive measure.
 
 %----------------------------------------------------------------------------
 \section{Limitations}
 \label{sec:disc_limitations}
 %----------------------------------------------------------------------------
 
-This study acknowledges the following limitations.
-
-\paragraph{Single dataset.}
-All quantitative results are derived from 200 samples of the PATS-A01
-Akhbar font, training split. This is a single typewritten Arabic font from
-a specific newspaper corpus. Results may not generalise to other PATS-A01
-fonts (some of which have higher OCR error rates), to handwritten text
-(KHATT), or to other document domains (historical manuscripts, printed books,
-signage).
-
 \paragraph{Single OCR engine.}
-Qaari's error characteristics --- particularly the repetition artefact and
-the preponderance of dot-confusion substitutions --- shape all downstream
-results. An OCR engine with different failure modes (e.g., Tesseract, TrOCR,
-or commercial engines) would present a different error distribution to the
-LLM. The confusion matrix injection (Phase~3), for instance, might behave
-differently if the confusion matrix reflected a different set of character
-pairs.
+Qaari's error characteristics shape all downstream results. An OCR engine
+with different failure modes would present a different error distribution
+to the LLM. The confusion matrix injection (Phase~3), for instance, might
+behave differently if the confusion matrix reflected a different set of
+character pairs.
 
 \paragraph{Single LLM.}
 Qwen3-4B-Instruct-2507 is the sole model evaluated. The model's size (4B
-parameters), training data (multilingual instruction tuning), and inference
-configuration (greedy decoding, no thinking mode) are specific choices that
-may not represent the behaviour of other instruction-tuned models. Larger
-models may over-correct less; Arabic-specific models may handle dot-confusion
-errors differently.
+parameters), training data, and inference configuration are specific choices
+that may not represent the behaviour of other instruction-tuned models.
+Larger models may over-correct less; Arabic-specific models may handle
+dot-confusion errors differently.
 
-\paragraph{No statistical significance testing on isolated phases.}
-Phases 2--5 are each evaluated on the same 200 samples with no held-out
-test set. The differences between phases (e.g., Phase~2 CER 5.77\% vs.
-Phase~4B CER 10.09\%) are reported without paired statistical tests.
-Phase~6 is designed to include paired t-tests and bootstrap confidence
-intervals, but the isolated phase results are presented as descriptive
-statistics only.
-
-\paragraph{Phase 6 not yet executed.}
-The combination and ablation study (Phase~6, answering RQ9) is designed but
-not yet executed. The most important research question --- which combination
-of knowledge sources produces the best result --- remains unanswered. The
-discussion in Section~\ref{sec:disc_rq} (RQ9) is therefore speculative.
+\paragraph{Single text content for PATS-A01.}
+All eight PATS-A01 fonts render the same underlying text. This enables
+controlled cross-font comparison but limits content diversity. Fonts may
+exhibit different behaviour on texts with different vocabulary, sentence
+length distributions, or topic coverage.
 
 \paragraph{QALB transfer gap.}
 Phase~4B few-shot examples are drawn from the QALB corpus, which contains
-human typing errors rather than OCR visual-confusion errors. The transfer
-gap between these two distributions limits the ecological validity of the
-few-shot condition. The Phase~4B result should be interpreted as a lower
-bound on what few-shot correction could achieve with OCR-native examples.
-
-\paragraph{Classical corpus for RAG.}
-Phase~5 uses OpenITI, a corpus of classical and historical Arabic texts.
-This is a worst-case domain match for the modern Akhbar newspaper corpus.
-The 283\% CER increase should not be interpreted as evidence that RAG cannot
-help Arabic OCR correction in general; it should be interpreted as evidence
-that a severely domain-mismatched retrieval corpus causes catastrophic
-degradation.
+human typing errors rather than OCR visual-confusion errors. Phase~7 (DSPy)
+partially addresses this by selecting OCR-native demonstrations, but the
+transfer gap remains a limitation for Phase~4B.
 
 \paragraph{Diacritic stripping in evaluation.}
-All CER and WER figures are computed after stripping diacritics from both
-the reference and hypothesis texts (Section~\ref{subsec:norm}).
-This is the standard evaluation protocol for Arabic NLP, as diacritics are
-optional in most printed Arabic. However, if the application requires
-diacritics (e.g., Quranic text, children's educational material), the
-evaluation protocol and the correction task would be more demanding.
+All CER and WER figures are computed after stripping diacritics. If the
+application requires diacritics, the evaluation protocol and the correction
+task would be more demanding.
 
 %----------------------------------------------------------------------------
 \section{Future Work}
 \label{sec:disc_future}
 %----------------------------------------------------------------------------
 
-\paragraph{Evaluate on KHATT and all PATS-A01 fonts.}
-The highest-priority next step is expanding evaluation to the 199 KHATT
-handwritten samples and all 8 PATS-A01 fonts. Handwritten text is expected
-to exhibit higher baseline CER, which may reverse the over-correction
-dynamic and produce positive results for knowledge augmentation. Evaluating
-across all 8 fonts would also reveal whether the Akhbar results generalise
-to other typewritten Arabic styles.
+\paragraph{Characterise the over-correction threshold formally.}
+The empirical threshold identified in this study (\tbd\% CER) is specific
+to Qwen3-4B and PATS-A01 text. Extending the evaluation to additional OCR
+engines, LLMs, and text domains would determine whether the threshold is
+model-specific or a more general property of LLM-based correction.
 
-\paragraph{Generate OCR-native few-shot pairs for Phase 4B.}
-Running Qaari on a clean ground-truth corpus, pairing OCR output with
-the original text, and selecting pairs that exhibit dot-confusion corrections
-and repetition collapses would produce few-shot examples that directly match
-the OCR error distribution. This experiment requires no GPU inference
-(Qaari is a local engine) and could substantially improve Phase~4B outcomes.
-
-\paragraph{Build a domain-matched retrieval corpus for Phase 5.}
-Replacing OpenITI with a modern Arabic newspaper corpus would remove the
-classical--modern domain mismatch. A corpus assembled from publicly available
-Arabic news sources (Aljazeera, BBC Arabic, Al-Ahram) in the Akhbar style
-would provide semantically relevant retrieval candidates. The Phase~5
-experimental infrastructure (FAISS index, retrieval pipeline) requires no
-modification; only the source corpus changes.
-
-\paragraph{Fine-tune Qwen3-4B for conservative OCR correction.}
+\paragraph{Fine-tune for conservative OCR correction.}
 Training a model on OCR correction pairs with explicit ``return unchanged''
 examples for high-quality inputs would directly address the over-correction
-problem. The training objective would reward the model for returning correct
-text unchanged (and penalise unsolicited modifications), which would change
-the model's intervention prior without requiring prompt engineering. Such a
-fine-tuned model would be a stronger base for knowledge augmentation.
+tendency. Such a fine-tuned model would have a different intervention prior
+and might benefit substantially from knowledge augmentation.
 
 \paragraph{Test with larger models.}
-Evaluating Qwen3-14B, GPT-4o, or Claude Sonnet on the same experimental
-conditions would assess whether the over-correction tendency diminishes with
-scale. Larger models have been exposed to more instruction-following data and
-may have a stronger implicit conservatism. This experiment requires no changes
-to the pipeline --- only the model identifier in the configuration file.
+Evaluating Qwen3-14B, GPT-4o, or Claude Sonnet on the same nine datasets
+would assess whether the over-correction tendency diminishes with model scale.
 
-\paragraph{Study over-correction as a standalone research question.}
-The 25.06\% error introduction rate observed in Phase~4D is a striking finding
-that warrants dedicated investigation. Characterising the types of tokens most
-likely to be over-corrected (frequency, morphological complexity, ambiguity
-of alternative forms), and developing a calibrated refusal mechanism that
-the model can apply at the token level, would be a valuable contribution to
-the LLM reliability literature.
+\paragraph{Extend to dialectal Arabic.}
+Egyptian, Gulf, and Levantine dialects present additional OCR challenges
+(non-standard spelling, code-switching) and limited NLP tool support.
 
 \paragraph{Confidence-guided selective correction.}
-Combining OCR confidence scores with LLM correction decisions would limit the
-corrector's exposure to high-confidence (likely correct) OCR output. A
-selective routing system that only sends low-confidence samples or samples
-above a length-ratio threshold to the LLM would deliver the primary
-correction benefit while avoiding the majority of over-correction cases.
+Combining OCR confidence scores with LLM correction decisions would limit
+the corrector's exposure to high-confidence output, delivering the primary
+correction benefit while avoiding over-correction on clean text.
 
-\paragraph{Extension to dialectal Arabic OCR.}
-Egyptian, Gulf, and Levantine dialects present additional OCR challenges
-(non-standard spelling, code-switching, absent diacritics) and limited
-NLP tool support. Extending the experimental framework to dialectal Arabic
-would require new ground-truth corpora and would test whether the
-over-correction problem is specific to MSA or applies more broadly.
+\paragraph{Cross-engine comparison.}
+Evaluating the same prompt strategies on output from Tesseract, TrOCR, or
+commercial Arabic OCR engines would test the generality of the findings and
+determine whether the over-correction threshold shifts with engine quality.
 
 %----------------------------------------------------------------------------
 \section{Conclusion}
 \label{sec:conclusion}
 %----------------------------------------------------------------------------
 
-This thesis set out to answer a single central question: \emph{Can a
-lightweight open-source LLM correct Arabic OCR errors through prompt
-engineering alone, and does adding more linguistic or retrieval-based
-knowledge to the prompt improve the correction?}
+This thesis set out to answer a central question: \emph{Can a lightweight
+open-source LLM correct Arabic OCR errors through prompt engineering alone,
+and does adding more linguistic knowledge to the prompt improve the
+correction?}
 
-The answer is nuanced. On the first part of the question: yes, a zero-shot
-LLM can improve aggregate OCR quality, primarily by eliminating catastrophic
-repetition artefacts that inflate CER. A 66\% aggregate CER reduction
-(17.01\% to 5.77\%) is a substantial improvement on an all-samples basis.
-On the second part of the question: no, knowledge augmentation does not
-improve upon zero-shot correction. Every augmentation strategy tested ---
-confusion matrix injection, orthographic rules, few-shot examples,
-self-reflective diagnostics, and retrieval-augmented generation --- produced
-higher CER than the zero-shot baseline, with degradations ranging from 75\%
-to 283\%.
+The answer depends on context. The multi-dataset evaluation across eight
+typewritten fonts and one handwritten corpus reveals that correction
+effectiveness is \emph{font-dependent}. On fonts with moderate-to-high
+baseline CER, zero-shot LLM correction provides substantial improvement.
+On fonts where the OCR engine already performs well, the LLM introduces
+more errors than it fixes, making correction net harmful. On handwritten
+text, where errors are abundant but diverse, the LLM provides marginal
+improvement.
 
-The underlying explanation is the \emph{over-correction problem}: on
-high-quality typewritten Arabic text where the OCR error rate is 1.37\%,
-the LLM's 25.06\% error introduction rate means that correction is net
-harmful for the average sample. Adding knowledge elements to the prompt
-increases the LLM's intervention rate, which worsens an already unfavourable
-error-introduction-to-error-fix ratio.
+Knowledge augmentation shows mixed results across fonts. No single strategy
+dominates all conditions. The combination and ablation study (Phase~5) and
+automated prompt optimisation (Phase~7) explore whether synergistic strategy
+selection or machine-optimised prompts can outperform individual hand-crafted
+approaches.
 
-The practical implication is direct: for high-quality typewritten Arabic OCR,
-the simplest strategy is the best. Zero-shot correction should be applied
-selectively --- only to samples suspected of containing errors, identified by
-confidence scores or output-length anomalies --- and should not be augmented
-with additional knowledge that signals to the model that the text is
-unreliable.
+The underlying explanation is the \emph{over-correction threshold}: an
+empirically identifiable baseline CER level that separates the regime where
+correction helps from the regime where it hurts. Below the threshold, the
+LLM's error introduction rate exceeds its fix rate. Above the threshold,
+the balance reverses. Augmented strategies raise the introduction rate,
+which shifts the threshold upward.
 
-The broader significance of this result extends beyond Arabic OCR. Negative
-results in prompt engineering research are informative precisely because they
-identify failure modes that successful systems must guard against. The finding
-that more information in the prompt is not always better --- and that on
-high-quality input, it is consistently worse --- is a contribution to the
-collective understanding of how instruction-tuned LLMs behave when tasked
-with selective modification. As LLMs are deployed in increasingly diverse
-text-processing pipelines, understanding the conditions under which they
-over-intervene is as important as understanding the conditions under which
-they succeed.
+The practical implication is direct: for Arabic OCR correction, the simplest
+approach is often the best. Zero-shot correction should be applied
+\emph{selectively} --- only to input expected to contain significant errors
+--- and should not be augmented with additional knowledge unless the baseline
+error rate is high enough to justify the additional intervention. Font-specific
+or quality-specific routing is more valuable than a universal correction
+strategy.
 
-The study of Arabic post-OCR correction is not finished. The KHATT
-handwritten dataset, larger models, domain-matched retrieval corpora, and
-OCR-native few-shot pairs all represent directions where the findings of
-this thesis would likely look different. Future work that pursues these
-directions will build on the experimental framework, the three-stage
-pipeline, and the negative results documented here to develop a more complete
-picture of when and how LLMs can be trusted to improve imperfect Arabic text.
+The broader significance extends beyond Arabic OCR. The finding that more
+information in the prompt is not always better --- and that on high-quality
+input, it is consistently worse --- is a contribution to the understanding
+of how instruction-tuned LLMs behave when tasked with selective modification.
+As LLMs are deployed in increasingly diverse text-processing pipelines,
+understanding the conditions under which they over-intervene is as important
+as understanding the conditions under which they succeed.

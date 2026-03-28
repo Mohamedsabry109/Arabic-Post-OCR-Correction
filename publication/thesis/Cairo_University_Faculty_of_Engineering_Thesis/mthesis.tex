@@ -80,6 +80,9 @@ citestyle=numeric-comp]{biblatex}
 \usepackage{microtype}         % Better text justification
 \usepackage{csquotes}          % Smart quotes (required by biblatex)
 
+% Placeholder command for results not yet available
+\newcommand{\tbd}[1][]{\textcolor{red}{\textbf{XX.XX}}}
+
 % Arabi defines \textRL{} and \textAR{}, not \RL{} or \textarabic{}
 % Provide aliases used throughout the thesis
 \AtBeginDocument{%
@@ -131,20 +134,19 @@ citestyle=numeric-comp]{biblatex}
 \InternalExaminer{Dr./Prof. Dr. Int. Examiner}
 \ThesisTitle{Knowledge-Augmented Large Language Models for Arabic Post-OCR Error Correction}
 
-\ThesisKeywords{Arabic OCR; Post-OCR Correction; Large Language Models; Prompt Engineering; Retrieval-Augmented Generation; Qwen3; PATS-A01; Error Taxonomy}
+\ThesisKeywords{Arabic OCR; Post-OCR Correction; Large Language Models; Prompt Engineering; DSPy; Qwen3; PATS-A01; KHATT; Error Taxonomy}
 
 \ThesisSummary{This thesis investigates whether a lightweight open-source instruction-tuned large
 language model can correct errors produced by the Qaari Arabic OCR engine through prompt
-engineering alone, and whether injecting linguistic or retrieval-based knowledge into the
-prompt improves correction quality. Six isolated knowledge-augmentation strategies are
-evaluated on the PATS-A01 Akhbar typewritten dataset and compared against a zero-shot
-baseline. Results show that zero-shot correction reduces character error rate by 66\%
-relative to the OCR baseline when accounting for catastrophic repetition artifacts, but
-increases error rate on clean text due to over-correction. All knowledge-augmentation
-strategies degrade performance relative to zero-shot, with RAG producing the worst result
-(CER 22.10\%) and few-shot producing the least degradation (CER 10.09\%). The dominant
-failure mode is over-correction: the model changes tokens that the OCR rendered correctly
-at a rate that exceeds errors fixed.}
+engineering alone, and whether injecting linguistic knowledge into the prompt improves
+correction quality. Seven prompt-engineering strategies are evaluated across nine
+datasets---eight typewritten fonts from PATS-A01 and one handwritten corpus (KHATT)---using
+Qwen3-4B-Instruct-2507. Strategies include zero-shot correction, confusion-matrix injection,
+rule-augmented prompting, few-shot examples, morphological post-processing, self-reflective
+prompting, strategy combinations with ablation, and DSPy-based automated prompt optimization.
+Results reveal that correction effectiveness is strongly font-dependent: the optimal strategy
+depends on the baseline error profile, and no single augmentation approach dominates across
+all fonts.}
 
 
 

@@ -68,9 +68,9 @@ Several properties of the script are critical for understanding OCR failure mode
 \textbf{Positional forms.}
 Most letters have four shapes depending on their position within a word:
 isolated, initial, medial, and final.
-The letter \textit{ain} (\textarabic{Ú}), for instance, appears as
-\textarabic{Ú} (isolated), \textarabic{ÚÜ} (initial), \textarabic{ÜÚÜ} (medial),
-and \textarabic{ÜÚ} (final).
+The letter \textit{ain} (\textarabic{ï¿½}), for instance, appears as
+\textarabic{ï¿½} (isolated), \textarabic{ï¿½ï¿½} (initial), \textarabic{ï¿½ï¿½ï¿½} (medial),
+and \textarabic{ï¿½ï¿½} (final).
 Since letters are connected into words by ligatures (joined strokes), an OCR
 engine must recognise not just a character in isolation but a glyph in context,
 making segmentation errors compound recognition errors.
@@ -90,38 +90,38 @@ sequence can represent multiple words depending on vowelisation.
 
 \textbf{Hamza.}
 The glottal stop (hamza) has a complex orthography.
-In some positions it appears alone (\textarabic{Á}); in others it appears on a
-carrier letter: alef (\textarabic{Ã} above, \textarabic{Å} below), waw (\textarabic{Ä}),
-or ya without dots (\textarabic{Æ}).
+In some positions it appears alone (\textarabic{ï¿½}); in others it appears on a
+carrier letter: alef (\textarabic{ï¿½} above, \textarabic{ï¿½} below), waw (\textarabic{ï¿½}),
+or ya without dots (\textarabic{ï¿½}).
 The choice of carrier follows rules based on the surrounding vowels, and even
 educated native speakers sometimes apply these rules inconsistently.
 Hamza rules are a major source of spelling errors in human writing and a
 significant challenge for OCR.
 
 \textbf{Taa marbuta.}
-The feminine ending \textarabic{É} (taa marbuta) is pronounced /at/ in context
+The feminine ending \textarabic{ï¿½} (taa marbuta) is pronounced /at/ in context
 and /a/ in pause.
-It is written with the same base shape as the letter ha (\textarabic{å}) but
+It is written with the same base shape as the letter ha (\textarabic{ï¿½}) but
 with two dots above.
-The visual similarity between \textarabic{É} and \textarabic{å} is a direct
+The visual similarity between \textarabic{ï¿½} and \textarabic{ï¿½} is a direct
 source of OCR errors whenever the ink quality, resolution, or font rendering
 is imperfect.
 
 \textbf{Alef maqsura.}
-The letter \textarabic{ì} (alef maqsura, literally ``abbreviated alef'') appears
+The letter \textarabic{ï¿½} (alef maqsura, literally ``abbreviated alef'') appears
 at the end of certain words to write the long vowel /aa/.
-Its shape is identical to ya (\textarabic{í}) but without the two dots below.
-OCR engines regularly confuse \textarabic{ì} and \textarabic{í}, and the
+Its shape is identical to ya (\textarabic{ï¿½}) but without the two dots below.
+OCR engines regularly confuse \textarabic{ï¿½} and \textarabic{ï¿½}, and the
 distinction is orthographically important because the two letters signal
 different word identities.
 
 \textbf{Dot-group characters.}
 Six groups of letters share the same base skeletal shape and differ only in
 the count or position of diacritical dots above or below:
-\textarabic{È}~/~\textarabic{Ê}~/~\textarabic{Ë}~(1/2/3 dots above),
-\textarabic{Ì}~/~\textarabic{Í}~/~\textarabic{Î}~(1 dot below / none / 1 dot above),
-\textarabic{Ý}~/~\textarabic{Þ}~(1 dot above / 2 dots above),
-\textarabic{ä}~/~\textarabic{í}~(1 dot above / 2 dots below), and others.
+\textarabic{ï¿½}~/~\textarabic{ï¿½}~/~\textarabic{ï¿½}~(1/2/3 dots above),
+\textarabic{ï¿½}~/~\textarabic{ï¿½}~/~\textarabic{ï¿½}~(1 dot below / none / 1 dot above),
+\textarabic{ï¿½}~/~\textarabic{ï¿½}~(1 dot above / 2 dots above),
+\textarabic{ï¿½}~/~\textarabic{ï¿½}~(1 dot above / 2 dots below), and others.
 Dot placement errors -- caused by ink smearing, low resolution, or font
 rendering artefacts -- are the most frequent single-character OCR confusion
 in Arabic typewritten text.
@@ -288,7 +288,7 @@ This is the most frequent source of character-level errors in PATS-A01.
 \textbf{Ligature handling.}
 Certain letter combinations in Arabic merge into single ligature glyphs with
 a shape that may not visually resemble the component letters in isolation.
-Common examples include lam-alef (\textarabic{áÇ}), which is always written as
+Common examples include lam-alef (\textarabic{ï¿½ï¿½}), which is always written as
 a single glyph.
 OCR engines trained on character-level templates may not include all ligature
 shapes, leading to substitution or insertion errors.
@@ -654,9 +654,10 @@ without excessive memory usage.
 An important consideration for RAG quality is \emph{domain match}: if the
 retrieval corpus covers a different domain or time period than the input text,
 retrieved passages may not be relevant and could mislead the model.
-The domain mismatch between the classical OpenITI corpus and the modern
-newspaper PATS-A01 text is a central element of the Phase~5 analysis in
-Chapter~5.
+The domain mismatch between the classical OpenITI corpus and modern
+newspaper text is a known limitation that was identified in preliminary
+experiments and led to the exclusion of RAG from the final experimental
+design of this thesis.
 
 \subsection{Self-Reflective and Meta-Cognitive Prompting}
 \label{subsec:self_reflective}
@@ -762,14 +763,15 @@ With hundreds of millions of words of Arabic text spanning many centuries and
 genres, it provides a large pool of grammatically correct Arabic sentences for
 dense retrieval.
 
-OpenITI is used in Phase~5 as the retrieval corpus for RAG.
-Its primary limitation for this application is \emph{domain mismatch}: OpenITI
-texts are classical and historical, while PATS-A01 Akhbar documents are modern
-newspaper text.
-The semantic and lexical overlap between medieval religious scholarship and
-contemporary news reporting is low, which affects retrieval quality.
-A retrieval corpus drawn from modern Arabic newspapers would be a better match
-for the PATS-A01 domain.
+OpenITI represents a potential retrieval corpus for RAG-based correction
+approaches. Its primary limitation is \emph{domain mismatch}: OpenITI
+texts are classical and historical, while PATS-A01 documents are modern
+newspaper text. The semantic and lexical overlap between medieval religious
+scholarship and contemporary news reporting is low. Preliminary experiments
+with OpenITI-based RAG showed severe degradation due to this mismatch, and
+the RAG approach was not included in the final experimental design of this
+thesis. A retrieval corpus drawn from modern Arabic newspapers would be
+required for effective RAG-based correction.
 
 \subsection{CAMeL Tools}
 \label{subsec:ks_camel}
@@ -921,13 +923,15 @@ setting with quantitative evidence.
 This thesis makes the following contributions relative to the existing literature:
 
 \begin{enumerate}
-  \item \textbf{Systematic evaluation of six isolated augmentation strategies.}
+  \item \textbf{Systematic multi-dataset evaluation of augmentation strategies.}
         Prior work on LLM-based OCR correction has at most compared zero-shot
-        with one or two augmentation conditions.
-        This study isolates six conditions (confusion matrix, orthographic rules,
-        few-shot examples, morphological post-processing, self-reflective
-        prompting, and RAG), each compared against the same zero-shot baseline
-        using the same model, dataset, and evaluation protocol.
+        with one or two augmentation conditions on a single dataset.
+        This study isolates five conditions (confusion matrix, orthographic rules,
+        few-shot examples, morphological post-processing, and self-reflective
+        prompting), tests combinations with ablation, and applies DSPy-based
+        automated optimisation --- all evaluated across nine datasets (eight
+        typewritten fonts and handwritten text) using the same model and
+        evaluation protocol.
 
   \item \textbf{Self-reflective prompting for OCR correction.}
         The Phase~4D strategy -- injecting pre-computed statistics about the

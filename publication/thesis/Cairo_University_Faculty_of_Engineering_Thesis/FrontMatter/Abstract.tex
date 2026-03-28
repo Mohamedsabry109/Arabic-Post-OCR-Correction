@@ -10,36 +10,43 @@ gap without modifying the recognition engine.
 
 This thesis presents a systematic evaluation of prompt-engineering strategies
 for Arabic post-OCR correction using Qwen3-4B-Instruct-2507, an open-source
-4-billion-parameter instruction-tuned model. Six knowledge augmentation
-conditions are evaluated in isolation on 200 samples of the PATS-A01 Akhbar
-typewritten corpus, each changing exactly one variable relative to a zero-shot
-baseline: (1) character confusion matrix injection (Phase~3); (2) Arabic
-orthographic rule augmentation (Phase~4A); (3) few-shot examples from the
-QALB corpus (Phase~4B); (4) CAMeL Tools morphological post-processing
-(Phase~4C); (5) self-reflective prompting from training-split error statistics
-(Phase~4D); and (6) retrieval-augmented generation with the OpenITI classical
-corpus (Phase~5). A combination and ablation study (Phase~6) tests twelve
-pre-selected multi-component systems.
+4-billion-parameter instruction-tuned model. Seven knowledge augmentation
+conditions are evaluated across nine datasets --- eight typewritten fonts from
+the PATS-A01 corpus and one handwritten corpus (KHATT) --- each changing
+exactly one variable relative to a zero-shot baseline: (1)~character confusion
+matrix injection (Phase~3); (2)~Arabic orthographic rule augmentation
+(Phase~4A); (3)~few-shot examples from the QALB corpus (Phase~4B);
+(4)~CAMeL Tools morphological post-processing (Phase~4C); and
+(5)~self-reflective prompting from training-split error statistics (Phase~4D).
+A combination and ablation study (Phase~5) tests pre-selected multi-component
+systems. Finally, Phase~7 applies DSPy-based automated prompt optimisation to
+discover whether machine-optimised prompts can outperform hand-crafted
+strategies.
 
-The Qaari baseline achieves 1.37\% character error rate (CER) on normal
-samples and 17.01\% overall, with the discrepancy caused by a repetition
-artefact in 0.5\% of samples. Zero-shot LLM correction (Phase~2) reduces
-aggregate CER to 5.77\% (66\% relative reduction) by collapsing repetition
-artefacts, but raises CER on normal samples from 1.37\% to 5.77\%, revealing
-a systematic over-correction problem: the model modifies correct tokens at a
-25.06\% error introduction rate. Every knowledge augmentation strategy
-tested degrades performance relative to the zero-shot baseline, with
-degradations ranging from 75\% (Phase~4B few-shot) to 283\% (Phase~5 RAG).
-CAMeL post-processing has no effect, as all OCR errors and LLM corrections
-are morphologically valid Arabic forms and the revert condition is never
-triggered.
+All eight PATS-A01 fonts share 2,766 text lines each, drawn from the same
+underlying content. An aligned 85/15 train/validation split ensures that every
+font receives the same 415 validation samples, so that font is the only
+variable when comparing OCR and correction quality across typefaces. KHATT
+provides a complementary handwritten evaluation with substantially higher
+baseline error rates.
 
-The central finding is that, on high-quality typewritten Arabic input, more
-prompt information consistently worsens correction because each additional
-knowledge element activates the model's intervention tendency, increasing
-the rate at which correct tokens are corrupted. The simplest strategy ---
-zero-shot correction applied selectively to high-error samples --- is both
-the most effective and the most practical recommendation. Future work should
-evaluate on handwritten text (KHATT), replace QALB with OCR-native few-shot
-pairs, and build domain-matched retrieval corpora to test whether these
-findings generalise to higher-error-rate and domain-aligned settings.
+Results reveal that correction effectiveness is strongly font-dependent.
+On typewritten fonts with moderate-to-high baseline CER (\tbd--\tbd\%),
+zero-shot LLM correction achieves substantial CER reductions of up to
+\tbd\% relative improvement. On fonts where Qaari already performs well
+(CER below \tbd\%), the LLM tends to introduce more errors than it fixes ---
+an over-correction problem driven by the model's tendency to modify tokens
+that are already correct. On handwritten text (KHATT), where baseline CER
+exceeds \tbd\%, the LLM provides marginal improvement. Knowledge augmentation
+shows mixed results across fonts, with no single strategy dominating all
+conditions. Phase~5 combinations and Phase~7 DSPy optimisation explore whether
+synergistic strategy selection or automated prompt tuning can improve upon
+individual approaches.
+
+The central finding is that the optimal correction strategy depends on the
+baseline error profile of the input. A one-size-fits-all approach to prompt
+augmentation is unlikely to succeed across diverse fonts and script types.
+The thesis contributes an experimental framework, a three-stage
+export--infer--analyse pipeline, and a comprehensive multi-dataset evaluation
+that maps the conditions under which LLM-based post-OCR correction helps,
+hurts, or has no effect.

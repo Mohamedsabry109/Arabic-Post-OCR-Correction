@@ -6,7 +6,7 @@ For every phase, the structure follows a consistent template: hypothesis,
 method (step-by-step), variables, output files, and the research question answered.
 Section~\ref{sec:design} explains the overarching design principles that govern
 how the phases relate to each other.
-Sections~\ref{sec:phase1} through~\ref{sec:phase6} describe each phase in full.
+Sections~\ref{sec:phase1} through~\ref{sec:phase7} describe each phase in full.
 Table~\ref{tab:phase_summary} at the end of this chapter provides a consolidated
 reference.
 
@@ -18,7 +18,7 @@ reference.
 \subsection{The Isolation Principle}
 \label{subsec:isolation}
 
-The defining design choice of this study is that Phases~3 through~5 are
+The defining design choice of this study is that Phases~3 through~4D are
 \emph{isolated} experiments.
 Each phase changes exactly one variable relative to Phase~2: the type of
 knowledge injected into the system prompt.
@@ -50,12 +50,14 @@ and constrain theories of what makes LLM correction succeed.
 
 All experiments use:
 \begin{itemize}
-  \item The same 200-sample random draw from PATS-A01 Akhbar training split.
+  \item The same nine evaluation datasets: eight PATS-A01 fonts (415 validation
+        samples each, aligned split) plus KHATT validation.
   \item The same model: \texttt{Qwen/Qwen3-4B-Instruct-2507}.
   \item The same generation parameters: temperature 0.1, \texttt{max\_new\_tokens} 1024,
         \texttt{enable\_thinking=False}.
   \item The same evaluation protocol: diacritic-stripped CER/WER, per-sample
-        then aggregated.
+        then aggregated. PATS-A01 macro-averages (non-weighted) are reported
+        alongside per-font results.
   \item Fixed random seeds where any sampling is involved (seed 42 throughout).
 \end{itemize}
 Each phase stores its inference input as a JSONL file with embedded prompts,
@@ -65,20 +67,19 @@ can be inspected or re-run.
 \subsection{Why Not Test All Combinations First}
 \label{subsec:why_not_all}
 
-With five distinct knowledge sources (confusion matrix, rules, few-shot,
-self-reflective insights, RAG), the full combination space contains $2^5 = 32$
-subsets.
-Running all 32 on the full 200-sample dataset would require approximately
-6,400 model inference calls plus the same number of analysis pipeline runs,
-well beyond the available compute budget.
-More importantly, running 32 uninformed combinations before understanding each
+With four distinct prompt-level knowledge sources (confusion matrix, rules,
+few-shot, self-reflective insights), the full combination space contains
+$2^4 = 16$ subsets. Running all 16 across nine datasets would require
+approximately 59,000 model inference calls, well beyond the available
+compute budget.
+More importantly, running uninformed combinations before understanding each
 component's individual behaviour would make the results difficult to interpret:
 a combination that degrades performance could not be decomposed into its
 contributing factors without the isolated phase results.
 
-The hierarchical strategy (isolated first, then best combinations in Phase~6)
+The hierarchical strategy (isolated first, then best combinations in Phase~5)
 extracts the maximum insight per inference call: isolated phases diagnose each
-component, and Phase~6 tests whether synergies exist between the best performers.
+component, and Phase~5 tests whether synergies exist between the best performers.
 
 % ============================================================
 \section{Phase 1 --- Baseline and Error Taxonomy}
@@ -94,8 +95,8 @@ types that can be quantified and used to guide subsequent phases.
 \label{subsec:phase1_method}
 
 \begin{enumerate}
-  \item Load all 200 OCR predictions and ground-truth pairs for PATS-A01 Akhbar
-        training split from the DataLoader.
+  \item Load all OCR predictions and ground-truth pairs for each of the nine
+        evaluation datasets from the DataLoader.
   \item Compute per-sample CER and WER using the normalised metric
         (diacritics stripped).
         Aggregate: mean, standard deviation, median, p95.
@@ -147,7 +148,7 @@ to recognise and correct implausible character sequences.
 \label{subsec:phase2_method}
 
 \begin{enumerate}
-  \item For each sample in the 200-sample evaluation set, construct the
+  \item For each sample in each of the nine evaluation datasets, construct the
         conservative zero-shot prompt using
         \texttt{PromptBuilder.build\_zero\_shot(ocr\_text, version="v2")}.
         The system message tells the model that the text may already be correct,
@@ -220,11 +221,10 @@ quality for those error types.
 
 \begin{enumerate}
   \item Load the Phase~1 confusion matrix from
-        \texttt{results/phase1/PATS-A01-Akhbar-train/confusion\_matrix.json}
-        using \texttt{ConfusionMatrixLoader}.
+        \texttt{results/phase1/\{dataset\}-train/confusion\_matrix.json}
+        using \texttt{ConfusionMatrixLoader}. Each font uses its own
+        font-specific confusion matrix derived from its training split.
   \item Extract the top-10 confusion pairs by substitution count.
-        For the PATS-A01 Akhbar training split, the dominant confusions are
-        detailed in Chapter~5.
   \item Format the confusion pairs as an Arabic-language bullet list using
         \texttt{ConfusionMatrixLoader.format\_for\_prompt()}.
         Each bullet item reads (translated): ``This system confuses [correct
@@ -448,9 +448,9 @@ Phase~4D is itself a three-stage process that must be executed in order.
 \subsubsection{Stage~1: Training-Split Analysis (analyze-train mode)}
 
 \begin{enumerate}
-  \item Load Phase~2 corrections on the training split
-        (\texttt{PATS-A01-Akhbar-train}) from
-        \texttt{results/phase2/PATS-A01-Akhbar-train/corrections.jsonl}.
+  \item Load Phase~2 corrections on the training split for each dataset
+        (e.g., \texttt{PATS-A01-Akhbar-train}) from
+        \texttt{results/phase2/\{dataset\}-train/corrections.jsonl}.
   \item For each sample, compare the Phase~2 LLM corrections to ground truth
         using \texttt{LLMErrorAnalyzer.analyse\_sample()}.
         For every character alignment between LLM output and ground truth:
@@ -473,11 +473,11 @@ Phase~4D is itself a three-stage process that must be executed in order.
 
 \subsubsection{Insights Derived from Training Data}
 
-Table~\ref{tab:phase4d_insights} reports the statistics extracted from the
-200-sample PATS-A01 Akhbar training split.
+Table~\ref{tab:phase4d_insights} reports representative statistics extracted
+from the PATS-A01 training split (aggregated across fonts).
 
 \begin{table}[ht]
-\caption{Phase~4D training-split analysis results for PATS-A01 Akhbar.
+\caption{Phase~4D training-split analysis results (PATS-A01 aggregate).
          The LLM is Qwen3-4B-Instruct-2507 under the zero-shot v2 prompt
          (Phase~2 setting). Fix rate = fraction of baseline errors of that type
          that the LLM corrected. Introduction rate = fraction of correct ground-truth
@@ -568,144 +568,64 @@ the original OCR output.
 \textbf{Research question answered:} RQ7.
 
 % ============================================================
-\section{Phase 5 --- Retrieval-Augmented Generation}
+\section{Phase 5 --- Combinations and Ablation}
 \label{sec:phase5}
 % ============================================================
 
-\subsection{Hypothesis}
-Providing the model with semantically similar passages from a large Arabic corpus
-(OpenITI) supplies lexical and syntactic grounding that helps it determine the
-correct form of ambiguous OCR sequences.
-
-\subsection{Method}
-\label{subsec:phase5_method}
-
-Phase~5 is itself a three-mode pipeline (build, export, analyze).
-
-\subsubsection{Build Mode}
-
-\begin{enumerate}
-  \item Load OpenITI corpus inventory from \texttt{data/OpenITI/} using
-        \texttt{OpenITILoader}.
-  \item Extract up to 200,000 sentences from primary-status texts, applying
-        filters: minimum 30 characters, maximum 300 characters.
-        Sentence splitting is performed at punctuation boundaries (full stop,
-        question mark, exclamation, Arabic semicolon U+061B).
-  \item Embed all sentences using
-        \texttt{paraphrase-multilingual-MiniLM-L12-v2}
-        in batches of 256 on CPU.
-  \item Build a FAISS \texttt{FlatIP} index from the embeddings.
-        Save index and sentence list to disk.
-\end{enumerate}
-
-\subsubsection{Export Mode}
-
-\begin{enumerate}
-  \item Load the FAISS index using \texttt{RAGRetriever}.
-  \item For each of the 200 evaluation samples, embed the OCR text as a query.
-  \item Retrieve the top-3 most similar sentences by inner-product similarity.
-  \item Format the retrieved sentences as a numbered Arabic list.
-  \item Build the RAG prompt using
-        \texttt{PromptBuilder.build\_rag(ocr\_text, retrieval\_context)}.
-  \item Write to \texttt{results/phase5/inference\_input.jsonl}, embedding the
-        retrieved text in each JSONL record so no index access is needed at
-        inference time.
-\end{enumerate}
-
-\subsubsection{Analyze Mode}
-
-\begin{enumerate}
-  \item Run inference on Kaggle GPU using \texttt{scripts/infer.py}.
-  \item Load \texttt{results/phase5/corrections.jsonl}.
-  \item Compute CER/WER; compare to Phase~2.
-  \item Compute retrieval quality metrics from the embedded retrieval scores:
-        average top-1 inner-product score, average top-$k$ score,
-        distribution of scores across quality bands.
-        Write to \texttt{results/phase5/\{dataset\}/retrieval\_analysis.json}.
-\end{enumerate}
-
-\subsection{Retrieval Quality}
-\label{subsec:phase5_retrieval_quality}
-
-The inner-product similarity scores between the OCR queries and the retrieved
-OpenITI sentences are high in absolute terms: the average top-1 score across
-200 samples is 0.805 and the average top-3 score is 0.793.
-However, these scores reflect embedding-space proximity as computed by
-\texttt{MiniLM-L12-v2}, not semantic relevance to the correction task.
-High scores indicate that the retrieved sentences are ``similar'' in embedding
-space to the query, but this similarity may be surface-level (both texts are
-Arabic and share common function words) rather than meaningful semantic overlap
-between the retrieved classical text and the modern newspaper query.
-Chapter~5 connects the retrieval score distribution to the observed CER outcome.
-
-\subsection{Output Files}
-\begin{itemize}
-  \item \texttt{results/phase5/\{dataset\}/metrics.json}
-  \item \texttt{results/phase5/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase5/\{dataset\}/retrieval\_analysis.json} ---
-        per-sample retrieval scores and aggregate statistics
-\end{itemize}
-
-\noindent
-\textbf{Research question answered:} RQ8.
-
-% ============================================================
-\section{Phase 6 --- Combinations and Ablation}
-\label{sec:phase6}
-% ============================================================
-
 \subsection{Purpose}
-\label{subsec:phase6_purpose}
+\label{subsec:phase5_purpose}
 
-Phases 3--5 establish which knowledge types help and which hurt in isolation.
-Phase~6 asks two follow-up questions:
-(a) can two knowledge types combine synergistically to produce a result better
-than either individually?
-(b) in the best combined system, what is each component's quantitative
+Phases~3--4D establish which knowledge types help and which hurt in isolation.
+Phase~5 asks two follow-up questions:
+(a)~can two or more knowledge types combine synergistically to produce a result
+better than either individually?
+(b)~in the best combined system, what is each component's quantitative
 contribution?
 
 \subsection{Combinations Tested}
-\label{subsec:phase6_combos}
+\label{subsec:phase5_combos}
 
-The 12 combinations are selected based on the isolated phase results.
-The guiding principle is that combinations involving components that performed
-similarly to Phase~2 in isolation are more likely to combine beneficially than
-combinations involving highly disruptive components.
-Table~\ref{tab:phase6_combos} lists all 12 combinations.
+Each combination is defined as a 4-tuple specifying which of the four
+prompt-level knowledge sources are active: confusion matrix (C), rules (R),
+few-shot examples (E), and self-reflective insights (S). CAMeL
+post-processing (Phase~4C) is applied as an optional post-processing step
+on top of any prompt combination.
+
+Table~\ref{tab:phase5_combos} lists the ten inference-level combinations
+tested. The guiding principle is that combinations involving components that
+performed comparably to Phase~2 in isolation are more likely to combine
+beneficially than combinations involving highly disruptive components.
 
 \begin{table}[ht]
-\caption{Phase~6 combination inventory. Each combination is identified by a
+\caption{Phase~5 combination inventory. Each combination is identified by a
          unique ID. Components: C = confusion matrix, R = rules, E = examples
-         (few-shot), S = self-reflective insights, G = RAG, M = CAMeL
-         post-processing.}
-\label{tab:phase6_combos}
+         (few-shot), S = self-reflective insights.}
+\label{tab:phase5_combos}
 \centering
 \renewcommand{\arraystretch}{1.3}
 \begin{tabular}{lll}
 \toprule
 \textbf{Combo ID} & \textbf{Components} & \textbf{Rationale} \\
 \midrule
-\texttt{conf\_rules}     & C + R   & Confusion + rules: both target character-level errors \\
-\texttt{conf\_few}       & C + E   & Confusion + examples: data-driven + example-driven \\
-\texttt{rules\_few}      & R + E   & Rules + examples: best two augmented phases \\
-\texttt{few\_self}       & E + S   & Examples + self-reflective: both are evidence-based \\
-\texttt{conf\_rules\_few}& C + R + E & Top-3 triple \\
-\texttt{rules\_few\_self}& R + E + S & Alternative triple \\
-\texttt{full\_no\_rag}   & C + R + E + S & Full system minus RAG (best guess given phase results) \\
-\texttt{full\_system}    & C + R + E + S + G & All five knowledge types \\
-\texttt{conf\_few\_camel}& C + E + M & Pair + CAMeL post-processing \\
-\texttt{rules\_few\_camel}& R + E + M & Best pair + CAMeL \\
-\texttt{few\_self\_d4d}  & E + S (Phase~4D) & Self-reflective as add-on \\
-\texttt{full\_camel}     & C + R + E + S + M & Full system with CAMeL, no RAG \\
+\texttt{conf\_rules}      & C + R       & Both target character-level errors \\
+\texttt{conf\_few}        & C + E       & Data-driven + example-driven \\
+\texttt{rules\_few}       & R + E       & Best two augmented phases \\
+\texttt{few\_self}        & E + S       & Both are evidence-based \\
+\texttt{conf\_rules\_few} & C + R + E   & Top-3 triple \\
+\texttt{conf\_few\_self}  & C + E + S   & Alternative triple \\
+\texttt{rules\_few\_self} & R + E + S   & Alternative triple \\
+\texttt{conf\_rules\_few\_self} & C + R + E + S & Full prompt system \\
+\texttt{conf\_self}       & C + S       & Confusion + self-reflective \\
+\texttt{rules\_self}      & R + S       & Rules + self-reflective \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \subsection{Ablation Design}
-\label{subsec:phase6_ablation}
+\label{subsec:phase5_ablation}
 
-The ablation study starts from the best-performing combination identified in
-Phase~6 and removes one component at a time.
+The ablation study starts from the full four-component combination
+(\texttt{conf\_rules\_few\_self}) and removes one component at a time.
 The CER delta when a component is removed measures that component's individual
 contribution to the combined system:
 
@@ -722,13 +642,13 @@ This design answers RQ9: which combination is optimal and what does each element
 contribute?
 
 \subsection{Statistical Testing}
-\label{subsec:phase6_stats}
+\label{subsec:phase5_stats}
 
-For Phase~6 results, paired t-tests are used to assess whether observed CER
+For Phase~5 results, paired t-tests are used to assess whether observed CER
 differences between the best combination and Phase~2 are statistically
 significant.
 The Bonferroni correction is applied to control the family-wise error rate across
-12 combination comparisons at the $\alpha = 0.05$ level.
+combination comparisons at the $\alpha = 0.05$ level.
 Bootstrap confidence intervals (1,000 iterations) are also computed for the
 best-performing combination.
 These tests are implemented in
@@ -736,15 +656,96 @@ These tests are implemented in
 
 \subsection{Output Files}
 \begin{itemize}
-  \item \texttt{results/phase6/\{combo\_id\}/\{dataset\}/metrics.json}
-  \item \texttt{results/phase6/\{combo\_id\}/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase6/summary.json} --- all combinations ranked by CER
-  \item \texttt{results/phase6/ablation.json} --- ablation delta table
-  \item \texttt{results/phase6/paper\_tables.md} --- formatted tables for publication
+  \item \texttt{results/phase5/\{combo\_id\}/\{dataset\}/metrics.json}
+  \item \texttt{results/phase5/\{combo\_id\}/\{dataset\}/comparison\_vs\_phase2.json}
+  \item \texttt{results/phase5/summary.json} --- all combinations ranked by CER
+  \item \texttt{results/phase5/ablation.json} --- ablation delta table
+  \item \texttt{results/phase5/paper\_tables.md} --- formatted tables for publication
 \end{itemize}
 
 \noindent
 \textbf{Research question answered:} RQ9.
+
+% ============================================================
+\section{Phase 7 --- DSPy Prompt Optimisation}
+\label{sec:phase7}
+% ============================================================
+
+\subsection{Hypothesis}
+
+Hand-crafted prompt engineering requires manual iteration and expert judgment.
+Automated prompt optimisation via DSPy \cite{khattab2023dspy} --- which
+programmatically searches the space of prompt instructions and few-shot
+examples using a training signal --- can discover prompts that outperform
+manually designed strategies.
+
+\subsection{Method}
+\label{subsec:phase7_method}
+
+Phase~7 uses the DSPy framework to automatically optimise the correction
+prompt. The pipeline consists of two stages.
+
+\subsubsection{Optimisation (Kaggle GPU)}
+
+\begin{enumerate}
+  \item Define a DSPy \texttt{Signature} for the correction task:
+        input is OCR text, output is corrected text.
+  \item Load training-split samples (OCR text, ground truth) as DSPy examples.
+  \item Apply \texttt{BootstrapFewShot} optimisation, which:
+        \begin{itemize}
+          \item Samples candidate few-shot demonstrations from the training set.
+          \item Evaluates each candidate prompt on a validation subset using
+                CER as the metric (lower is better).
+          \item Selects the prompt configuration (instruction + demonstrations)
+                that minimises validation CER.
+        \end{itemize}
+  \item Save the compiled DSPy program to disk.
+  \item Run inference using the compiled program on all nine evaluation
+        datasets, writing corrections to
+        \texttt{results/phase7/corrections.jsonl}.
+\end{enumerate}
+
+The optimisation script is \texttt{scripts/dspy\_optimize.py}, designed to
+run on Kaggle with GPU access to the Qwen3-4B model.
+
+\subsubsection{Analysis (Local)}
+
+\begin{enumerate}
+  \item Load \texttt{results/phase7/corrections.jsonl}.
+  \item Compute CER/WER per dataset; compare to Phase~2 zero-shot baseline.
+  \item Write per-dataset reports and a summary comparing DSPy-optimised
+        prompts against all hand-crafted phases.
+\end{enumerate}
+
+\subsection{DSPy Framework}
+\label{subsec:dspy_framework}
+
+DSPy \cite{khattab2023dspy} treats language model prompts as programs rather
+than static text strings. A DSPy ``module'' defines the task signature
+(input/output types), and an ``optimiser'' searches over prompt configurations
+(instructions, demonstrations, chain-of-thought steps) to maximise a
+user-defined metric. This approach has two advantages over manual prompt
+engineering: (1)~it searches a larger space of prompt variations than a human
+can feasibly test; and (2)~it optimises directly on the target metric (CER),
+rather than relying on human intuition about what instructions will reduce
+errors.
+
+The \texttt{BootstrapFewShot} optimiser used in this study selects few-shot
+demonstrations from the training set that, when included in the prompt,
+minimise CER on a held-out validation subset. Unlike Phase~4B (which uses
+QALB examples from a different error distribution), the DSPy-selected
+demonstrations come from the OCR correction task itself, potentially
+providing more targeted guidance.
+
+\subsection{Output Files}
+\begin{itemize}
+  \item \texttt{results/phase7/\{dataset\}/metrics.json}
+  \item \texttt{results/phase7/\{dataset\}/comparison\_vs\_phase2.json}
+  \item \texttt{results/phase7/summary.json} --- cross-dataset comparison
+\end{itemize}
+
+\noindent
+\textbf{Research question answered:} RQ8.
 
 % ============================================================
 \section{Phase Summary}
@@ -755,7 +756,8 @@ Table~\ref{tab:phase_summary} provides a consolidated reference for all phases.
 
 \begin{table}[ht]
 \caption{Summary of all experimental phases. ``Comparison'' is the phase each
-         experiment is evaluated against.}
+         experiment is evaluated against. All phases are evaluated across nine
+         datasets (eight PATS-A01 fonts + KHATT).}
 \label{tab:phase_summary}
 \centering
 \renewcommand{\arraystretch}{1.3}
@@ -763,15 +765,15 @@ Table~\ref{tab:phase_summary} provides a consolidated reference for all phases.
 \toprule
 \textbf{Phase} & \textbf{Knowledge injected} & \textbf{Comparison} & \textbf{RQ} \\
 \midrule
-Phase~1 & None (OCR analysis) & N/A          & RQ1 \\
-Phase~2 & None (zero-shot)    & Phase~1      & RQ2 \\
-Phase~3 & Confusion matrix (top-10 pairs) & Phase~2  & RQ3 \\
-Phase~4A & Arabic orthographic rules & Phase~2  & RQ4 \\
-Phase~4B & 5 QALB few-shot examples  & Phase~2  & RQ5 \\
-Phase~4C & CAMeL morphological post-processing & Phase~2 & RQ6 \\
-Phase~4D & LLM training-split error statistics & Phase~2 & RQ7 \\
-Phase~5  & Top-3 OpenITI RAG passages & Phase~2  & RQ8 \\
-Phase~6  & Combinations + ablation    & Phase~2 + best combo & RQ9 \\
+Phase~1  & None (OCR analysis)                   & N/A          & RQ1 \\
+Phase~2  & None (zero-shot)                      & Phase~1      & RQ2 \\
+Phase~3  & Confusion matrix (top-10 pairs)       & Phase~2      & RQ3 \\
+Phase~4A & Arabic orthographic rules             & Phase~2      & RQ4 \\
+Phase~4B & 5 QALB few-shot examples              & Phase~2      & RQ5 \\
+Phase~4C & CAMeL morphological post-processing   & Phase~2      & RQ6 \\
+Phase~4D & LLM error statistics + word pairs     & Phase~2      & RQ7 \\
+Phase~5  & Combinations + ablation               & Phase~2 + best combo & RQ9 \\
+Phase~7  & DSPy automated prompt optimisation     & Phase~2      & RQ8 \\
 \bottomrule
 \end{tabularx}
 \end{table}
