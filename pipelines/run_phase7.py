@@ -68,7 +68,7 @@ from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
-from pipelines._utils import resolve_datasets, load_sample_list
+from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
 
 logger = logging.getLogger(__name__)
 
@@ -474,8 +474,17 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
                 logger.warning("Error analysis failed for %s: %s", ds_key, e)
 
     # Save aggregate metrics
+    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
+    _corr = {ds: v.get("corrected", {}) for ds, v in all_metrics.items() if v.get("corrected")}
+    _corr_nd = {ds: v.get("corrected_no_diacritics", {}) for ds, v in all_metrics.items() if v.get("corrected_no_diacritics")}
+    agg_output = {
+        "datasets": all_metrics,
+        "group_aggregates": compute_group_aggregates(_corr) if _corr else {},
+    }
+    if _corr_nd:
+        agg_output["group_aggregates_no_diacritics"] = compute_group_aggregates(_corr_nd)
     with open(results_dir / "metrics.json", "w", encoding="utf-8") as f:
-        json.dump(all_metrics, f, indent=2, ensure_ascii=False)
+        json.dump(agg_output, f, indent=2, ensure_ascii=False)
 
     # Save comparison
     if comparisons:

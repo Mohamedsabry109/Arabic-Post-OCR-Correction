@@ -36,7 +36,7 @@ from src.analysis.metrics import calculate_metrics, calculate_metrics_split, cal
 from src.analysis.error_analyzer import ErrorAnalyzer, SampleError
 from src.linguistic.morphology import MorphAnalyzer
 from src.linguistic.validator import WordValidator
-from pipelines._utils import resolve_datasets, load_sample_list
+from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
 
 logger = logging.getLogger(__name__)
 
@@ -442,6 +442,12 @@ def aggregate_metrics(
         "results_normal_only_no_diacritics": {k: v.to_dict() for k, v in normal_nd_results.items()},
         "data_quality": quality_stats,
     }
+    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
+    # Use "normal_only" as the primary variant (excludes runaway samples).
+    output["group_aggregates"] = compute_group_aggregates(output["results_normal_only"])
+    output["group_aggregates_no_diacritics"] = compute_group_aggregates(
+        output["results_normal_only_no_diacritics"]
+    )
 
     save_json(output, results_dir / "baseline_metrics.json")
 

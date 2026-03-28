@@ -75,7 +75,7 @@ from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.analysis.llm_error_analyzer import LLMErrorAnalyzer
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
-from pipelines._utils import resolve_datasets, load_sample_list
+from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
 
 logger = logging.getLogger(__name__)
 
@@ -1180,6 +1180,12 @@ def run_analyze(
             for ds, v in nd_data.items()
         },
     }
+    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
+    aggregated["group_aggregates"] = compute_group_aggregates(aggregated["by_dataset"])
+    if nd_data:
+        aggregated["group_aggregates_no_diacritics"] = compute_group_aggregates(
+            {ds: {"cer": v.get("cer", 0), "wer": v.get("wer", 0)} for ds, v in nd_data.items()}
+        )
     save_json(aggregated, results_dir / "metrics.json")
 
     # Paper tables markdown

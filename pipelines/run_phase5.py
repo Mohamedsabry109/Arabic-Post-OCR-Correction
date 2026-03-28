@@ -98,7 +98,7 @@ from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.analysis.stats_tester import StatsTester
 from src.linguistic.morphology import MorphAnalyzer
 from src.linguistic.validator import WordValidator, TextCorrectionResult
-from pipelines._utils import resolve_datasets, load_sample_list
+from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
 
 logger = logging.getLogger(__name__)
 
@@ -1548,6 +1548,12 @@ def aggregate_combo_results(
             for ds, v in nd_data.items()
         },
     }
+    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
+    output["group_aggregates"] = compute_group_aggregates(output["results"])
+    if nd_data:
+        output["group_aggregates_no_diacritics"] = compute_group_aggregates(
+            {ds: {"cer": v.get("cer", 0), "wer": v.get("wer", 0)} for ds, v in nd_data.items()}
+        )
     save_json(output, combo_dir / "metrics.json")
 
     if all_comparisons:

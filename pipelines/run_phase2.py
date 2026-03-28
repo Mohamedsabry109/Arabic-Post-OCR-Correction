@@ -59,7 +59,7 @@ from src.core.llm_corrector import (
     CorrectedSample,
     get_corrector,
 )
-from pipelines._utils import resolve_datasets, load_sample_list
+from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
 
 logger = logging.getLogger(__name__)
 
@@ -875,6 +875,11 @@ def aggregate_results(
         "results": {k: v.to_dict() for k, v in all_corrected.items()},
         "results_no_diacritics": _load_nd_results(all_corrected, results_dir),
     }
+    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
+    output["group_aggregates"] = compute_group_aggregates(output["results"])
+    nd = output.get("results_no_diacritics", {})
+    if nd:
+        output["group_aggregates_no_diacritics"] = compute_group_aggregates(nd)
     save_json(output, results_dir / "metrics.json")
 
 
