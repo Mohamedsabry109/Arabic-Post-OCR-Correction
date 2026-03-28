@@ -85,7 +85,10 @@
       "Bash(sed -i 's/Phase 6/Phase 5/g' pipelines/run_phase2.py pipelines/run_phase3.py pipelines/run_phase4.py)",
       "Bash(sed -i 's/phase6/phase5/g' pipelines/run_phase4d.py src/analysis/llm_error_analyzer.py)",
       "Bash(sed -i 's/Phase 6/Phase 5/g' src/analysis/stats_tester.py)",
-      "Bash(find /d/Masters/Arabic-Post-OCR-Correction/src -name *knowledge* -o -name *loader*)"
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction/src -name *knowledge* -o -name *loader*)",
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction -type d -name *thesis*)",
+      "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('scripts/select_test_samples.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\(''scripts/select_test_samples.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")"
     ]
   }
 }
