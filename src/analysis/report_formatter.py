@@ -147,6 +147,7 @@ class _SampleResult:
     wer_ocr_raw: float = 0.0
     cer_llm_raw: float = 0.0
     wer_llm_raw: float = 0.0
+    is_runaway: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -179,9 +180,18 @@ def _load_corrections(results_dir: Path) -> list[dict]:
     return records
 
 
+_RUNAWAY_RATIO_THRESHOLD = 5.0
+"""OCR/GT length ratio above which a sample is classified as runaway.
+
+Must match the threshold in ``pipelines/run_phase2.py`` and
+``src/analysis/metrics.calculate_metrics_split``.
+"""
+
+
 def _compute_results(records: list[dict]) -> list[_SampleResult]:
     # Import here to avoid circular imports
     from src.analysis.metrics import calculate_cer, calculate_wer
+    from src.data.text_utils import normalise_arabic
 
     results: list[_SampleResult] = []
     for rec in records:
@@ -192,6 +202,11 @@ def _compute_results(records: list[dict]) -> list[_SampleResult]:
         gt = rec.get("gt_text", "")
         if not gt:
             continue
+
+        # Runaway detection (same criterion as Phase 1 / Phase 2 pipeline)
+        gt_len = max(len(normalise_arabic(gt)), 1)
+        ocr_len = len(normalise_arabic(ocr))
+        is_runaway = ocr_len / gt_len > _RUNAWAY_RATIO_THRESHOLD
 
         # Primary metrics: diacritics stripped (used for ranking/categorisation)
         cer_ocr = calculate_cer(gt, ocr, strip_diacritics=True)
@@ -232,6 +247,7 @@ def _compute_results(records: list[dict]) -> list[_SampleResult]:
             wer_ocr_raw=wer_ocr_raw,
             cer_llm_raw=cer_llm_raw,
             wer_llm_raw=wer_llm_raw,
+            is_runaway=is_runaway,
         ))
     return results
 
@@ -279,6 +295,7 @@ def build_report(
     title: str,
     top_regressed: int = 40,
     top_improved: int = 20,
+    exclude_runaway: bool = False,
 ) -> str:
     """Build and return the full sample report as a UTF-8 string.
 
@@ -300,40 +317,52 @@ def build_report(
         records = _read_jsonl(corrections_path)
         src_display = str(corrections_path)
 
-    results = _compute_results(records)
-    if not results:
+    all_results = _compute_results(records)
+    if not all_results:
         return f"[report_formatter] No valid samples found in {src_display}\n"
+
+    # Split into normal / runaway (same threshold as Phase 1 & Phase 2 pipeline)
+    normal_results = [r for r in all_results if not r.is_runaway]
+    n_runaway = len(all_results) - len(normal_results)
+
+    # Primary sample set based on exclude_runaway config
+    results = normal_results if exclude_runaway else all_results
+    n = len(results)
 
     improved  = sorted([r for r in results if r.outcome == "improved"],
                        key=lambda r: r.cer_delta, reverse=True)
     regressed = sorted([r for r in results if r.outcome == "regressed"],
                        key=lambda r: r.cer_delta)
     unchanged = [r for r in results if r.outcome == "unchanged"]
-    n = len(results)
 
     cat_counts: Counter[str] = Counter(r.category for r in results)
 
-    # Per-dataset aggregation
-    ds_data: dict[str, dict] = {}
-    for r in results:
-        d = ds_data.setdefault(r.dataset, {
-            "improved": 0, "regressed": 0, "unchanged": 0,
-            "cer_ocr_sum": 0.0, "cer_llm_sum": 0.0,
-            "wer_ocr_sum": 0.0, "wer_llm_sum": 0.0,
-            "cer_ocr_raw_sum": 0.0, "cer_llm_raw_sum": 0.0,
-            "wer_ocr_raw_sum": 0.0, "wer_llm_raw_sum": 0.0,
-            "n": 0,
-        })
-        d[r.outcome] += 1
-        d["cer_ocr_sum"] += r.cer_ocr
-        d["cer_llm_sum"] += r.cer_llm
-        d["wer_ocr_sum"] += r.wer_ocr
-        d["wer_llm_sum"] += r.wer_llm
-        d["cer_ocr_raw_sum"] += r.cer_ocr_raw
-        d["cer_llm_raw_sum"] += r.cer_llm_raw
-        d["wer_ocr_raw_sum"] += r.wer_ocr_raw
-        d["wer_llm_raw_sum"] += r.wer_llm_raw
-        d["n"] += 1
+    # Per-dataset aggregation helper
+    def _aggregate(sample_list: list[_SampleResult]) -> dict[str, dict]:
+        ds: dict[str, dict] = {}
+        for r in sample_list:
+            d = ds.setdefault(r.dataset, {
+                "improved": 0, "regressed": 0, "unchanged": 0,
+                "cer_ocr_sum": 0.0, "cer_llm_sum": 0.0,
+                "wer_ocr_sum": 0.0, "wer_llm_sum": 0.0,
+                "cer_ocr_raw_sum": 0.0, "cer_llm_raw_sum": 0.0,
+                "wer_ocr_raw_sum": 0.0, "wer_llm_raw_sum": 0.0,
+                "n": 0,
+            })
+            d[r.outcome] += 1
+            d["cer_ocr_sum"] += r.cer_ocr
+            d["cer_llm_sum"] += r.cer_llm
+            d["wer_ocr_sum"] += r.wer_ocr
+            d["wer_llm_sum"] += r.wer_llm
+            d["cer_ocr_raw_sum"] += r.cer_ocr_raw
+            d["cer_llm_raw_sum"] += r.cer_llm_raw
+            d["wer_ocr_raw_sum"] += r.wer_ocr_raw
+            d["wer_llm_raw_sum"] += r.wer_llm_raw
+            d["n"] += 1
+        return ds
+
+    ds_all = _aggregate(all_results)
+    ds_normal = _aggregate(normal_results)
 
     W = 88
     SEP  = "=" * W
@@ -351,85 +380,112 @@ def build_report(
     ]
 
     # ------------------------------------------------------------------
-    # Overall summary (dual metrics)
+    # Overall summary helper
     # ------------------------------------------------------------------
-    avg_cer_ocr = sum(r.cer_ocr for r in results) / n
-    avg_cer_llm = sum(r.cer_llm for r in results) / n
-    avg_wer_ocr = sum(r.wer_ocr for r in results) / n
-    avg_wer_llm = sum(r.wer_llm for r in results) / n
-    net = avg_cer_ocr - avg_cer_llm
-    net_dir = "better" if net > 0 else "worse"
+    def _overall_block(label: str, sample_list: list[_SampleResult]) -> None:
+        sn = len(sample_list)
+        if sn == 0:
+            return
+        s_imp = sum(1 for r in sample_list if r.outcome == "improved")
+        s_reg = sum(1 for r in sample_list if r.outcome == "regressed")
+        s_unc = sn - s_imp - s_reg
 
-    avg_cer_ocr_raw = sum(r.cer_ocr_raw for r in results) / n
-    avg_cer_llm_raw = sum(r.cer_llm_raw for r in results) / n
-    avg_wer_ocr_raw = sum(r.wer_ocr_raw for r in results) / n
-    avg_wer_llm_raw = sum(r.wer_llm_raw for r in results) / n
-    net_raw = avg_cer_ocr_raw - avg_cer_llm_raw
-    net_raw_dir = "better" if net_raw > 0 else "worse"
+        a_cer_o = sum(r.cer_ocr for r in sample_list) / sn
+        a_cer_l = sum(r.cer_llm for r in sample_list) / sn
+        a_wer_o = sum(r.wer_ocr for r in sample_list) / sn
+        a_wer_l = sum(r.wer_llm for r in sample_list) / sn
+        net_s = a_cer_o - a_cer_l
+        dir_s = "better" if net_s > 0 else "worse"
 
+        a_cer_o_r = sum(r.cer_ocr_raw for r in sample_list) / sn
+        a_cer_l_r = sum(r.cer_llm_raw for r in sample_list) / sn
+        a_wer_o_r = sum(r.wer_ocr_raw for r in sample_list) / sn
+        a_wer_l_r = sum(r.wer_llm_raw for r in sample_list) / sn
+        net_r = a_cer_o_r - a_cer_l_r
+        dir_r = "better" if net_r > 0 else "worse"
+
+        lines.extend([
+            f"{label}  ({sn} samples)",
+            THIN,
+            f"  -- Diacritics stripped --",
+            f"  Avg CER       : {a_cer_o * 100:.2f}%  ->  {a_cer_l * 100:.2f}%  "
+            f"({dir_s} by {abs(net_s) * 100:.2f}pp)",
+            f"  Avg WER       : {a_wer_o * 100:.2f}%  ->  {a_wer_l * 100:.2f}%",
+            f"  -- With diacritics --",
+            f"  Avg CER       : {a_cer_o_r * 100:.2f}%  ->  {a_cer_l_r * 100:.2f}%  "
+            f"({dir_r} by {abs(net_r) * 100:.2f}pp)",
+            f"  Avg WER       : {a_wer_o_r * 100:.2f}%  ->  {a_wer_l_r * 100:.2f}%",
+            f"  Improved={s_imp} ({s_imp/sn*100:.1f}%)  "
+            f"Regressed={s_reg} ({s_reg/sn*100:.1f}%)  "
+            f"Unchanged={s_unc} ({s_unc/sn*100:.1f}%)",
+            "",
+        ])
+
+    # ------------------------------------------------------------------
+    # Data quality line
+    # ------------------------------------------------------------------
     lines += [
-        "OVERALL",
-        THIN,
-        f"  Samples       : {n}",
-        "",
-        f"  -- Diacritics stripped (primary) --",
-        f"  Avg CER       : {avg_cer_ocr * 100:.2f}%  ->  {avg_cer_llm * 100:.2f}%  "
-        f"({net_dir} by {abs(net) * 100:.2f}pp)",
-        f"  Avg WER       : {avg_wer_ocr * 100:.2f}%  ->  {avg_wer_llm * 100:.2f}%",
-        "",
-        f"  -- Raw (with diacritics) --",
-        f"  Avg CER       : {avg_cer_ocr_raw * 100:.2f}%  ->  {avg_cer_llm_raw * 100:.2f}%  "
-        f"({net_raw_dir} by {abs(net_raw) * 100:.2f}pp)",
-        f"  Avg WER       : {avg_wer_ocr_raw * 100:.2f}%  ->  {avg_wer_llm_raw * 100:.2f}%",
-        "",
-        f"  Improved      : {len(improved):>4}  ({len(improved) / n * 100:.1f}%)",
-        f"  Regressed     : {len(regressed):>4}  ({len(regressed) / n * 100:.1f}%)",
-        f"  Unchanged     : {len(unchanged):>4}  ({len(unchanged) / n * 100:.1f}%)",
+        f"  Total samples : {len(all_results)}",
+        f"  Runaway       : {n_runaway}  (OCR>{_RUNAWAY_RATIO_THRESHOLD}x GT length)",
+        f"  Normal        : {len(normal_results)}",
         "",
     ]
 
-    # ------------------------------------------------------------------
-    # Dataset summary table
-    # ------------------------------------------------------------------
-    lines += [
-        "DATASET SUMMARY (diacritics stripped)",
-        THIN,
-        f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} {'OCR WER':>8} {'LLM WER':>8} "
-        f"{'Improved':>9} {'Regressed':>10} {'Unchanged':>9}",
-        THIN,
-    ]
-    for ds, d in sorted(ds_data.items()):
-        dn = d["n"]
-        avg_cer_o = d["cer_ocr_sum"] / dn
-        avg_cer_l = d["cer_llm_sum"] / dn
-        avg_wer_o = d["wer_ocr_sum"] / dn
-        avg_wer_l = d["wer_llm_sum"] / dn
-        lines.append(
-            f"  {ds:<34} {avg_cer_o * 100:>7.1f}%  {avg_cer_l * 100:>7.1f}%"
-            f"  {avg_wer_o * 100:>7.1f}%  {avg_wer_l * 100:>7.1f}%"
-            f"  {d['improved']:>4} ({d['improved'] / dn * 100:>3.0f}%)"
-            f"  {d['regressed']:>4} ({d['regressed'] / dn * 100:>3.0f}%)"
-            f"  {d['unchanged']:>4}"
-        )
-    lines += [THIN, ""]
+    _overall_block("ALL SAMPLES", all_results)
+    _overall_block("NORMAL-ONLY (excludes runaway)", normal_results)
 
-    lines += [
-        "DATASET SUMMARY (raw / with diacritics)",
-        THIN,
-        f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} {'OCR WER':>8} {'LLM WER':>8}",
-        THIN,
-    ]
-    for ds, d in sorted(ds_data.items()):
-        dn = d["n"]
-        avg_cer_o = d["cer_ocr_raw_sum"] / dn
-        avg_cer_l = d["cer_llm_raw_sum"] / dn
-        avg_wer_o = d["wer_ocr_raw_sum"] / dn
-        avg_wer_l = d["wer_llm_raw_sum"] / dn
-        lines.append(
-            f"  {ds:<34} {avg_cer_o * 100:>7.1f}%  {avg_cer_l * 100:>7.1f}%"
-            f"  {avg_wer_o * 100:>7.1f}%  {avg_wer_l * 100:>7.1f}%"
-        )
-    lines += [THIN, ""]
+    # ------------------------------------------------------------------
+    # Dataset summary table helper
+    # ------------------------------------------------------------------
+    def _ds_table(label: str, ds_data: dict[str, dict], show_outcomes: bool = True) -> None:
+        if show_outcomes:
+            lines.extend([
+                label,
+                THIN,
+                f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} {'OCR WER':>8} {'LLM WER':>8} "
+                f"{'Improved':>9} {'Regressed':>10} {'Unchanged':>9}",
+                THIN,
+            ])
+            for ds, d in sorted(ds_data.items()):
+                dn = d["n"]
+                lines.append(
+                    f"  {ds:<34} {d['cer_ocr_sum']/dn*100:>7.1f}%  {d['cer_llm_sum']/dn*100:>7.1f}%"
+                    f"  {d['wer_ocr_sum']/dn*100:>7.1f}%  {d['wer_llm_sum']/dn*100:>7.1f}%"
+                    f"  {d['improved']:>4} ({d['improved']/dn*100:>3.0f}%)"
+                    f"  {d['regressed']:>4} ({d['regressed']/dn*100:>3.0f}%)"
+                    f"  {d['unchanged']:>4}"
+                )
+        else:
+            lines.extend([
+                label,
+                THIN,
+                f"  {'Dataset':<34} {'OCR CER':>8} {'LLM CER':>8} {'OCR WER':>8} {'LLM WER':>8}  {'N':>5}",
+                THIN,
+            ])
+            for ds, d in sorted(ds_data.items()):
+                dn = d["n"]
+                lines.append(
+                    f"  {ds:<34} {d['cer_ocr_sum']/dn*100:>7.1f}%  {d['cer_llm_sum']/dn*100:>7.1f}%"
+                    f"  {d['wer_ocr_sum']/dn*100:>7.1f}%  {d['wer_llm_sum']/dn*100:>7.1f}%  {dn:>5}"
+                )
+        lines.extend([THIN, ""])
+
+    # All samples tables
+    _ds_table("DATASET SUMMARY -- ALL SAMPLES (diacritics stripped)", ds_all, show_outcomes=True)
+    # For raw/with-diacritics, swap in the raw sums
+    ds_all_raw = {}
+    for ds, d in ds_all.items():
+        ds_all_raw[ds] = {**d, "cer_ocr_sum": d["cer_ocr_raw_sum"], "cer_llm_sum": d["cer_llm_raw_sum"],
+                          "wer_ocr_sum": d["wer_ocr_raw_sum"], "wer_llm_sum": d["wer_llm_raw_sum"]}
+    _ds_table("DATASET SUMMARY -- ALL SAMPLES (with diacritics)", ds_all_raw, show_outcomes=False)
+
+    # Normal-only tables
+    _ds_table("DATASET SUMMARY -- NORMAL-ONLY (diacritics stripped)", ds_normal, show_outcomes=True)
+    ds_norm_raw = {}
+    for ds, d in ds_normal.items():
+        ds_norm_raw[ds] = {**d, "cer_ocr_sum": d["cer_ocr_raw_sum"], "cer_llm_sum": d["cer_llm_raw_sum"],
+                           "wer_ocr_sum": d["wer_ocr_raw_sum"], "wer_llm_sum": d["wer_llm_raw_sum"]}
+    _ds_table("DATASET SUMMARY -- NORMAL-ONLY (with diacritics)", ds_norm_raw, show_outcomes=False)
 
     # ------------------------------------------------------------------
     # Category breakdown
@@ -497,6 +553,7 @@ def write_corrections_report(
     title: str,
     top_regressed: int = 40,
     top_improved: int = 20,
+    exclude_runaway: bool = False,
 ) -> None:
     """Build the report, save it to *output_path*, and print a category
     summary to stdout (ASCII-safe — no Arabic characters on the console).
@@ -507,12 +564,14 @@ def write_corrections_report(
         title: One-line report title.
         top_regressed: Regressed samples to include in the report.
         top_improved: Improved samples to include in the report.
+        exclude_runaway: If True, exclude runaway samples from aggregates.
     """
     report = build_report(
         corrections_path=corrections_path,
         title=title,
         top_regressed=top_regressed,
         top_improved=top_improved,
+        exclude_runaway=exclude_runaway,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -520,18 +579,20 @@ def write_corrections_report(
         f.write(report)
 
     # ------------------------------------------------------------------
-    # ASCII-safe console summary (no Arabic)
+    # ASCII-safe console summary (no Arabic, normal-only)
     # ------------------------------------------------------------------
-    # Parse category counts and overall stats from the report string for display
     if corrections_path.is_dir():
         records = _load_corrections(corrections_path)
     else:
         records = _read_jsonl(corrections_path)
-    results = _compute_results(records)
-    if not results:
-        print(f"[sample report] No valid samples — skipping.")
+    all_results = _compute_results(records)
+    if not all_results:
+        print(f"[sample report] No valid samples -- skipping.")
         return
 
+    normal_results = [r for r in all_results if not r.is_runaway]
+    n_runaway = len(all_results) - len(normal_results)
+    results = normal_results if exclude_runaway else all_results
     n = len(results)
     n_imp = sum(1 for r in results if r.outcome == "improved")
     n_reg = sum(1 for r in results if r.outcome == "regressed")
@@ -543,8 +604,11 @@ def write_corrections_report(
     avg_wer_s = sum(r.wer_llm for r in results) / n
     avg_wer_r = sum(r.wer_llm_raw for r in results) / n
 
+    variant_label = "normal-only" if exclude_runaway else "all samples"
     print()
     print("  Sample report saved:", output_path)
+    if n_runaway:
+        print(f"  Total: {len(all_results)}  Normal: {len(normal_results)}  Runaway: {n_runaway}  Using: {variant_label}")
     print(f"  Improved={n_imp} ({n_imp/n*100:.1f}%)  "
           f"Regressed={n_reg} ({n_reg/n*100:.1f}%)  "
           f"Unchanged={n_unc} ({n_unc/n*100:.1f}%)")

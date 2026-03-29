@@ -44,6 +44,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
+from src.data.text_utils import normalise_arabic
 from src.analysis.metrics import (
     MetricResult,
     calculate_metrics,
@@ -574,6 +575,48 @@ def run_error_change_analysis(
 # ANALYZE MODE — per-dataset processing
 # ---------------------------------------------------------------------------
 
+DEFAULT_RUNAWAY_RATIO_THRESHOLD = 5.0
+"""Default OCR/GT length ratio above which a sample is classified as runaway.
+
+Overridden by ``evaluation.runaway_ratio_threshold`` in config.yaml.
+"""
+
+
+def split_runaway_samples(
+    samples: list[CorrectedSample],
+    threshold: float = DEFAULT_RUNAWAY_RATIO_THRESHOLD,
+) -> tuple[list[CorrectedSample], list[CorrectedSample], dict]:
+    """Separate CorrectedSamples into normal vs runaway using OCR/GT length.
+
+    Uses the same criterion as Phase 1's ``calculate_metrics_split``:
+    a sample is *runaway* when ``len(ocr_text) / len(gt_text) > threshold``.
+
+    Returns:
+        (normal_samples, runaway_samples, data_quality_dict)
+    """
+    normal: list[CorrectedSample] = []
+    runaway: list[CorrectedSample] = []
+    for cs in samples:
+        gt_len = max(len(normalise_arabic(cs.sample.gt_text)), 1)
+        ocr_len = len(normalise_arabic(cs.sample.ocr_text))
+        if ocr_len / gt_len > threshold:
+            runaway.append(cs)
+        else:
+            normal.append(cs)
+    n = len(samples)
+    data_quality = {
+        "total_samples": n,
+        "normal_samples": len(normal),
+        "runaway_samples": len(runaway),
+        "runaway_percentage": round(len(runaway) / max(n, 1) * 100, 2),
+        "runaway_ratio_threshold": threshold,
+        "description": (
+            f"{len(runaway)} samples ({len(runaway)/max(n,1)*100:.1f}%) "
+            f"have OCR output >{threshold}x longer than GT (Qaari repetition bug)."
+        ),
+    }
+    return normal, runaway, data_quality
+
 
 def process_dataset_analyze(
     dataset_key: str,
@@ -586,6 +629,13 @@ def process_dataset_analyze(
 ) -> MetricResult:
     """Run all analysis steps for one dataset given its CorrectedSample list.
 
+    Always computes metrics for both *all* and *normal-only* subsets.
+    The **primary** result (returned and used for comparisons/reports)
+    is controlled by ``evaluation.exclude_runaway`` in config:
+
+    - ``false`` (default): primary = all samples
+    - ``true``: primary = normal-only (excluding runaways)
+
     Args:
         dataset_key: E.g. "KHATT-train".
         corrected_samples: Loaded from corrections.jsonl.
@@ -596,8 +646,12 @@ def process_dataset_analyze(
         analyze_errors: If True, run error_changes.json computation.
 
     Returns:
-        MetricResult for corrected text on this dataset.
+        MetricResult for the **primary** subset (all or normal-only).
     """
+    eval_cfg = config.get("evaluation", {})
+    exclude_runaway = eval_cfg.get("exclude_runaway", False)
+    threshold = eval_cfg.get("runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD)
+
     out_dir = results_dir / dataset_key
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -612,14 +666,57 @@ def process_dataset_analyze(
     logger.info("Analyzing dataset: %s  (%d samples, %d failed)", dataset_key, n, n_failed)
 
     # ------------------------------------------------------------------
-    # Step 1: CER/WER on corrected texts
+    # Step 1: Split into normal / runaway, compute metrics for both
     # ------------------------------------------------------------------
-    logger.info("[%s] Calculating corrected CER/WER ...", dataset_key)
-    corrected_result, corrected_result_nd = calculate_metrics_dual(
+    normal_samples, runaway_samples, data_quality = split_runaway_samples(
+        corrected_samples, threshold=threshold,
+    )
+    if runaway_samples:
+        logger.info(
+            "[%s] %s", dataset_key, data_quality["description"],
+        )
+
+    logger.info("[%s] Calculating OCR baseline + corrected CER/WER ...", dataset_key)
+
+    # ------------------------------------------------------------------
+    # OCR baseline (OCR vs GT) — same sample set, before LLM correction
+    # ------------------------------------------------------------------
+    ocr_all, ocr_all_nd = calculate_metrics_dual(
+        corrected_samples,
+        dataset_name=dataset_key,
+        text_field="ocr_text",
+    )
+    ocr_normal, ocr_normal_nd = calculate_metrics_dual(
+        normal_samples,
+        dataset_name=dataset_key,
+        text_field="ocr_text",
+    )
+
+    # ------------------------------------------------------------------
+    # Corrected (LLM vs GT) — after LLM correction
+    # ------------------------------------------------------------------
+    all_result, all_result_nd = calculate_metrics_dual(
         corrected_samples,
         dataset_name=dataset_key,
         text_field="corrected_text",
     )
+    normal_result, normal_result_nd = calculate_metrics_dual(
+        normal_samples,
+        dataset_name=dataset_key,
+        text_field="corrected_text",
+    )
+
+    # Primary result based on config
+    if exclude_runaway:
+        ocr_primary, ocr_primary_nd = ocr_normal, ocr_normal_nd
+        primary, primary_nd = normal_result, normal_result_nd
+        primary_source = "normal_only"
+        primary_label = "normal-only"
+    else:
+        ocr_primary, ocr_primary_nd = ocr_all, ocr_all_nd
+        primary, primary_nd = all_result, all_result_nd
+        primary_source = "all"
+        primary_label = "all"
 
     metrics_json = {
         "meta": make_meta(
@@ -630,49 +727,82 @@ def process_dataset_analyze(
                 "total_latency_s":        round(total_latency, 2),
                 "avg_latency_per_sample_s": round(avg_latency, 3),
                 "failed_samples":         n_failed,
+                "primary_variant":        primary_source,
             },
         ),
-        "corrected": corrected_result.to_dict(),
-        "corrected_no_diacritics": corrected_result_nd.to_dict(),
+        # OCR baseline (before LLM)
+        "ocr_all": ocr_all.to_dict(),
+        "ocr_all_no_diacritics": ocr_all_nd.to_dict(),
+        "ocr_normal_only": ocr_normal.to_dict(),
+        "ocr_normal_only_no_diacritics": ocr_normal_nd.to_dict(),
+        # Corrected (after LLM)
+        "corrected_all": all_result.to_dict(),
+        "corrected_all_no_diacritics": all_result_nd.to_dict(),
+        "corrected_normal_only": normal_result.to_dict(),
+        "corrected_normal_only_no_diacritics": normal_result_nd.to_dict(),
+        "data_quality": data_quality,
     }
     save_json(metrics_json, out_dir / "metrics.json")
 
     logger.info(
-        "[%s] Corrected CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%",
-        dataset_key,
-        corrected_result.cer * 100,
-        corrected_result.wer * 100,
-        corrected_result_nd.cer * 100,
-        corrected_result_nd.wer * 100,
+        "[%s] Primary (%s, %d samples):  OCR CER=%.2f%%  ->  LLM CER=%.2f%%  |  no-diac: %.2f%% -> %.2f%%",
+        dataset_key, primary_label, primary.num_samples,
+        ocr_primary.cer * 100, primary.cer * 100,
+        ocr_primary_nd.cer * 100, primary_nd.cer * 100,
     )
+    if runaway_samples and not exclude_runaway:
+        logger.info(
+            "[%s] Normal-only (%d samples): OCR CER=%.2f%%  ->  LLM CER=%.2f%%",
+            dataset_key, len(normal_samples),
+            ocr_normal.cer * 100, normal_result.cer * 100,
+        )
+    elif runaway_samples and exclude_runaway:
+        logger.info(
+            "[%s] All samples (%d):         OCR CER=%.2f%%  ->  LLM CER=%.2f%%",
+            dataset_key, n,
+            ocr_all.cer * 100, all_result.cer * 100,
+        )
 
     # ------------------------------------------------------------------
     # Step 2: Comparison vs Phase 1
     # ------------------------------------------------------------------
     if phase1_metrics is not None:
-        # Pull per-dataset Phase 1 numbers from baseline_metrics.json
-        p1_normal = phase1_metrics.get("results_normal_only", {}).get(dataset_key)
-        p1_all    = phase1_metrics.get("results_all_samples", {}).get(dataset_key)
-        p1_data   = p1_normal or p1_all  # prefer normal-only (excludes runaway)
+        # Match Phase 1 variant to our primary
+        if exclude_runaway:
+            p1_normal = phase1_metrics.get("results_normal_only", {}).get(dataset_key)
+            p1_all    = phase1_metrics.get("results_all_samples", {}).get(dataset_key)
+            p1_data   = p1_normal or p1_all
+            p1_source = "results_normal_only" if p1_normal else "results_all_samples"
+        else:
+            p1_all    = phase1_metrics.get("results_all_samples", {}).get(dataset_key)
+            p1_normal = phase1_metrics.get("results_normal_only", {}).get(dataset_key)
+            p1_data   = p1_all or p1_normal
+            p1_source = "results_all_samples" if p1_all else "results_normal_only"
 
         if p1_data:
             p1_cer = p1_data.get("cer", 0.0)
             p1_wer = p1_data.get("wer", 0.0)
-            cer_delta_abs = p1_cer - corrected_result.cer
-            wer_delta_abs = p1_wer - corrected_result.wer
+            cer_delta_abs = p1_cer - primary.cer
+            wer_delta_abs = p1_wer - primary.wer
             cer_rel = (cer_delta_abs / p1_cer * 100) if p1_cer > 0 else 0.0
             wer_rel = (wer_delta_abs / p1_wer * 100) if p1_wer > 0 else 0.0
 
             # No-diacritics comparison
-            p1_normal_nd = phase1_metrics.get("results_normal_only_no_diacritics", {}).get(dataset_key)
-            p1_all_nd = phase1_metrics.get("results_all_samples_no_diacritics", {}).get(dataset_key)
-            p1_data_nd = p1_normal_nd or p1_all_nd
+            if exclude_runaway:
+                p1_nd_pref = phase1_metrics.get("results_normal_only_no_diacritics", {}).get(dataset_key)
+                p1_nd_alt  = phase1_metrics.get("results_all_samples_no_diacritics", {}).get(dataset_key)
+                p1_data_nd = p1_nd_pref or p1_nd_alt
+            else:
+                p1_nd_pref = phase1_metrics.get("results_all_samples_no_diacritics", {}).get(dataset_key)
+                p1_nd_alt  = phase1_metrics.get("results_normal_only_no_diacritics", {}).get(dataset_key)
+                p1_data_nd = p1_nd_pref or p1_nd_alt
+
             delta_nd = {}
             if p1_data_nd:
                 p1_cer_nd = p1_data_nd.get("cer", 0.0)
                 p1_wer_nd = p1_data_nd.get("wer", 0.0)
-                cer_d_nd = p1_cer_nd - corrected_result_nd.cer
-                wer_d_nd = p1_wer_nd - corrected_result_nd.wer
+                cer_d_nd = p1_cer_nd - primary_nd.cer
+                wer_d_nd = p1_wer_nd - primary_nd.wer
                 cer_r_nd = (cer_d_nd / p1_cer_nd * 100) if p1_cer_nd > 0 else 0.0
                 wer_r_nd = (wer_d_nd / p1_wer_nd * 100) if p1_wer_nd > 0 else 0.0
                 delta_nd = {
@@ -680,8 +810,8 @@ def process_dataset_analyze(
                         "cer": round(p1_cer_nd, 6), "wer": round(p1_wer_nd, 6),
                     },
                     "phase2_corrected_no_diacritics": {
-                        "cer": round(corrected_result_nd.cer, 6),
-                        "wer": round(corrected_result_nd.wer, 6),
+                        "cer": round(primary_nd.cer, 6),
+                        "wer": round(primary_nd.wer, 6),
                     },
                     "delta_no_diacritics": {
                         "cer_absolute": round(cer_d_nd, 6),
@@ -696,11 +826,12 @@ def process_dataset_analyze(
                 "phase1_ocr": {
                     "cer": round(p1_cer, 6),
                     "wer": round(p1_wer, 6),
-                    "source": "results_normal_only" if p1_normal else "results_all_samples",
+                    "source": p1_source,
                 },
                 "phase2_corrected": {
-                    "cer": round(corrected_result.cer, 6),
-                    "wer": round(corrected_result.wer, 6),
+                    "cer": round(primary.cer, 6),
+                    "wer": round(primary.wer, 6),
+                    "source": primary_source,
                 },
                 "delta": {
                     "cer_absolute":       round(cer_delta_abs, 6),
@@ -712,25 +843,30 @@ def process_dataset_analyze(
                 "interpretation": (
                     f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
                     f"{abs(cer_rel):.1f}% "
-                    f"({p1_cer*100:.2f}% → {corrected_result.cer*100:.2f}%). "
+                    f"({p1_cer*100:.2f}% -> {primary.cer*100:.2f}%). "
                     f"WER {'reduced' if wer_delta_abs >= 0 else 'increased'} by "
                     f"{abs(wer_rel):.1f}% "
-                    f"({p1_wer*100:.2f}% → {corrected_result.wer*100:.2f}%)."
+                    f"({p1_wer*100:.2f}% -> {primary.wer*100:.2f}%)."
+                ),
+                "note": (
+                    f"exclude_runaway={exclude_runaway}. "
+                    f"Data quality: {data_quality['runaway_samples']} runaway samples "
+                    f"(OCR>{threshold}x GT length)."
                 ),
             }
             save_json(comparison, out_dir / "comparison_vs_phase1.json")
             logger.info(
                 "[%s] CER: %.2f%% -> %.2f%% (%+.1f%%)  |  WER: %.2f%% -> %.2f%% (%+.1f%%)",
                 dataset_key,
-                p1_cer * 100, corrected_result.cer * 100, cer_rel,
-                p1_wer * 100, corrected_result.wer * 100, wer_rel,
+                p1_cer * 100, primary.cer * 100, cer_rel,
+                p1_wer * 100, primary.wer * 100, wer_rel,
             )
             if p1_data_nd:
                 logger.info(
                     "[%s] ND  CER: %.2f%% -> %.2f%% (%+.1f%%)  |  ND  WER: %.2f%% -> %.2f%% (%+.1f%%)",
                     dataset_key,
-                    p1_cer_nd * 100, corrected_result_nd.cer * 100, cer_r_nd,
-                    p1_wer_nd * 100, corrected_result_nd.wer * 100, wer_r_nd,
+                    p1_cer_nd * 100, primary_nd.cer * 100, cer_r_nd,
+                    p1_wer_nd * 100, primary_nd.wer * 100, wer_r_nd,
                 )
         else:
             logger.warning(
@@ -752,7 +888,7 @@ def process_dataset_analyze(
         error_changes["meta"] = make_meta(dataset_key, n, config, limit)
         save_json(error_changes, out_dir / "error_changes.json")
 
-    return corrected_result
+    return primary
 
 
 # ---------------------------------------------------------------------------
@@ -841,18 +977,47 @@ def process_dataset_full(
 # ---------------------------------------------------------------------------
 
 
-def _load_nd_results(all_corrected: dict, results_dir: Path) -> dict:
-    """Load corrected_no_diacritics from per-dataset metrics.json files."""
-    nd: dict = {}
+def _load_per_dataset_metrics(
+    all_corrected: dict, results_dir: Path,
+) -> dict:
+    """Load all metric variants from per-dataset metrics.json files.
+
+    Returns:
+        Dict with keys: ``ocr_all``, ``ocr_all_nd``, ``ocr_norm``,
+        ``ocr_norm_nd``, ``corr_all``, ``corr_all_nd``, ``corr_norm``,
+        ``corr_norm_nd``, ``data_quality`` — each a dict keyed by dataset.
+    """
+    out: dict[str, dict] = {
+        "ocr_all": {}, "ocr_all_nd": {}, "ocr_norm": {}, "ocr_norm_nd": {},
+        "corr_all": {}, "corr_all_nd": {}, "corr_norm": {}, "corr_norm_nd": {},
+        "data_quality": {},
+    }
     for ds_key in all_corrected:
         path = results_dir / ds_key / "metrics.json"
-        if path.exists():
-            try:
-                with open(path, encoding="utf-8") as f:
-                    nd[ds_key] = json.load(f).get("corrected_no_diacritics", {})
-            except (json.JSONDecodeError, OSError):
-                pass
-    return nd
+        if not path.exists():
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                m = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        # OCR baseline (before LLM)
+        out["ocr_all"][ds_key] = m.get("ocr_all", {})
+        out["ocr_all_nd"][ds_key] = m.get("ocr_all_no_diacritics", {})
+        out["ocr_norm"][ds_key] = m.get("ocr_normal_only", {})
+        out["ocr_norm_nd"][ds_key] = m.get("ocr_normal_only_no_diacritics", {})
+        # Corrected (after LLM) — with legacy fallback
+        out["corr_all"][ds_key] = m.get("corrected_all", m.get("corrected", {}))
+        out["corr_all_nd"][ds_key] = m.get(
+            "corrected_all_no_diacritics", m.get("corrected_no_diacritics", {}),
+        )
+        out["corr_norm"][ds_key] = m.get("corrected_normal_only", m.get("corrected", {}))
+        out["corr_norm_nd"][ds_key] = m.get(
+            "corrected_normal_only_no_diacritics",
+            m.get("corrected_no_diacritics", {}),
+        )
+        out["data_quality"][ds_key] = m.get("data_quality", {})
+    return out
 
 
 def aggregate_results(
@@ -861,7 +1026,29 @@ def aggregate_results(
     results_dir: Path,
     limit: Optional[int],
 ) -> None:
-    """Write combined metrics.json across all datasets."""
+    """Write combined metrics.json across all datasets.
+
+    ``results`` stores the **primary** variant (all or normal-only)
+    controlled by ``evaluation.exclude_runaway``.  Both variants are
+    always stored for reference.
+    """
+    eval_cfg = config.get("evaluation", {})
+    exclude_runaway = eval_cfg.get("exclude_runaway", False)
+    threshold = eval_cfg.get("runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD)
+
+    pm = _load_per_dataset_metrics(all_corrected, results_dir)
+
+    # Primary variants follow config
+    if exclude_runaway:
+        primary_ocr = pm["ocr_norm"]
+        primary_ocr_nd = pm["ocr_norm_nd"]
+        primary_corr_nd = pm["corr_norm_nd"]
+    else:
+        primary_ocr = pm["ocr_all"]
+        primary_ocr_nd = pm["ocr_all_nd"]
+        primary_corr_nd = pm["corr_all_nd"]
+
+    variant_label = "normal-only (excluding runaways)" if exclude_runaway else "all samples"
     output = {
         "meta": {
             "phase": "phase2",
@@ -871,11 +1058,30 @@ def aggregate_results(
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "git_commit": get_git_commit(),
             "limit_applied": limit,
+            "exclude_runaway": exclude_runaway,
+            "runaway_ratio_threshold": threshold,
+            "note": (
+                f"Primary results use {variant_label}. "
+                f"Runaway threshold: OCR>{threshold}x GT length."
+            ),
         },
+        # Primary OCR baseline (before LLM): follows config
+        "ocr_results": primary_ocr,
+        "ocr_results_no_diacritics": primary_ocr_nd,
+        # Primary corrected (after LLM): follows config
         "results": {k: v.to_dict() for k, v in all_corrected.items()},
-        "results_no_diacritics": _load_nd_results(all_corrected, results_dir),
+        "results_no_diacritics": primary_corr_nd,
+        # All variants always stored for reference
+        "ocr_all_samples": pm["ocr_all"],
+        "ocr_all_samples_no_diacritics": pm["ocr_all_nd"],
+        "ocr_normal_only": pm["ocr_norm"],
+        "ocr_normal_only_no_diacritics": pm["ocr_norm_nd"],
+        "results_all_samples": pm["corr_all"],
+        "results_all_samples_no_diacritics": pm["corr_all_nd"],
+        "results_normal_only": pm["corr_norm"],
+        "results_normal_only_no_diacritics": pm["corr_norm_nd"],
+        "data_quality": pm["data_quality"],
     }
-    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
     output["group_aggregates"] = compute_group_aggregates(output["results"])
     nd = output.get("results_no_diacritics", {})
     if nd:
@@ -919,8 +1125,17 @@ def generate_report(
     all_comparisons: dict[str, dict],
     model_name: str,
     results_dir: Path,
+    config: Optional[dict] = None,
 ) -> None:
     """Write human-readable Markdown report to results_dir/report.md."""
+    eval_cfg = (config or {}).get("evaluation", {})
+    exclude_runaway = eval_cfg.get("exclude_runaway", False)
+    threshold = eval_cfg.get("runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD)
+    variant_label = "normal-only" if exclude_runaway else "all"
+
+    # Load internally-computed OCR baseline from per-dataset files
+    pm = _load_per_dataset_metrics(all_corrected, results_dir)
+
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines: list[str] = []
 
@@ -928,50 +1143,47 @@ def generate_report(
     lines.append(f"\nGenerated: {now}")
     lines.append(f"Model: {model_name}")
     lines.append("Prompt: Zero-Shot (v1)")
+    lines.append(f"Sample selection: **{variant_label}** (exclude_runaway={exclude_runaway}, threshold={threshold})")
     lines.append("")
 
-    # Summary table
-    lines.append("## Results vs Phase 1 (OCR Baseline)\n")
-    if all_comparisons:
+    def _md_table(heading: str, ocr_data: dict, corr_data: dict) -> None:
+        """Append one OCR-vs-LLM markdown table to *lines*."""
+        lines.append(f"## {heading}\n")
         lines.append(
-            "| Dataset | Phase 1 CER | Phase 2 CER | Δ CER | "
-            "Phase 1 WER | Phase 2 WER | Δ WER |"
+            "| Dataset | OCR CER | LLM CER | Delta CER | OCR WER | LLM WER | Delta WER | N |"
         )
-        lines.append("|---------|-------------|-------------|-------|-------------|-------------|-------|")
-        for ds, cmp in all_comparisons.items():
-            p1 = cmp.get("phase1_ocr", {})
-            p2 = cmp.get("phase2_corrected", {})
-            d  = cmp.get("delta", {})
-            lines.append(
-                f"| {ds} "
-                f"| {p1.get('cer', 0)*100:.2f}% "
-                f"| {p2.get('cer', 0)*100:.2f}% "
-                f"| {d.get('cer_relative_pct', 0):+.1f}% "
-                f"| {p1.get('wer', 0)*100:.2f}% "
-                f"| {p2.get('wer', 0)*100:.2f}% "
-                f"| {d.get('wer_relative_pct', 0):+.1f}% |"
-            )
-    else:
-        lines.append("*Phase 1 baseline not available — comparison skipped.*")
-    lines.append("")
+        lines.append("|---------|---------|---------|-----------|---------|---------|-----------|---|")
+        for ds in all_corrected:
+            o = ocr_data.get(ds, {})
+            c = corr_data.get(ds, {})
+            o_cer = o.get("cer", None)
+            o_wer = o.get("wer", None)
+            c_cer = c.get("cer", None)
+            c_wer = c.get("wer", None)
+            n = c.get("num_samples", o.get("num_samples", 0))
+            if o_cer is not None and c_cer is not None:
+                d_cer = (o_cer - c_cer) * 100
+                d_wer = ((o_wer or 0) - (c_wer or 0)) * 100
+                lines.append(
+                    f"| {ds} "
+                    f"| {o_cer*100:.2f}% "
+                    f"| {c_cer*100:.2f}% "
+                    f"| {d_cer:+.2f}pp "
+                    f"| {o_wer*100:.2f}% "
+                    f"| {c_wer*100:.2f}% "
+                    f"| {d_wer:+.2f}pp "
+                    f"| {n:,} |"
+                )
+            else:
+                lines.append(f"| {ds} | N/A | N/A | N/A | N/A | N/A | N/A | {n:,} |")
+        lines.append("")
 
-    # Corrected metrics only (when no comparison available)
-    lines.append("## Post-Correction Metrics\n")
-    lines.append(
-        "| Dataset | CER | WER | CER Median | WER Median | CER p95 | Samples |"
-    )
-    lines.append("|---------|-----|-----|------------|------------|---------|---------|")
-    for ds, r in all_corrected.items():
-        lines.append(
-            f"| {ds} "
-            f"| {r.cer*100:.2f}% "
-            f"| {r.wer*100:.2f}% "
-            f"| {r.cer_median*100:.2f}% "
-            f"| {r.wer_median*100:.2f}% "
-            f"| {r.cer_p95*100:.2f}% "
-            f"| {r.num_samples:,} |"
-        )
-    lines.append("")
+    # All samples
+    _md_table("All Samples (with diacritics)", pm.get("ocr_all", {}), pm.get("corr_all", {}))
+    _md_table("All Samples (no diacritics)", pm.get("ocr_all_nd", {}), pm.get("corr_all_nd", {}))
+    # Normal-only
+    _md_table("Normal-Only (with diacritics)", pm.get("ocr_norm", {}), pm.get("corr_norm", {}))
+    _md_table("Normal-Only (no diacritics)", pm.get("ocr_norm_nd", {}), pm.get("corr_norm_nd", {}))
 
     # Error analysis tables (loaded from saved files)
     lines.append("## Error Change Analysis\n")
@@ -1033,65 +1245,97 @@ def generate_report(
 # ---------------------------------------------------------------------------
 
 
+def _print_summary_table(
+    label: str,
+    ocr_data: dict,
+    corr_data: dict,
+    datasets: list[str],
+) -> None:
+    """Print one OCR-vs-LLM summary table to stdout."""
+    print(f"  {label}")
+    print(f"  {'Dataset':<30} {'OCR CER':>8} {'LLM CER':>8} {'D(CER)':>9} {'OCR WER':>8} {'LLM WER':>8} {'D(WER)':>9} {'N':>6}")
+    print("  " + "-" * 96)
+    for ds in datasets:
+        o = ocr_data.get(ds, {})
+        c = corr_data.get(ds, {})
+        o_cer = o.get("cer", None)
+        o_wer = o.get("wer", None)
+        c_cer = c.get("cer", None)
+        c_wer = c.get("wer", None)
+        n = c.get("num_samples", o.get("num_samples", 0))
+        if o_cer is not None and c_cer is not None:
+            d_cer = o_cer - c_cer
+            d_wer = (o_wer or 0) - (c_wer or 0)
+            print(
+                f"  {ds:<30} {o_cer*100:>7.2f}% {c_cer*100:>7.2f}% {d_cer*100:>+8.2f}pp "
+                f"{o_wer*100:>7.2f}% {c_wer*100:>7.2f}% {d_wer*100:>+8.2f}pp {n:>6}"
+            )
+        else:
+            print(f"  {ds:<30} {'N/A':>8} {'N/A':>8} {'N/A':>9} {'N/A':>8} {'N/A':>8} {'N/A':>9} {n:>6}")
+
+
 def print_summary(
     all_corrected: dict[str, MetricResult],
     all_comparisons: dict[str, dict],
     results_dir: Optional[Path] = None,
+    config: Optional[dict] = None,
 ) -> None:
-    """Print a final summary table to stdout."""
-    nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
+    """Print a final summary table to stdout.
 
-    sep = "=" * 90
+    Shows both all-samples and normal-only variants so the user can
+    see the full picture at a glance.
+    """
+    eval_cfg = (config or {}).get("evaluation", {})
+    exclude_runaway = eval_cfg.get("exclude_runaway", False)
+    variant_label = "normal-only" if exclude_runaway else "all samples"
+
+    # Load all metric variants from per-dataset files
+    pm: dict = {}
+    if results_dir:
+        pm = _load_per_dataset_metrics(all_corrected, results_dir)
+
+    datasets = list(all_corrected.keys())
+    sep = "=" * 104
+    thin = "-" * 104
+
     print("\n" + sep)
-    print("PHASE 2 SUMMARY -- Zero-Shot LLM Correction")
-
-    # --- Table 1: With diacritics ---
+    print(f"PHASE 2 SUMMARY -- Zero-Shot LLM Correction  (primary: {variant_label})")
     print(sep)
-    print("  [WITH DIACRITICS]")
-    print(f"  {'Dataset':<30} {'P1 CER':>8} {'P2 CER':>8} {'D(CER)':>8} {'P1 WER':>8} {'P2 WER':>8} {'D(WER)':>8} {'N':>6}")
-    print("  " + "-" * 82)
-    for ds, r in all_corrected.items():
-        cmp = all_comparisons.get(ds, {})
-        p1_cer = cmp.get("phase1_ocr", {}).get("cer", 0.0)
-        p1_wer = cmp.get("phase1_ocr", {}).get("wer", 0.0)
-        cer_rel = cmp.get("delta", {}).get("cer_relative_pct", 0.0)
-        wer_rel = cmp.get("delta", {}).get("wer_relative_pct", 0.0)
-        p1_cer_str = f"{p1_cer*100:.2f}%" if cmp else "N/A"
-        p1_wer_str = f"{p1_wer*100:.2f}%" if cmp else "N/A"
-        d_cer_str = f"{cer_rel:+.1f}%" if cmp else "N/A"
-        d_wer_str = f"{wer_rel:+.1f}%" if cmp else "N/A"
-        print(
-            f"  {ds:<30} {p1_cer_str:>8} {r.cer*100:>7.2f}% {d_cer_str:>8} "
-            f"{p1_wer_str:>8} {r.wer*100:>7.2f}% {d_wer_str:>8} {r.num_samples:>6}"
-        )
 
-    # --- Table 2: No diacritics ---
+    # --- All samples ---
+    _print_summary_table(
+        "[ALL SAMPLES, with diacritics]",
+        pm.get("ocr_all", {}), pm.get("corr_all", {}), datasets,
+    )
     print()
-    print("  [NO DIACRITICS]")
-    print(f"  {'Dataset':<30} {'P1 CER':>8} {'P2 CER':>8} {'D(CER)':>8} {'P1 WER':>8} {'P2 WER':>8} {'D(WER)':>8} {'N':>6}")
-    print("  " + "-" * 82)
-    for ds, r in all_corrected.items():
-        cmp = all_comparisons.get(ds, {})
-        p1_nd = cmp.get("phase1_ocr_no_diacritics", {})
-        p2_nd = cmp.get("phase2_corrected_no_diacritics", {})
-        delta_nd = cmp.get("delta_no_diacritics", {})
-        nd_curr = nd_results.get(ds, {})
-        p1_cer_nd = p1_nd.get("cer", None)
-        p1_wer_nd = p1_nd.get("wer", None)
-        p2_cer_nd = nd_curr.get("cer", p2_nd.get("cer", None))
-        p2_wer_nd = nd_curr.get("wer", p2_nd.get("wer", None))
-        d_cer_nd = delta_nd.get("cer_relative_pct", None)
-        d_wer_nd = delta_nd.get("wer_relative_pct", None)
-        p1_cer_str = f"{p1_cer_nd*100:.2f}%" if p1_cer_nd is not None else "N/A"
-        p1_wer_str = f"{p1_wer_nd*100:.2f}%" if p1_wer_nd is not None else "N/A"
-        p2_cer_str = f"{p2_cer_nd*100:.2f}%" if p2_cer_nd is not None else "N/A"
-        p2_wer_str = f"{p2_wer_nd*100:.2f}%" if p2_wer_nd is not None else "N/A"
-        d_cer_str = f"{d_cer_nd:+.1f}%" if d_cer_nd is not None else "N/A"
-        d_wer_str = f"{d_wer_nd:+.1f}%" if d_wer_nd is not None else "N/A"
-        print(
-            f"  {ds:<30} {p1_cer_str:>8} {p2_cer_str:>8} {d_cer_str:>8} "
-            f"{p1_wer_str:>8} {p2_wer_str:>8} {d_wer_str:>8} {r.num_samples:>6}"
-        )
+    _print_summary_table(
+        "[ALL SAMPLES, no diacritics]",
+        pm.get("ocr_all_nd", {}), pm.get("corr_all_nd", {}), datasets,
+    )
+
+    print()
+    print(f"  {thin}")
+
+    # --- Normal-only ---
+    _print_summary_table(
+        "[NORMAL-ONLY (excludes runaway), with diacritics]",
+        pm.get("ocr_norm", {}), pm.get("corr_norm", {}), datasets,
+    )
+    print()
+    _print_summary_table(
+        "[NORMAL-ONLY (excludes runaway), no diacritics]",
+        pm.get("ocr_norm_nd", {}), pm.get("corr_norm_nd", {}), datasets,
+    )
+
+    # --- Data quality ---
+    dq = pm.get("data_quality", {})
+    if any(d.get("runaway_samples", 0) > 0 for d in dq.values()):
+        print()
+        print("  [DATA QUALITY]")
+        for ds in datasets:
+            d = dq.get(ds, {})
+            if d.get("runaway_samples", 0) > 0:
+                print(f"  {ds}: {d['description']}")
 
     print(sep)
 
@@ -1189,7 +1433,13 @@ def main() -> None:
                     )
                     with open(metrics_path, encoding="utf-8") as f:
                         mdata = json.load(f)
-                    corrected_data = mdata.get("corrected", {})
+                    # Pick primary variant from config; fall back to legacy
+                    eval_cfg = config.get("evaluation", {})
+                    _excl = eval_cfg.get("exclude_runaway", False)
+                    _prim_key = "corrected_normal_only" if _excl else "corrected_all"
+                    corrected_data = mdata.get(
+                        _prim_key, mdata.get("corrected", {}),
+                    )
                     ds_name = mdata.get("meta", {}).get("dataset", ds_key)
                     all_corrected[ds_key] = MetricResult(
                         dataset=ds_name,
@@ -1271,13 +1521,15 @@ def main() -> None:
     aggregate_comparisons(all_comparisons, config, results_dir, limit)
 
     model_name = config.get("model", {}).get("name", "unknown")
-    generate_report(all_corrected, all_comparisons, model_name, results_dir)
-    print_summary(all_corrected, all_comparisons, results_dir)
+    generate_report(all_corrected, all_comparisons, model_name, results_dir, config)
+    print_summary(all_corrected, all_comparisons, results_dir, config)
 
+    eval_cfg = config.get("evaluation", {})
     write_corrections_report(
         corrections_path=results_dir,
         output_path=results_dir / "sample_report.txt",
         title="Phase 2 -- Zero-Shot Correction",
+        exclude_runaway=eval_cfg.get("exclude_runaway", False),
     )
     logger.info("Phase 2 complete. Results in: %s", results_dir)
 

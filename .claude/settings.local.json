@@ -88,7 +88,10 @@
       "Bash(find /d/Masters/Arabic-Post-OCR-Correction/src -name *knowledge* -o -name *loader*)",
       "Bash(find /d/Masters/Arabic-Post-OCR-Correction -type d -name *thesis*)",
       "Bash(.venv/Scripts/python -c \"import ast; ast.parse\\(open\\('scripts/select_test_samples.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
-      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\(''scripts/select_test_samples.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")"
+      "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\(''scripts/select_test_samples.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(.venv/Scripts/python -c \":*)",
+      "Bash(.venv/Scripts/python.exe pipelines/run_phase2.py --mode analyze --force --datasets PATS-A01-Simplified-val 2>&1)",
+      "Bash(D:/Masters/Arabic-Post-OCR-Correction/venv/Scripts/python.exe pipelines/run_phase2.py --mode analyze --force --datasets PATS-A01-Simplified-val)"
     ]
   }
 }
