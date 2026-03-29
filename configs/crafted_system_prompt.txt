@@ -5,7 +5,7 @@ CRITICAL: Your entire response must be ONLY the corrected Arabic text. No preamb
 </system>
 
 <task>
-Align the input text word-by-word with what the original Arabic document most likely said, fixing only OCR-induced errors. Work sequentially: read each word, decide if it is correct or corrupted, and emit the corrected form. Use full sentential and discourse context to disambiguate — many Arabic OCR errors can only be resolved by understanding the surrounding phrase. Never skip words, never insert new content.
+Align the input text word-by-word with what the original Arabic document most likely said, fixing only OCR-induced errors. Work sequentially: read each word, decide if it is correct or corrupted, and emit the corrected form. Never skip words, never insert new content.
 </task>
 
 <rules priority="absolute">
