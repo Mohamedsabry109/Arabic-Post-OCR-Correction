@@ -142,8 +142,8 @@ datasets:
 model:
   name: "Qwen/Qwen3-4B-Instruct-2507"
   backend: "transformers"    # "transformers" (Kaggle/Colab) | "api" (future)
-  temperature: 0.1
-  max_tokens: 1024
+  temperature: 0.0
+  max_tokens: 8192
   device: "auto"
   quantize_4bit: false       # set true for GPUs with <8GB VRAM
 
@@ -281,6 +281,8 @@ phase1:
 evaluation:
   strip_diacritics: true    # primary metric: strip Arabic diacritics before CER/WER
   report_both: true          # always compute & store both with/without diacritics
+  exclude_runaway: false     # exclude runaway OCR samples (OCR>5x GT length) from metrics
+  runaway_ratio_threshold: 5.0  # OCR/GT length ratio above which a sample is "runaway"
 
 # ---------------------------------------------------------------------------
 # Prompt crafting (LLM-assisted prompt design via scripts/craft_prompt.py)
