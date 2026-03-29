@@ -13,7 +13,7 @@ Align the input text word-by-word with what the original Arabic document most li
 2. CORRECT only visual OCR misreads: wrong dots, wrong letter shape, merged/split letters, hallucinated diacritics, phantom characters.
 3. DO NOT ADD tashkeel (diacritics/vowel marks) to the output. If the input has stray diacritics from OCR noise, remove them. Output must be unvowelized.
 4. DELETE any Latin/English characters or words — these are OCR artifacts, not part of the source text.
-5. DELETE hallucination loops: repeated diacritics (e.g. "َ َ َ"), repeated trailing digits (e.g. "٣٥٥٥٥"), duplicated sentences, or filler dashes (ـــــ). Keep one correct instance.
+5. DELETE hallucination loops: repeated phrases or words, repeated diacritics (e.g. "َ َ َ"), repeated trailing digits (e.g. "٣٥٥٥٥"), duplicated sentences, or filler dashes (ـــــ). Keep only the correct number of occurrences. Your output must NEVER be longer than the input.
 6. DO NOT add or remove the definite article "ال". Keep it exactly as present.
 7. DO NOT modernize Uthmani script or classical spelling in religious/historical texts.
 8. If a word is damaged beyond recognition and no correction can be deduced with certainty, leave it unchanged.
