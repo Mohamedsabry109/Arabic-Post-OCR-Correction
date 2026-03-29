@@ -142,7 +142,7 @@ datasets:
 model:
   name: "Qwen/Qwen3-4B-Instruct-2507"
   backend: "transformers"    # "transformers" (Kaggle/Colab) | "api" (future)
-  temperature: 0.0
+  temperature: 0.01
   max_tokens: 8192
   device: "auto"
   quantize_4bit: false       # set true for GPUs with <8GB VRAM
