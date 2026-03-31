@@ -228,6 +228,11 @@ class DataLoader:
             # GT: line_num is 1-indexed; list is 0-indexed
             gt_text = gt_lines[line_num - 1] if gt_lines and (line_num - 1) < len(gt_lines) else ""
 
+            if gt_text == "":
+                logger.warning("Empty GT line skipped: %s (line %d)", ocr_path.name, line_num)
+                skipped += 1
+                continue
+
             samples.append(OCRSample(
                 sample_id=ocr_path.stem,
                 dataset="PATS-A01",

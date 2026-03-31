@@ -311,6 +311,11 @@ def read_input(
             if datasets_filter and ds not in datasets_filter:
                 continue
 
+            # Skip samples with empty OCR text (e.g. Qaari produced no output).
+            if not r.get("ocr_text", "").strip():
+                logger.warning("Skipping %s with empty ocr_text.", r.get("sample_id", "?"))
+                continue
+
             if limit is not None:
                 if counts.get(ds, 0) >= limit:
                     continue

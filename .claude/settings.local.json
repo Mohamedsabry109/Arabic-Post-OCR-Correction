@@ -91,7 +91,18 @@
       "Bash(.venv/Scripts/python.exe -c \"import ast; ast.parse\\(open\\(''scripts/select_test_samples.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
       "Bash(.venv/Scripts/python -c \":*)",
       "Bash(.venv/Scripts/python.exe pipelines/run_phase2.py --mode analyze --force --datasets PATS-A01-Simplified-val 2>&1)",
-      "Bash(D:/Masters/Arabic-Post-OCR-Correction/venv/Scripts/python.exe pipelines/run_phase2.py --mode analyze --force --datasets PATS-A01-Simplified-val)"
+      "Bash(D:/Masters/Arabic-Post-OCR-Correction/venv/Scripts/python.exe pipelines/run_phase2.py --mode analyze --force --datasets PATS-A01-Simplified-val)",
+      "Bash(.venv/Scripts/python -c \"import datasets; print\\(datasets.__version__\\)\")",
+      "Bash(venv/Scripts/python -c \"import datasets; print\\(datasets.__version__\\)\")",
+      "Bash(venv/Scripts/pip install:*)",
+      "Bash(venv/Scripts/python scripts/download_kitab_bench.py --list)",
+      "Bash(venv/Scripts/python scripts/download_kitab_bench.py)",
+      "Bash(venv/Scripts/python -c \":*)",
+      "Bash(.venv/Scripts/python pipelines/run_phase2.py --mode export --force)",
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction/data/ocr-raw-data/KHATT -type f -name *.txt)",
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction/data/ocr-raw-data/KHATT -type f -name *.txt -size 0)",
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction -path */khatt-data/* -name *.txt -size 0)",
+      "Bash(find /d/Masters/Arabic-Post-OCR-Correction -path */pats-a01-data/* -name *.txt -size 0)"
     ]
   }
 }
