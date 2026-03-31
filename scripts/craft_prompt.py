@@ -1000,9 +1000,13 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
             )
 
         # Phase 2 comparison
-        p2_data = phase2_baselines.get(ds_key, {}).get(
-            "corrected_no_diacritics"
-        ) or phase2_baselines.get(ds_key, {}).get("corrected", {})
+        p2_full = phase2_baselines.get(ds_key, {})
+        p2_data = (
+            p2_full.get("corrected_all_no_diacritics")
+            or p2_full.get("corrected_no_diacritics")
+            or p2_full.get("corrected_all")
+            or p2_full.get("corrected", {})
+        )
         if p2_data:
             p2_cer = p2_data.get("cer", 0.0)
             result["p2_cer"] = round(p2_cer, 6)

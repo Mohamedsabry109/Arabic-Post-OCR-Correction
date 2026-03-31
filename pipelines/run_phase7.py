@@ -68,7 +68,11 @@ from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
-from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
+from pipelines._utils import (
+    resolve_datasets, load_sample_list, compute_group_aggregates,
+    split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
+    load_phase2_full_metrics, pick_phase2_variant,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -354,13 +358,9 @@ def _load_corrections(corrections_path: Path) -> dict[str, list[dict]]:
 
 
 def _load_phase2_metrics(config: dict, dataset_key: str) -> Optional[dict]:
-    """Load Phase 2 metrics for comparison."""
+    """Load Phase 2 metrics (full dict, new + old format compat)."""
     phase2_dir = Path(config.get("output", {}).get("results_dir", "results")) / "phase2"
-    metrics_path = phase2_dir / dataset_key / "metrics.json"
-    if not metrics_path.exists():
-        return None
-    with open(metrics_path, encoding="utf-8") as f:
-        return json.load(f)
+    return load_phase2_full_metrics(phase2_dir, dataset_key)
 
 
 def run_analyze(args: argparse.Namespace, config: dict) -> None:
@@ -412,22 +412,55 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
                 "ocr_text": rec.get("ocr_text", ""),
             })
 
-        # Calculate metrics
-        if report_both:
-            m_with, m_without = calculate_metrics_dual(
-                samples, ds_key, text_field="corrected_text",
-            )
-            metrics_data = {
-                "corrected": m_with.to_dict() if m_with else {},
-                "corrected_no_diacritics": m_without.to_dict() if m_without else {},
-            }
-            primary_m = m_without if strip_diac else m_with
+        # Split into normal / runaway
+        eval_cfg = config.get("evaluation", {})
+        exclude_runaway = eval_cfg.get("exclude_runaway", False)
+        threshold = eval_cfg.get("runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD)
+        normal_samples, runaway_samples, data_quality = split_runaway_samples(
+            samples, threshold=threshold,
+        )
+        if runaway_samples:
+            logger.info("  %s", data_quality["description"])
+
+        # OCR baseline
+        ocr_all, ocr_all_nd = calculate_metrics_dual(
+            samples, ds_key, text_field="ocr_text",
+        )
+        ocr_normal, ocr_normal_nd = calculate_metrics_dual(
+            normal_samples, ds_key, text_field="ocr_text",
+        )
+
+        # Corrected
+        all_result, all_result_nd = calculate_metrics_dual(
+            samples, ds_key, text_field="corrected_text",
+        )
+        normal_result, normal_result_nd = calculate_metrics_dual(
+            normal_samples, ds_key, text_field="corrected_text",
+        )
+
+        if exclude_runaway:
+            primary_m = normal_result
+            primary_nd = normal_result_nd
+            primary_source = "normal_only"
         else:
-            primary_m = calculate_metrics(
-                samples, ds_key, text_field="corrected_text",
-                strip_diacritics=strip_diac,
-            )
-            metrics_data = {"corrected": primary_m.to_dict() if primary_m else {}}
+            primary_m = all_result
+            primary_nd = all_result_nd
+            primary_source = "all"
+
+        metrics_data = {
+            "meta": {"primary_variant": primary_source},
+            # OCR baseline
+            "ocr_all": ocr_all.to_dict() if ocr_all else {},
+            "ocr_all_no_diacritics": ocr_all_nd.to_dict() if ocr_all_nd else {},
+            "ocr_normal_only": ocr_normal.to_dict() if ocr_normal else {},
+            "ocr_normal_only_no_diacritics": ocr_normal_nd.to_dict() if ocr_normal_nd else {},
+            # Corrected
+            "corrected_all": all_result.to_dict() if all_result else {},
+            "corrected_all_no_diacritics": all_result_nd.to_dict() if all_result_nd else {},
+            "corrected_normal_only": normal_result.to_dict() if normal_result else {},
+            "corrected_normal_only_no_diacritics": normal_result_nd.to_dict() if normal_result_nd else {},
+            "data_quality": data_quality,
+        }
 
         # Save per-dataset metrics
         with open(ds_dir / "metrics.json", "w", encoding="utf-8") as f:
@@ -436,10 +469,10 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
         all_metrics[ds_key] = metrics_data
 
         # Compare vs Phase 2
-        p2_metrics = _load_phase2_metrics(config, ds_key)
-        if p2_metrics and primary_m:
-            p2_key = "corrected_no_diacritics" if strip_diac else "corrected"
-            p2_cer = p2_metrics.get(p2_key, {}).get("cer", None)
+        p2_full = _load_phase2_metrics(config, ds_key)
+        if p2_full and primary_m:
+            p2_corr, p2_nd_dict, p2_src = pick_phase2_variant(p2_full, exclude_runaway)
+            p2_cer = p2_corr.get("cer", None)
             p7_cer = primary_m.cer
             if p2_cer is not None:
                 delta = p7_cer - p2_cer
@@ -448,6 +481,7 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
                     "phase7_cer": p7_cer,
                     "delta_cer": delta,
                     "improved": delta < 0,
+                    "variant": p2_src,
                 }
                 direction = "v" if delta < 0 else "^"
                 logger.info(
@@ -475,8 +509,11 @@ def run_analyze(args: argparse.Namespace, config: dict) -> None:
 
     # Save aggregate metrics
     # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
-    _corr = {ds: v.get("corrected", {}) for ds, v in all_metrics.items() if v.get("corrected")}
-    _corr_nd = {ds: v.get("corrected_no_diacritics", {}) for ds, v in all_metrics.items() if v.get("corrected_no_diacritics")}
+    _corr = {ds: v.get("corrected_all", v.get("corrected", {})) for ds, v in all_metrics.items()
+             if v.get("corrected_all") or v.get("corrected")}
+    _corr_nd = {ds: v.get("corrected_all_no_diacritics", v.get("corrected_no_diacritics", {}))
+                for ds, v in all_metrics.items()
+                if v.get("corrected_all_no_diacritics") or v.get("corrected_no_diacritics")}
     agg_output = {
         "datasets": all_metrics,
         "group_aggregates": compute_group_aggregates(_corr) if _corr else {},
@@ -534,21 +571,21 @@ def _write_paper_tables(
     lines.append("|---------|-----|-----|---------|---|")
 
     for ds_key, m in sorted(all_metrics.items()):
-        md = m.get("corrected", {})
+        md = m.get("corrected_all", m.get("corrected", {}))
         lines.append(
             f"| {ds_key} | {md.get('cer', 0):.4f} | {md.get('wer', 0):.4f} "
             f"| {md.get('cer_std', 0):.4f} | {md.get('num_samples', 0)} |"
         )
 
     # Full metrics — NO DIACRITICS
-    has_nd = any(m.get("corrected_no_diacritics") for m in all_metrics.values())
+    has_nd = any(m.get("corrected_all_no_diacritics") or m.get("corrected_no_diacritics") for m in all_metrics.values())
     if has_nd:
         lines.extend(["", "## Full Metrics (No Diacritics)", ""])
         lines.append("| Dataset | CER | WER | CER_std | N |")
         lines.append("|---------|-----|-----|---------|---|")
 
         for ds_key, m in sorted(all_metrics.items()):
-            md = m.get("corrected_no_diacritics", {})
+            md = m.get("corrected_all_no_diacritics", m.get("corrected_no_diacritics", {}))
             lines.append(
                 f"| {ds_key} | {md.get('cer', 0):.4f} | {md.get('wer', 0):.4f} "
                 f"| {md.get('cer_std', 0):.4f} | {md.get('num_samples', 0)} |"

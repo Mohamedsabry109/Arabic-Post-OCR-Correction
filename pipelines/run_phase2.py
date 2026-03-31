@@ -60,7 +60,10 @@ from src.core.llm_corrector import (
     CorrectedSample,
     get_corrector,
 )
-from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
+from pipelines._utils import (
+    resolve_datasets, load_sample_list, compute_group_aggregates,
+    split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -574,49 +577,6 @@ def run_error_change_analysis(
 # ---------------------------------------------------------------------------
 # ANALYZE MODE — per-dataset processing
 # ---------------------------------------------------------------------------
-
-DEFAULT_RUNAWAY_RATIO_THRESHOLD = 5.0
-"""Default OCR/GT length ratio above which a sample is classified as runaway.
-
-Overridden by ``evaluation.runaway_ratio_threshold`` in config.yaml.
-"""
-
-
-def split_runaway_samples(
-    samples: list[CorrectedSample],
-    threshold: float = DEFAULT_RUNAWAY_RATIO_THRESHOLD,
-) -> tuple[list[CorrectedSample], list[CorrectedSample], dict]:
-    """Separate CorrectedSamples into normal vs runaway using OCR/GT length.
-
-    Uses the same criterion as Phase 1's ``calculate_metrics_split``:
-    a sample is *runaway* when ``len(ocr_text) / len(gt_text) > threshold``.
-
-    Returns:
-        (normal_samples, runaway_samples, data_quality_dict)
-    """
-    normal: list[CorrectedSample] = []
-    runaway: list[CorrectedSample] = []
-    for cs in samples:
-        gt_len = max(len(normalise_arabic(cs.sample.gt_text)), 1)
-        ocr_len = len(normalise_arabic(cs.sample.ocr_text))
-        if ocr_len / gt_len > threshold:
-            runaway.append(cs)
-        else:
-            normal.append(cs)
-    n = len(samples)
-    data_quality = {
-        "total_samples": n,
-        "normal_samples": len(normal),
-        "runaway_samples": len(runaway),
-        "runaway_percentage": round(len(runaway) / max(n, 1) * 100, 2),
-        "runaway_ratio_threshold": threshold,
-        "description": (
-            f"{len(runaway)} samples ({len(runaway)/max(n,1)*100:.1f}%) "
-            f"have OCR output >{threshold}x longer than GT (Qaari repetition bug)."
-        ),
-    }
-    return normal, runaway, data_quality
-
 
 def process_dataset_analyze(
     dataset_key: str,

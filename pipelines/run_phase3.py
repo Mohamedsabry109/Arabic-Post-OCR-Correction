@@ -64,7 +64,11 @@ from src.core.llm_corrector import (
     CorrectedSample,
     get_corrector,
 )
-from pipelines._utils import resolve_datasets, load_sample_list, compute_group_aggregates
+from pipelines._utils import (
+    resolve_datasets, load_sample_list, compute_group_aggregates,
+    split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
+    load_phase2_full_metrics, pick_phase2_variant, _pick_corrected_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -930,23 +934,10 @@ def _nd_comparison_block(p2_nd: dict, corrected_nd: "MetricResult", phase_label:
 def load_phase2_dataset_metrics(phase2_dir: Path, dataset_key: str) -> Optional[dict]:
     """Load Phase 2 per-dataset corrected metrics for comparison.
 
-    Args:
-        phase2_dir: Phase 2 results root directory.
-        dataset_key: Dataset key, e.g. "KHATT-train".
-
-    Returns:
-        The "corrected" sub-dict from metrics.json, or None if not found.
+    Delegates to shared ``load_phase2_full_metrics`` which handles both
+    old-format and new-format keys.
     """
-    path = phase2_dir / dataset_key / "metrics.json"
-    if not path.exists():
-        return None
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-        return data.get("corrected", {})
-    except (json.JSONDecodeError, OSError) as exc:
-        logger.warning("Could not load Phase 2 metrics for %s: %s", dataset_key, exc)
-        return None
+    return load_phase2_full_metrics(phase2_dir, dataset_key)
 
 
 def process_dataset_analyze(
@@ -997,18 +988,47 @@ def process_dataset_analyze(
     total_latency = sum(cs.latency_s for cs in corrected_samples)
     avg_latency = total_latency / max(n, 1)
 
+    eval_cfg = config.get("evaluation", {})
+    exclude_runaway = eval_cfg.get("exclude_runaway", False)
+    threshold = eval_cfg.get("runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD)
+
     logger.info("=" * 60)
     logger.info("Analyzing dataset: %s  (%d samples, %d failed)", dataset_key, n, n_failed)
 
     # ------------------------------------------------------------------
-    # Step 1: CER/WER on Phase 3 corrected texts
+    # Step 1: Split into normal / runaway, compute metrics for both
     # ------------------------------------------------------------------
-    logger.info("[%s] Calculating corrected CER/WER ...", dataset_key)
-    corrected_result, corrected_result_nd = calculate_metrics_dual(
-        corrected_samples,
-        dataset_name=dataset_key,
-        text_field="corrected_text",
+    normal_samples, runaway_samples, data_quality = split_runaway_samples(
+        corrected_samples, threshold=threshold,
     )
+    if runaway_samples:
+        logger.info("[%s] %s", dataset_key, data_quality["description"])
+
+    logger.info("[%s] Calculating OCR baseline + corrected CER/WER ...", dataset_key)
+
+    # OCR baseline (OCR vs GT)
+    ocr_all, ocr_all_nd = calculate_metrics_dual(
+        corrected_samples, dataset_name=dataset_key, text_field="ocr_text",
+    )
+    ocr_normal, ocr_normal_nd = calculate_metrics_dual(
+        normal_samples, dataset_name=dataset_key, text_field="ocr_text",
+    )
+
+    # Corrected (LLM vs GT)
+    all_result, all_result_nd = calculate_metrics_dual(
+        corrected_samples, dataset_name=dataset_key, text_field="corrected_text",
+    )
+    normal_result, normal_result_nd = calculate_metrics_dual(
+        normal_samples, dataset_name=dataset_key, text_field="corrected_text",
+    )
+
+    # Primary result based on config
+    if exclude_runaway:
+        primary, primary_nd = normal_result, normal_result_nd
+        primary_source = "normal_only"
+    else:
+        primary, primary_nd = all_result, all_result_nd
+        primary_source = "all"
 
     metrics_json = {
         "meta": make_meta(
@@ -1019,38 +1039,42 @@ def process_dataset_analyze(
                 "total_latency_s":          round(total_latency, 2),
                 "avg_latency_per_sample_s": round(avg_latency, 3),
                 "failed_samples":           n_failed,
+                "primary_variant":          primary_source,
             },
         ),
-        "corrected": corrected_result.to_dict(),
-        "corrected_no_diacritics": corrected_result_nd.to_dict(),
+        # OCR baseline (before LLM)
+        "ocr_all": ocr_all.to_dict(),
+        "ocr_all_no_diacritics": ocr_all_nd.to_dict(),
+        "ocr_normal_only": ocr_normal.to_dict(),
+        "ocr_normal_only_no_diacritics": ocr_normal_nd.to_dict(),
+        # Corrected (after LLM)
+        "corrected_all": all_result.to_dict(),
+        "corrected_all_no_diacritics": all_result_nd.to_dict(),
+        "corrected_normal_only": normal_result.to_dict(),
+        "corrected_normal_only_no_diacritics": normal_result_nd.to_dict(),
+        "data_quality": data_quality,
     }
     save_json(metrics_json, out_dir / "metrics.json")
 
     logger.info(
-        "[%s] Phase 3 CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%",
-        dataset_key,
-        corrected_result.cer * 100,
-        corrected_result.wer * 100,
-        corrected_result_nd.cer * 100,
-        corrected_result_nd.wer * 100,
+        "[%s] Phase 3 Primary (%s): OCR CER=%.2f%% -> LLM CER=%.2f%%  |  no-diac: %.2f%% -> %.2f%%",
+        dataset_key, primary_source,
+        (ocr_all if not exclude_runaway else ocr_normal).cer * 100,
+        primary.cer * 100,
+        (ocr_all_nd if not exclude_runaway else ocr_normal_nd).cer * 100,
+        primary_nd.cer * 100,
     )
 
     # ------------------------------------------------------------------
     # Step 2: Comparison vs Phase 2 baseline (ISOLATED comparison)
     # ------------------------------------------------------------------
-    p2_metrics = load_phase2_dataset_metrics(phase2_dir, dataset_key)
-    if p2_metrics is not None:
-        p2_cer = float(p2_metrics.get("cer", 0.0))
-        p2_wer = float(p2_metrics.get("wer", 0.0))
-        # Load no-diacritics Phase 2 baseline
-        p2_path = phase2_dir / dataset_key / "metrics.json"
-        p2_nd = {}
-        if p2_path.exists():
-            with open(p2_path, encoding="utf-8") as _f:
-                _p2_full = json.load(_f)
-                p2_nd = _p2_full.get("corrected_no_diacritics", {})
-        cer_delta_abs = p2_cer - corrected_result.cer    # positive = Phase 3 better
-        wer_delta_abs = p2_wer - corrected_result.wer
+    p2_full = load_phase2_dataset_metrics(phase2_dir, dataset_key)
+    if p2_full is not None:
+        p2_corr, p2_nd, p2_src = pick_phase2_variant(p2_full, exclude_runaway)
+        p2_cer = float(p2_corr.get("cer", 0.0))
+        p2_wer = float(p2_corr.get("wer", 0.0))
+        cer_delta_abs = p2_cer - primary.cer
+        wer_delta_abs = p2_wer - primary.wer
         cer_rel = (cer_delta_abs / p2_cer * 100) if p2_cer > 0 else 0.0
         wer_rel = (wer_delta_abs / p2_wer * 100) if p2_wer > 0 else 0.0
 
@@ -1061,10 +1085,12 @@ def process_dataset_analyze(
                 "cer": round(p2_cer, 6),
                 "wer": round(p2_wer, 6),
                 "source": str(phase2_dir / dataset_key / "metrics.json"),
+                "variant": p2_src,
             },
             "phase3_corrected": {
-                "cer": round(corrected_result.cer, 6),
-                "wer": round(corrected_result.wer, 6),
+                "cer": round(primary.cer, 6),
+                "wer": round(primary.wer, 6),
+                "variant": primary_source,
             },
             "delta": {
                 "cer_absolute":     round(cer_delta_abs, 6),
@@ -1072,14 +1098,14 @@ def process_dataset_analyze(
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
-            **(_nd_comparison_block(p2_nd, corrected_result_nd, "phase3")),
+            **(_nd_comparison_block(p2_nd, primary_nd, "phase3")),
             "interpretation": (
                 f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
-                f"({p2_cer*100:.2f}% -> {corrected_result.cer*100:.2f}%). "
+                f"({p2_cer*100:.2f}% -> {primary.cer*100:.2f}%). "
                 f"WER {'reduced' if wer_delta_abs >= 0 else 'increased'} by "
                 f"{abs(wer_rel):.1f}% "
-                f"({p2_wer*100:.2f}% -> {corrected_result.wer*100:.2f}%)."
+                f"({p2_wer*100:.2f}% -> {primary.wer*100:.2f}%)."
             ),
         }
         save_json(comparison, out_dir / "comparison_vs_phase2.json")
@@ -1087,25 +1113,25 @@ def process_dataset_analyze(
             "[%s] Phase2->Phase3 CER: %.2f%% -> %.2f%% (%+.1f%%) | "
             "WER: %.2f%% -> %.2f%% (%+.1f%%)",
             dataset_key,
-            p2_cer * 100, corrected_result.cer * 100, cer_rel,
-            p2_wer * 100, corrected_result.wer * 100, wer_rel,
+            p2_cer * 100, primary.cer * 100, cer_rel,
+            p2_wer * 100, primary.wer * 100, wer_rel,
         )
         if p2_nd:
             p2_cer_nd = float(p2_nd.get("cer", 0.0))
             p2_wer_nd = float(p2_nd.get("wer", 0.0))
-            cer_d_nd = p2_cer_nd - corrected_result_nd.cer
-            wer_d_nd = p2_wer_nd - corrected_result_nd.wer
+            cer_d_nd = p2_cer_nd - primary_nd.cer
+            wer_d_nd = p2_wer_nd - primary_nd.wer
             cer_r_nd = (cer_d_nd / p2_cer_nd * 100) if p2_cer_nd > 0 else 0.0
             wer_r_nd = (wer_d_nd / p2_wer_nd * 100) if p2_wer_nd > 0 else 0.0
             logger.info(
                 "[%s] ND  CER: %.2f%% -> %.2f%% (%+.1f%%)  |  ND  WER: %.2f%% -> %.2f%% (%+.1f%%)",
                 dataset_key,
-                p2_cer_nd * 100, corrected_result_nd.cer * 100, cer_r_nd,
-                p2_wer_nd * 100, corrected_result_nd.wer * 100, wer_r_nd,
+                p2_cer_nd * 100, primary_nd.cer * 100, cer_r_nd,
+                p2_wer_nd * 100, primary_nd.wer * 100, wer_r_nd,
             )
     else:
         logger.warning(
-            "[%s] Phase 2 metrics not found at %s — skipping comparison_vs_phase2.json.",
+            "[%s] Phase 2 metrics not found at %s -- skipping comparison_vs_phase2.json.",
             dataset_key, phase2_dir / dataset_key / "metrics.json",
         )
 
@@ -1156,7 +1182,7 @@ def process_dataset_analyze(
             "(impact analysis requires error_changes).", dataset_key
         )
 
-    return corrected_result
+    return primary
 
 
 # ---------------------------------------------------------------------------
@@ -1244,15 +1270,29 @@ def process_dataset_full(
 # ---------------------------------------------------------------------------
 
 
-def _load_nd_results(all_corrected: dict, results_dir: Path) -> dict:
-    """Load corrected_no_diacritics from per-dataset metrics.json files."""
+def _load_nd_results(all_corrected: dict, results_dir: Path, exclude_runaway: bool = False) -> dict:
+    """Load corrected no-diacritics from per-dataset metrics.json files."""
     nd: dict = {}
     for ds_key in all_corrected:
         path = results_dir / ds_key / "metrics.json"
         if path.exists():
             try:
                 with open(path, encoding="utf-8") as f:
-                    nd[ds_key] = json.load(f).get("corrected_no_diacritics", {})
+                    data = json.load(f)
+                # New format keys
+                if exclude_runaway:
+                    nd_val = (
+                        data.get("corrected_normal_only_no_diacritics")
+                        or data.get("corrected_all_no_diacritics")
+                        or data.get("corrected_no_diacritics", {})
+                    )
+                else:
+                    nd_val = (
+                        data.get("corrected_all_no_diacritics")
+                        or data.get("corrected_no_diacritics", {})
+                    )
+                if nd_val:
+                    nd[ds_key] = nd_val
             except (json.JSONDecodeError, OSError):
                 pass
     return nd
@@ -1693,7 +1733,8 @@ def main() -> None:
                     )
                     with open(metrics_path, encoding="utf-8") as f:
                         mdata = json.load(f)
-                    cd = mdata.get("corrected", {})
+                    exclude_r = config.get("evaluation", {}).get("exclude_runaway", False)
+                    cd = _pick_corrected_key(mdata, exclude_r)
                     all_corrected[ds_key] = MetricResult(
                         dataset=mdata.get("meta", {}).get("dataset", ds_key),
                         num_samples=cd.get("num_samples", 0),
