@@ -301,6 +301,10 @@ def run_export(
     # Resume: discover which datasets are already in the file
     already_exported = _load_exported_datasets(output_path) if not force else set()
 
+    # Truncate the file when --force is used to avoid duplicating data.
+    if force and output_path.exists():
+        output_path.unlink()
+
     total_written = 0
 
     with open(output_path, "a", encoding="utf-8") as f:

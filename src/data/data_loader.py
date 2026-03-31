@@ -184,7 +184,9 @@ class DataLoader:
                     "No split data for font '%s' in pats_splits.json — loading all samples.", font
                 )
             else:
-                allowed_ids = set(font_splits.get(split, []))
+                # Normalise to lowercase for case-insensitive matching
+                # (some OCR engines produce lowercase filenames, e.g. "andalus_1").
+                allowed_ids = {sid.lower() for sid in font_splits.get(split, [])}
                 if not allowed_ids:
                     raise DataError(f"Split '{split}' for font '{font}' is empty in pats_splits.json")
 
@@ -198,7 +200,7 @@ class DataLoader:
 
         # Filter to the requested split before applying limit.
         if allowed_ids is not None:
-            ocr_files = [p for p in ocr_files if p.stem in allowed_ids]
+            ocr_files = [p for p in ocr_files if p.stem.lower() in allowed_ids]
 
         # Filter to requested sample IDs (skip files not in the set entirely).
         if sample_ids is not None:
