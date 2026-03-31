@@ -350,6 +350,82 @@ class TransformersCorrector(BaseLLMCorrector):
             error=last_error,
         )
 
+    def _truncate_ocr_text(self, messages: list[dict]) -> list[dict]:
+        """Truncate only the OCR text (user message) if prompt exceeds budget.
+
+        Builds the full prompt with an empty user message to measure the
+        instruction overhead (system prompt + chat template tokens).  If the
+        OCR text pushes the total beyond ``MAX_INPUT_TOKENS``, only the user
+        content is truncated so that instructions are always intact.
+
+        Args:
+            messages: OpenAI-format chat messages (system + user).
+
+        Returns:
+            Messages list — unchanged if within budget, or with a truncated
+            user message if the original exceeded ``MAX_INPUT_TOKENS``.
+        """
+        # Safety margin for chat-template overhead estimation
+        MARGIN = 32
+
+        budget = self.MAX_INPUT_TOKENS - self._max_tokens - MARGIN
+
+        # Find the user message index
+        user_idx: int | None = None
+        for i, msg in enumerate(messages):
+            if msg["role"] == "user":
+                user_idx = i
+                break
+
+        if user_idx is None:
+            return messages
+
+        # Build a copy with empty user content to measure instruction overhead
+        shell_messages = [
+            {**msg, "content": ""} if i == user_idx else msg
+            for i, msg in enumerate(messages)
+        ]
+        shell_formatted = self._tokenizer.apply_chat_template(
+            shell_messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=False,
+        )
+        instruction_tokens = len(self._tokenizer.encode(shell_formatted))
+
+        ocr_budget = budget - instruction_tokens
+        if ocr_budget <= 0:
+            logger.error(
+                "Instruction overhead (%d tokens) alone exceeds budget (%d). "
+                "Cannot fit any OCR text.",
+                instruction_tokens, budget,
+            )
+            return messages
+
+        # Tokenize OCR text and check if truncation is needed
+        ocr_text = messages[user_idx]["content"]
+        ocr_token_ids = self._tokenizer.encode(ocr_text, add_special_tokens=False)
+
+        if len(ocr_token_ids) <= ocr_budget:
+            return messages  # fits fine
+
+        logger.warning(
+            "OCR text (%d tokens) exceeds budget (%d tokens for user content, "
+            "%d instruction overhead). Truncating OCR text.",
+            len(ocr_token_ids), ocr_budget, instruction_tokens,
+        )
+        truncated_ids = ocr_token_ids[:ocr_budget]
+        truncated_text = self._tokenizer.decode(
+            truncated_ids, skip_special_tokens=True,
+        )
+
+        truncated_messages = list(messages)
+        truncated_messages[user_idx] = {
+            **messages[user_idx],
+            "content": truncated_text,
+        }
+        return truncated_messages
+
     def _generate(self, messages: list[dict]) -> tuple[str, int, int]:
         """Tokenise messages, run model.generate(), decode new tokens only.
 
@@ -363,6 +439,10 @@ class TransformersCorrector(BaseLLMCorrector):
             RuntimeError: If generation raises any exception.
         """
         import torch
+
+        # Truncate OCR text (user message) if prompt exceeds token budget,
+        # preserving system instructions intact.
+        messages = self._truncate_ocr_text(messages)
 
         # Apply Qwen3 chat template — add_generation_prompt=True appends the
         # <|im_start|>assistant token so the model continues from that position.
@@ -385,17 +465,6 @@ class TransformersCorrector(BaseLLMCorrector):
             attention_mask = attention_mask.to(device)
 
         prompt_len = input_ids.shape[1]
-
-        # Guard against OOM on unexpectedly long inputs
-        if prompt_len > self.MAX_INPUT_TOKENS:
-            logger.warning(
-                "Input %d tokens exceeds MAX_INPUT_TOKENS=%d — truncating.",
-                prompt_len, self.MAX_INPUT_TOKENS,
-            )
-            input_ids = input_ids[:, -self.MAX_INPUT_TOKENS:]
-            if attention_mask is not None:
-                attention_mask = attention_mask[:, -self.MAX_INPUT_TOKENS:]
-            prompt_len = input_ids.shape[1]
 
         with torch.no_grad():
             generate_kwargs: dict = dict(
