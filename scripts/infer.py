@@ -566,9 +566,9 @@ def main() -> None:
                 hf_push(args.hf_repo, token, args.output, args.hf_path)  # type: ignore[arg-type]
                 pushed_at = i + 1
 
-    # Final HF push
+    # Final HF push (ensure last batch is synced)
     if use_hf:
-        hf_push(args.hf_repo, token, args.output)  # type: ignore[arg-type]
+        hf_push(args.hf_repo, token, args.output, args.hf_path)  # type: ignore[arg-type]
 
     logger.info("=" * 60)
     logger.info("Done: %d success, %d failed.", n_success, n_failed)
