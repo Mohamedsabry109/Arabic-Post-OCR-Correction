@@ -144,6 +144,14 @@ def parse_args() -> argparse.Namespace:
             "(e.g. results/phase3/corrections.jsonl -> phase3/corrections.jsonl)."
         ),
     )
+    parser.add_argument(
+        "--system-prompt", type=str, default=None, dest="system_prompt",
+        help=(
+            "Path to the system prompt file to use as the base prompt. "
+            "Overrides the default (configs/crafted_system_prompt.txt). "
+            "Example: --system-prompt configs/crafted_system_prompt_v2.txt"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -401,7 +409,7 @@ def main() -> None:
     # Load model once
     logger.info("Loading model...")
     corrector = get_corrector(config)
-    crafted_prompt_path = config.get("prompt_craft", {}).get("crafted_prompt_path")
+    crafted_prompt_path = args.system_prompt or config.get("prompt_craft", {}).get("crafted_prompt_path")
     builder = PromptBuilder(crafted_prompt_path=crafted_prompt_path)
     logger.info("Model ready: %s", corrector.model_name)
 
