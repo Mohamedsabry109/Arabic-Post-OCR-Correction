@@ -36,7 +36,7 @@ _PROJECT_ROOT = _SCRIPT_DIR.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.analysis.metrics import calculate_cer
+from src.analysis.metrics import calculate_cer, calculate_wer
 from src.data.text_utils import normalise_arabic, tokenise_arabic, is_arabic_word
 
 logging.basicConfig(
@@ -234,6 +234,26 @@ def run_analysis(args: argparse.Namespace) -> None:
     degraded_samples: list[dict] = []
     unchanged_hard_samples: list[dict] = []
 
+    # Per-sample metric lists for aggregation
+    all_cer_ocr_nodiac: list[float] = []
+    all_cer_llm_nodiac: list[float] = []
+    all_wer_ocr_nodiac: list[float] = []
+    all_wer_llm_nodiac: list[float] = []
+    all_cer_ocr_diac: list[float] = []
+    all_cer_llm_diac: list[float] = []
+    all_wer_ocr_diac: list[float] = []
+    all_wer_llm_diac: list[float] = []
+
+    # Per-dataset metric lists
+    ds_cer_ocr_nodiac: dict[str, list[float]] = defaultdict(list)
+    ds_cer_llm_nodiac: dict[str, list[float]] = defaultdict(list)
+    ds_wer_ocr_nodiac: dict[str, list[float]] = defaultdict(list)
+    ds_wer_llm_nodiac: dict[str, list[float]] = defaultdict(list)
+    ds_cer_ocr_diac: dict[str, list[float]] = defaultdict(list)
+    ds_cer_llm_diac: dict[str, list[float]] = defaultdict(list)
+    ds_wer_ocr_diac: dict[str, list[float]] = defaultdict(list)
+    ds_wer_llm_diac: dict[str, list[float]] = defaultdict(list)
+
     for r in tqdm(records, desc="Classifying samples", unit="sample"):
         ocr_text = r["ocr_text"]
         gt_text = r["gt_text"]
@@ -241,8 +261,36 @@ def run_analysis(args: argparse.Namespace) -> None:
         dataset = r.get("dataset", "unknown")
         sample_id = r.get("sample_id", "")
 
+        # Metrics without diacritics (primary)
         cer_ocr = calculate_cer(gt_text, ocr_text, strip_diacritics=True)
         cer_llm = calculate_cer(gt_text, llm_text, strip_diacritics=True)
+        wer_ocr = calculate_wer(gt_text, ocr_text, strip_diacritics=True)
+        wer_llm = calculate_wer(gt_text, llm_text, strip_diacritics=True)
+
+        all_cer_ocr_nodiac.append(cer_ocr)
+        all_cer_llm_nodiac.append(cer_llm)
+        all_wer_ocr_nodiac.append(wer_ocr)
+        all_wer_llm_nodiac.append(wer_llm)
+        ds_cer_ocr_nodiac[dataset].append(cer_ocr)
+        ds_cer_llm_nodiac[dataset].append(cer_llm)
+        ds_wer_ocr_nodiac[dataset].append(wer_ocr)
+        ds_wer_llm_nodiac[dataset].append(wer_llm)
+
+        # Metrics with diacritics preserved
+        cer_ocr_d = calculate_cer(gt_text, ocr_text, strip_diacritics=False)
+        cer_llm_d = calculate_cer(gt_text, llm_text, strip_diacritics=False)
+        wer_ocr_d = calculate_wer(gt_text, ocr_text, strip_diacritics=False)
+        wer_llm_d = calculate_wer(gt_text, llm_text, strip_diacritics=False)
+
+        all_cer_ocr_diac.append(cer_ocr_d)
+        all_cer_llm_diac.append(cer_llm_d)
+        all_wer_ocr_diac.append(wer_ocr_d)
+        all_wer_llm_diac.append(wer_llm_d)
+        ds_cer_ocr_diac[dataset].append(cer_ocr_d)
+        ds_cer_llm_diac[dataset].append(cer_llm_d)
+        ds_wer_ocr_diac[dataset].append(wer_ocr_d)
+        ds_wer_llm_diac[dataset].append(wer_llm_d)
+
         bucket = classify_sample(cer_ocr, cer_llm)
 
         bucket_counts[bucket] += 1
@@ -302,6 +350,63 @@ def run_analysis(args: argparse.Namespace) -> None:
         "Classification: %d perfect, %d improved, %d unchanged, %d degraded (of %d total)",
         bucket_counts["perfect"], bucket_counts["improved"],
         bucket_counts["unchanged"], bucket_counts["degraded"], total,
+    )
+
+    # ------------------------------------------------------------------
+    # 1b. Aggregate CER/WER metrics
+    # ------------------------------------------------------------------
+    def _agg(values: list[float]) -> dict:
+        """Compute mean/median/std/p95 for a list of per-sample values."""
+        import statistics as _st
+        if not values:
+            return {"mean": 0.0, "median": 0.0, "std": 0.0, "p95": 0.0}
+        sorted_v = sorted(values)
+        p95_idx = min(int(len(sorted_v) * 0.95), len(sorted_v) - 1)
+        return {
+            "mean": round(_st.mean(values), 6),
+            "median": round(_st.median(values), 6),
+            "std": round(_st.stdev(values), 6) if len(values) > 1 else 0.0,
+            "p95": round(sorted_v[p95_idx], 6),
+        }
+
+    overall_metrics = {
+        "no_diacritics": {
+            "cer_ocr": _agg(all_cer_ocr_nodiac),
+            "cer_llm": _agg(all_cer_llm_nodiac),
+            "wer_ocr": _agg(all_wer_ocr_nodiac),
+            "wer_llm": _agg(all_wer_llm_nodiac),
+        },
+        "with_diacritics": {
+            "cer_ocr": _agg(all_cer_ocr_diac),
+            "cer_llm": _agg(all_cer_llm_diac),
+            "wer_ocr": _agg(all_wer_ocr_diac),
+            "wer_llm": _agg(all_wer_llm_diac),
+        },
+    }
+
+    per_dataset_metrics: dict[str, dict] = {}
+    for ds in sorted(per_dataset_counts.keys()):
+        per_dataset_metrics[ds] = {
+            "no_diacritics": {
+                "cer_ocr": _agg(ds_cer_ocr_nodiac[ds]),
+                "cer_llm": _agg(ds_cer_llm_nodiac[ds]),
+                "wer_ocr": _agg(ds_wer_ocr_nodiac[ds]),
+                "wer_llm": _agg(ds_wer_llm_nodiac[ds]),
+            },
+            "with_diacritics": {
+                "cer_ocr": _agg(ds_cer_ocr_diac[ds]),
+                "cer_llm": _agg(ds_cer_llm_diac[ds]),
+                "wer_ocr": _agg(ds_wer_ocr_diac[ds]),
+                "wer_llm": _agg(ds_wer_llm_diac[ds]),
+            },
+        }
+
+    logger.info(
+        "Overall CER (no diac): OCR=%.4f -> LLM=%.4f | WER: OCR=%.4f -> LLM=%.4f",
+        overall_metrics["no_diacritics"]["cer_ocr"]["mean"],
+        overall_metrics["no_diacritics"]["cer_llm"]["mean"],
+        overall_metrics["no_diacritics"]["wer_ocr"]["mean"],
+        overall_metrics["no_diacritics"]["wer_llm"]["mean"],
     )
 
     # ------------------------------------------------------------------
@@ -424,8 +529,12 @@ def run_analysis(args: argparse.Namespace) -> None:
             k: round(bucket_counts[k] / max(total, 1) * 100, 2)
             for k in ["perfect", "improved", "unchanged", "degraded"]
         },
+        "metrics": overall_metrics,
         "per_dataset": {
-            ds: {k: counts[k] for k in ["perfect", "improved", "unchanged", "degraded"]}
+            ds: {
+                "buckets": {k: counts[k] for k in ["perfect", "improved", "unchanged", "degraded"]},
+                "metrics": per_dataset_metrics.get(ds, {}),
+            }
             for ds, counts in sorted(per_dataset_counts.items())
         },
     }
@@ -442,6 +551,8 @@ def run_analysis(args: argparse.Namespace) -> None:
         total=total,
         bucket_counts=bucket_counts,
         per_dataset_counts=per_dataset_counts,
+        overall_metrics=overall_metrics,
+        per_dataset_metrics=per_dataset_metrics,
         ocr_word_pairs=ocr_word_pairs,
         llm_unfixed_pairs=llm_unfixed_pairs,
         llm_introduced_pairs=llm_introduced_pairs,
@@ -475,6 +586,8 @@ def _write_summary(
     total: int,
     bucket_counts: Counter,
     per_dataset_counts: dict[str, Counter],
+    overall_metrics: dict,
+    per_dataset_metrics: dict[str, dict],
     ocr_word_pairs: Counter,
     llm_unfixed_pairs: Counter,
     llm_introduced_pairs: Counter,
@@ -491,7 +604,78 @@ def _write_summary(
     lines.append(f"**Generated**: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
 
+    # ------------------------------------------------------------------
+    # Overall metrics table
+    # ------------------------------------------------------------------
+    lines.append("## Overall Metrics")
+    lines.append("")
+
+    for diac_label, diac_key in [("Without Diacritics", "no_diacritics"), ("With Diacritics", "with_diacritics")]:
+        m = overall_metrics[diac_key]
+        lines.append(f"### {diac_label}")
+        lines.append("")
+        lines.append("| Metric | OCR (mean) | LLM (mean) | Delta | OCR (median) | LLM (median) | OCR (p95) | LLM (p95) |")
+        lines.append("|--------|----------:|----------:|------:|------------:|------------:|---------:|---------:|")
+        for metric_name, ocr_key, llm_key in [("CER", "cer_ocr", "cer_llm"), ("WER", "wer_ocr", "wer_llm")]:
+            ocr_m = m[ocr_key]
+            llm_m = m[llm_key]
+            delta = llm_m["mean"] - ocr_m["mean"]
+            lines.append(
+                f"| {metric_name} "
+                f"| {ocr_m['mean']*100:.2f}% "
+                f"| {llm_m['mean']*100:.2f}% "
+                f"| {delta*100:+.2f}% "
+                f"| {ocr_m['median']*100:.2f}% "
+                f"| {llm_m['median']*100:.2f}% "
+                f"| {ocr_m['p95']*100:.2f}% "
+                f"| {llm_m['p95']*100:.2f}% |"
+            )
+        lines.append("")
+
+    # ------------------------------------------------------------------
+    # Per-dataset metrics table
+    # ------------------------------------------------------------------
+    lines.append("## Per-Dataset Metrics (Without Diacritics)")
+    lines.append("")
+    lines.append("| Dataset | CER OCR | CER LLM | CER Delta | WER OCR | WER LLM | WER Delta |")
+    lines.append("|---------|--------:|--------:|----------:|--------:|--------:|----------:|")
+    for ds in sorted(per_dataset_metrics.keys()):
+        m = per_dataset_metrics[ds]["no_diacritics"]
+        cer_d = m["cer_llm"]["mean"] - m["cer_ocr"]["mean"]
+        wer_d = m["wer_llm"]["mean"] - m["wer_ocr"]["mean"]
+        lines.append(
+            f"| {ds} "
+            f"| {m['cer_ocr']['mean']*100:.2f}% "
+            f"| {m['cer_llm']['mean']*100:.2f}% "
+            f"| {cer_d*100:+.2f}% "
+            f"| {m['wer_ocr']['mean']*100:.2f}% "
+            f"| {m['wer_llm']['mean']*100:.2f}% "
+            f"| {wer_d*100:+.2f}% |"
+        )
+    lines.append("")
+
+    lines.append("## Per-Dataset Metrics (With Diacritics)")
+    lines.append("")
+    lines.append("| Dataset | CER OCR | CER LLM | CER Delta | WER OCR | WER LLM | WER Delta |")
+    lines.append("|---------|--------:|--------:|----------:|--------:|--------:|----------:|")
+    for ds in sorted(per_dataset_metrics.keys()):
+        m = per_dataset_metrics[ds]["with_diacritics"]
+        cer_d = m["cer_llm"]["mean"] - m["cer_ocr"]["mean"]
+        wer_d = m["wer_llm"]["mean"] - m["wer_ocr"]["mean"]
+        lines.append(
+            f"| {ds} "
+            f"| {m['cer_ocr']['mean']*100:.2f}% "
+            f"| {m['cer_llm']['mean']*100:.2f}% "
+            f"| {cer_d*100:+.2f}% "
+            f"| {m['wer_ocr']['mean']*100:.2f}% "
+            f"| {m['wer_llm']['mean']*100:.2f}% "
+            f"| {wer_d*100:+.2f}% |"
+        )
+    lines.append("")
+
+    # ------------------------------------------------------------------
     # Classification overview
+    # ------------------------------------------------------------------
     lines.append("## Sample Classification")
     lines.append("")
     lines.append("| Bucket | Count | % |")
@@ -503,7 +687,7 @@ def _write_summary(
     lines.append("")
 
     # Per-dataset breakdown
-    lines.append("## Per-Dataset Breakdown")
+    lines.append("## Per-Dataset Classification")
     lines.append("")
     lines.append("| Dataset | Perfect | Improved | Unchanged | Degraded | Total |")
     lines.append("|---------|--------:|---------:|----------:|---------:|------:|")
