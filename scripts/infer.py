@@ -421,25 +421,25 @@ def main() -> None:
         """Build messages for a single record (mirrors the dispatch below)."""
         pt = rec.get("prompt_type", "zero_shot")
         if pt == "ocr_aware":
-            return builder.build_ocr_aware(rec["ocr_text"], rec.get("confusion_context", ""))
-        if pt == "rule_augmented":
-            return builder.build_rule_augmented(rec["ocr_text"], rec.get("rules_context", ""))
-        if pt == "few_shot":
-            return builder.build_few_shot(rec["ocr_text"], rec.get("examples_context", ""))
+            return builder.build_ocr_aware(
+                rec["ocr_text"],
+                rec.get("confusion_context", ""),
+                rec.get("word_examples", ""),
+            )
         if pt == "combined":
             return builder.build_combined(
                 ocr_text=rec["ocr_text"],
                 confusion_context=rec.get("confusion_context") or "",
-                rules_context=rec.get("rules_context") or "",
-                examples_context=rec.get("examples_context") or "",
                 insights_context=rec.get("insights_context") or "",
                 word_pairs_context=rec.get("word_pairs_context") or "",
+                overcorrection_context=rec.get("overcorrection_context") or "",
             )
         if pt == "self_reflective":
             return builder.build_self_reflective(
                 rec["ocr_text"],
                 rec.get("insights_context", ""),
                 rec.get("word_pairs_context", ""),
+                rec.get("overcorrection_context", ""),
             )
         if pt == "meta_prompt":
             return builder.build_meta_prompt(rec["ocr_text"])
@@ -477,50 +477,39 @@ def main() -> None:
 
             if prompt_type == "ocr_aware":
                 confusion_context = record.get("confusion_context", "")
-                messages = builder.build_ocr_aware(record["ocr_text"], confusion_context)
+                word_examples = record.get("word_examples", "")
+                messages = builder.build_ocr_aware(record["ocr_text"], confusion_context, word_examples)
                 prompt_ver = builder.ocr_aware_prompt_version
                 if not confusion_context.strip():
                     # build_ocr_aware fell back to zero_shot internally
-                    prompt_type = "zero_shot_fallback"
-            elif prompt_type == "rule_augmented":
-                rules_context = record.get("rules_context", "")
-                messages = builder.build_rule_augmented(record["ocr_text"], rules_context)
-                prompt_ver = builder.rules_prompt_version
-                if not rules_context.strip():
-                    prompt_type = "zero_shot_fallback"
-            elif prompt_type == "few_shot":
-                examples_context = record.get("examples_context", "")
-                messages = builder.build_few_shot(record["ocr_text"], examples_context)
-                prompt_ver = builder.few_shot_prompt_version
-                if not examples_context.strip():
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "combined":
                 messages = builder.build_combined(
                     ocr_text=record["ocr_text"],
                     confusion_context=record.get("confusion_context") or "",
-                    rules_context=record.get("rules_context") or "",
-                    examples_context=record.get("examples_context") or "",
                     insights_context=record.get("insights_context") or "",
                     word_pairs_context=record.get("word_pairs_context") or "",
+                    overcorrection_context=record.get("overcorrection_context") or "",
                 )
                 prompt_ver = builder.combined_prompt_version
                 _any_ctx = any([
                     record.get("confusion_context"),
-                    record.get("rules_context"),
-                    record.get("examples_context"),
                     record.get("insights_context"),
                     record.get("word_pairs_context"),
+                    record.get("overcorrection_context"),
                 ])
                 if not _any_ctx:
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "self_reflective":
                 insights_context = record.get("insights_context", "")
                 word_pairs_context = record.get("word_pairs_context", "")
+                overcorrection_context = record.get("overcorrection_context", "")
                 messages = builder.build_self_reflective(
-                    record["ocr_text"], insights_context, word_pairs_context
+                    record["ocr_text"], insights_context, word_pairs_context,
+                    overcorrection_context,
                 )
                 prompt_ver = builder.self_reflective_prompt_version
-                if not insights_context.strip() and not word_pairs_context.strip():
+                if not insights_context.strip() and not word_pairs_context.strip() and not overcorrection_context.strip():
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "meta_prompt":
                 messages = builder.build_meta_prompt(record["ocr_text"])

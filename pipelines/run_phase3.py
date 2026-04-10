@@ -53,7 +53,10 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
-from src.data.knowledge_base import ConfusionMatrixLoader, ConfusionPair
+from src.data.knowledge_base import (
+    ConfusionMatrixLoader, ConfusionPair,
+    load_unfixed_word_pairs, format_word_examples_for_prompt,
+)
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual, compare_metrics
 from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
@@ -436,6 +439,31 @@ def run_export(
     min_subs = phase3_cfg.get("min_substitutions_for_dataset_matrix",
                                ConfusionMatrixLoader.MIN_SUBSTITUTIONS)
 
+    # Training cross-reference: filter confusions by LLM failures + add word examples
+    use_training_failures = phase3_cfg.get("use_training_failures", True)
+    training_failures_path = _PROJECT_ROOT / phase3_cfg.get(
+        "training_failures_path",
+        "results/phase2-training/analysis/word_pairs_llm_failures.txt",
+    )
+    word_examples_n = phase3_cfg.get("word_level_examples_n", 10)
+
+    unfixed_pairs: list[tuple[str, str]] = []
+    word_examples_context = ""
+    if use_training_failures and training_failures_path.exists():
+        unfixed_pairs = load_unfixed_word_pairs(training_failures_path)
+        word_examples_context = format_word_examples_for_prompt(unfixed_pairs, n=word_examples_n)
+        logger.info(
+            "Training cross-reference: %d unfixed word pairs loaded, "
+            "word_examples=%d chars.",
+            len(unfixed_pairs), len(word_examples_context),
+        )
+    elif use_training_failures:
+        logger.warning(
+            "Training failures file not found at %s — "
+            "falling back to original Phase 3 behavior (no filtering).",
+            training_failures_path,
+        )
+
     # Pre-build pooled matrices once (used as fallback for sparse datasets)
     pooled = build_pooled_matrices(phase1_dir, loader_conf, all_dataset_names)
 
@@ -455,6 +483,15 @@ def run_export(
                 ds_key, phase1_dir, pooled, loader_conf, min_subs,
             )
 
+            # Filter confusion pairs by LLM failures (enhanced Phase 3)
+            if use_training_failures and unfixed_pairs:
+                original_count = len(pairs)
+                pairs = loader_conf.filter_by_llm_failures(pairs, training_failures_path)
+                logger.info(
+                    "[%s] Confusion pairs filtered by LLM failures: %d -> %d.",
+                    ds_key, original_count, len(pairs),
+                )
+
             # Format once — all samples in this dataset share the same confusion context
             confusion_context = loader_conf.format_for_prompt(pairs, n=top_n, style=format_style)
 
@@ -472,6 +509,7 @@ def run_export(
                     "gt_text":           sample.gt_text,
                     "prompt_type":       "ocr_aware" if confusion_context else "zero_shot",
                     "confusion_context": confusion_context,
+                    "word_examples":     word_examples_context,
                     "top_n":             top_n,
                     "format_style":      format_style,
                     "confusion_source":  confusion_source,
@@ -1206,6 +1244,7 @@ def process_dataset_full(
     pooled: dict[str, list[ConfusionPair]],
     analyze_errors: bool,
     analyze_impact: bool,
+    word_examples: str = "",
 ) -> MetricResult:
     """Run inline inference + analysis for one dataset (full/API mode)."""
     out_dir = results_dir / dataset_key
@@ -1232,7 +1271,7 @@ def process_dataset_full(
 
     with open(corrections_path, "a", encoding="utf-8") as out_f:
         for sample in tqdm(pending, desc=f"  Correcting {dataset_key}", unit="sample"):
-            messages = builder.build_ocr_aware(sample.ocr_text, confusion_context)
+            messages = builder.build_ocr_aware(sample.ocr_text, confusion_context, word_examples)
             result: CorrectionResult = corrector.correct(
                 sample_id=sample.sample_id,
                 ocr_text=sample.ocr_text,

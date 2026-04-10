@@ -1,8 +1,13 @@
 # Research Enhancements, Innovations & Paper Writing Guide
 
+> **NOTE**: This document was written for the old 8-phase structure (4A/4B/4C/4D). As of v1.0.0, the project
+> uses a 7-phase structure. References to Phase 4A (Rules), 4B (QALB Few-Shot) are for removed phases.
+> Phase 4C = current Phase 5 (CAMeL). Phase 4D = current Phase 4 (Self-Reflective).
+> Phase 5/6 Combinations = current Phase 6. See `docs/Architecture.md` for current design.
+
 > **Audience**: Author (thesis self-reference) and advisor review
 > **Purpose**: What to do if LLM results are disappointing, what to modify, novel ideas, and how to write the paper
-> **Based on**: Deep analysis of the full pipeline (Phases 1–6 + 4D implemented)
+> **Based on**: Deep analysis of the full pipeline (Phases 1–7 implemented)
 
 ---
 

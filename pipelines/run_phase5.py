@@ -1,56 +1,43 @@
 #!/usr/bin/env python3
-"""Phase 5: Combinations & Ablation Study.
+"""Phase 6: Combinations.
 
-Tests combinations of knowledge sources from Phases 3-5 and measures each
-component's contribution via ablation.
+Tests combinations of Phase 3 (OCR-Aware) and Phase 4 (Self-Reflective)
+prompt components, plus CAMeL post-processing on the best combo.
 
 Experiment set
 --------------
 Inference-based combos (need export -> Kaggle -> analyze):
-  pair_conf_rules    Confusion + Rules
-  pair_conf_fewshot  Confusion + Few-Shot
-  pair_conf_rag      Confusion + RAG
-  pair_rules_fewshot Rules + Few-Shot
-  full_prompt        Confusion + Rules + Few-Shot + RAG
-  abl_no_confusion   Rules + Few-Shot + RAG
-  abl_no_rules       Confusion + Few-Shot + RAG
-  abl_no_fewshot     Confusion + Rules + RAG
-  abl_no_rag         Confusion + Rules + Few-Shot
-  self_reflective    Self-Reflective (Phase 4D) only
-  pair_self_conf     Self-Reflective + Confusion
-  full_with_self     All 5 components (Full + Self-Reflective)
+  conf_only    Phase 3 alone (OCR-Aware confusion matrix)
+  self_only    Phase 4 alone (Self-Reflective insights + word pairs)
+  conf_self    Phase 3 + 4 combined (full prompt)
 
-CAMeL post-processing combos (local only, no Kaggle step):
-  pair_best_camel    Best pair (config.phase5.pair_best) + CAMeL revert
-  full_system        full_prompt + CAMeL revert
-
-Note: abl_no_camel == full_prompt (no separate run needed).
+CAMeL post-processing combo (local only, no Kaggle step):
+  best_camel   Best inference combo + Phase 5 CAMeL validation
 
 Pipeline per inference combo
 -----------------------------
-  1. LOCAL:  python pipelines/run_phase5.py --combo pair_conf_rules --mode export
+  1. LOCAL:  python pipelines/run_phase5.py --combo conf_only --mode export
   2. REMOTE: python scripts/infer.py \\
-                 --input  results/phase5/pair_conf_rules/inference_input.jsonl \\
-                 --output results/phase5/pair_conf_rules/corrections.jsonl
-  3. LOCAL:  python pipelines/run_phase5.py --combo pair_conf_rules --mode analyze
+                 --input  results/phase5/conf_only/inference_input.jsonl \\
+                 --output results/phase5/conf_only/corrections.jsonl
+  3. LOCAL:  python pipelines/run_phase5.py --combo conf_only --mode analyze
 
-CAMeL combos (no Kaggle step):
-  python pipelines/run_phase5.py --combo full_system  --mode validate
-  python pipelines/run_phase5.py --combo pair_best_camel --mode validate
+CAMeL combo (no Kaggle step):
+  python pipelines/run_phase5.py --combo best_camel --mode validate
 
 Cross-combo summary (after all combos analyzed/validated):
   python pipelines/run_phase5.py --mode summarize
 
 Usage
 -----
-    # Smoke test: export + infer + analyze one pair
-    python pipelines/run_phase5.py --combo pair_conf_rules --mode export \\
+    # Smoke test: export + infer + analyze one combo
+    python pipelines/run_phase5.py --combo conf_only --mode export \\
         --datasets KHATT-train --limit 50
     python scripts/infer.py \\
-        --input  results/phase5/pair_conf_rules/inference_input.jsonl \\
-        --output results/phase5/pair_conf_rules/corrections.jsonl \\
+        --input  results/phase5/conf_only/inference_input.jsonl \\
+        --output results/phase5/conf_only/corrections.jsonl \\
         --datasets KHATT-train --limit 50
-    python pipelines/run_phase5.py --combo pair_conf_rules --mode analyze \\
+    python pipelines/run_phase5.py --combo conf_only --mode analyze \\
         --datasets KHATT-train
 
     # Run all inference combos in sequence:
@@ -58,9 +45,8 @@ Usage
     # (then run Kaggle for each combo)
     python pipelines/run_phase5.py --combo all --mode analyze
 
-    # After setting pair_best in config.yaml:
-    python pipelines/run_phase5.py --combo full_system     --mode validate
-    python pipelines/run_phase5.py --combo pair_best_camel --mode validate
+    # After setting phase6.best_combo in config.yaml:
+    python pipelines/run_phase5.py --combo best_camel --mode validate
 
     # Final cross-combo analysis:
     python pipelines/run_phase5.py --mode summarize
@@ -85,8 +71,6 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.data.data_loader import DataLoader, DataError, OCRSample
 from src.data.knowledge_base import (
     ConfusionMatrixLoader, ConfusionPair,
-    RulesLoader,
-    QALBLoader,
     LLMInsightsLoader,
     WordErrorPairsLoader,
 )
@@ -111,41 +95,25 @@ logger = logging.getLogger(__name__)
 # Combo definitions
 # ---------------------------------------------------------------------------
 
-# (use_confusion, use_rules, use_fewshot, use_self)
-# use_self = True requires Phase 4D insights + word_error_pairs.txt in results/phase4d/
-COMBO_COMPONENTS: dict[str, tuple[bool, bool, bool, bool]] = {
-    # Phase 3-4 combinations (use_self=False)
-    "pair_conf_rules":    (True,  True,  False, False),
-    "pair_conf_fewshot":  (True,  False, True,  False),
-    "pair_rules_fewshot": (False, True,  True,  False),
-    "full_prompt":        (True,  True,  True,  False),
-    "abl_no_confusion":   (False, True,  True,  False),
-    "abl_no_rules":       (True,  False, True,  False),
-    "abl_no_fewshot":     (True,  True,  False, False),
-    # Phase 4D combos (use_self=True — includes insights + word pairs)
-    "self_reflective":    (False, False, False, True),
-    "pair_self_conf":     (True,  False, False, True),
-    "full_with_self":     (True,  True,  True,  True),
+# (use_confusion, use_self)
+# use_confusion = True injects Phase 3 confusion matrix (filtered by LLM failures)
+# use_self = True injects Phase 4 self-reflective signals (insights + word pairs + overcorrections)
+COMBO_COMPONENTS: dict[str, tuple[bool, bool]] = {
+    "conf_only":   (True,  False),   # Phase 3 alone
+    "self_only":   (False, True),    # Phase 4 alone
+    "conf_self":   (True,  True),    # Phase 3 + 4 (full prompt)
 }
 
-CAMEL_COMBOS = {"pair_best_camel", "full_system"}
+CAMEL_COMBOS = {"best_camel"}   # Best inference combo + Phase 5 CAMeL post-processing
 
 INFERENCE_COMBOS = list(COMBO_COMPONENTS.keys())
 ALL_COMBOS = INFERENCE_COMBOS + sorted(CAMEL_COMBOS)
 
 COMBO_DESCRIPTIONS: dict[str, str] = {
-    "pair_conf_rules":    "Confusion + Rules",
-    "pair_conf_fewshot":  "Confusion + Few-Shot",
-    "pair_rules_fewshot": "Rules + Few-Shot",
-    "full_prompt":        "All Prompt Components (Confusion + Rules + Few-Shot)",
-    "abl_no_confusion":   "Full Prompt minus Confusion",
-    "abl_no_rules":       "Full Prompt minus Rules",
-    "abl_no_fewshot":     "Full Prompt minus Few-Shot",
-    "self_reflective":    "Self-Reflective Prompting (Phase 4D: insights + word pairs)",
-    "pair_self_conf":     "Self-Reflective + Confusion",
-    "full_with_self":     "Full Prompt + Self-Reflective",
-    "pair_best_camel":    "Best Pair + CAMeL Validation",
-    "full_system":        "Full System (All + CAMeL)",
+    "conf_only":    "Phase 3: OCR-Aware Confusion Matrix",
+    "self_only":    "Phase 4: Self-Reflective (insights + word pairs + overcorrections)",
+    "conf_self":    "Phase 3 + 4: Confusion + Self-Reflective",
+    "best_camel":   "Best Inference Combo + Phase 5 CAMeL Validation",
 }
 
 
@@ -177,7 +145,7 @@ def parse_args() -> argparse.Namespace:
         help=(
             "export    -> write inference_input.jsonl (inference combos); "
             "analyze   -> compute metrics from corrections.jsonl; "
-            "validate  -> apply CAMeL post-processing (pair_best_camel / full_system); "
+            "validate  -> apply CAMeL post-processing (best_camel); "
             "summarize -> cross-combo analysis (no --combo needed)"
         ),
     )
@@ -327,11 +295,10 @@ def make_meta(
 def _active_component_names(combo_id: str) -> list[str]:
     """Return human-readable component list for a combo."""
     if combo_id in CAMEL_COMBOS:
-        base = "full_prompt" if combo_id == "full_system" else "pair_best"
-        return [base, "camel"]
-    flags = COMBO_COMPONENTS.get(combo_id, (False, False, False, False))
+        return ["best_combo", "camel"]
+    flags = COMBO_COMPONENTS.get(combo_id, (False, False))
     names = []
-    labels = ["confusion", "rules", "fewshot", "self"]
+    labels = ["confusion", "self"]
     for flag, label in zip(flags, labels):
         if flag:
             names.append(label)
@@ -418,65 +385,7 @@ def build_pooled_matrices(
     return {"PATS-A01": pats_pooled, "KHATT": khatt_pooled}
 
 
-def build_rules_context(config: dict) -> str:
-    """Build rules context string (Phase 4A style)."""
-    phase4_cfg = config.get("phase4", {}).get("rules", {})
-    style = phase4_cfg.get("format_style", "compact_arabic")
-    cats = phase4_cfg.get("categories")
-    n = phase4_cfg.get("n_rules")
-
-    loader = RulesLoader()
-    rules = loader.load(categories=cats)
-
-    if not rules:
-        logger.warning("No rules loaded -- rules_context empty.")
-        return ""
-
-    context = loader.format_for_prompt(rules, n=n, style=style)
-    logger.info("Rules context: %d rules, %d chars (style=%s).", len(rules), len(context), style)
-    return context
-
-
-def build_examples_context(config: dict) -> str:
-    """Build few-shot examples context string (Phase 4B style)."""
-    phase4b_cfg = config.get("phase4", {}).get("few_shot", {})
-    seed = phase4b_cfg.get("seed", 42)
-    max_length = phase4b_cfg.get("max_length", 100)
-    min_length = phase4b_cfg.get("min_length", 10)
-    max_words_changed = phase4b_cfg.get("max_words_changed", 4)
-    num_examples = phase4b_cfg.get("num_examples", 5)
-    selection = phase4b_cfg.get("selection", "diverse")
-    format_style = phase4b_cfg.get("format_style", "inline_arabic")
-    years = phase4b_cfg.get("years", ["2014"])
-
-    loader = QALBLoader(config)
-    try:
-        pairs = loader.load(splits=["train"], years=years)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("QALB load failed: %s -- examples_context empty.", exc)
-        return ""
-
-    if not pairs:
-        logger.warning("No QALB pairs loaded -- examples_context empty.")
-        return ""
-
-    filtered = loader.filter_ocr_relevant(
-        pairs,
-        max_length=max_length,
-        min_length=min_length,
-        max_words_changed=max_words_changed,
-    )
-    if not filtered:
-        logger.warning("No OCR-relevant QALB pairs -- examples_context empty.")
-        return ""
-
-    selected = loader.select(filtered, n=num_examples, strategy=selection, seed=seed)
-    context = loader.format_for_prompt(selected, style=format_style)
-    logger.info(
-        "Examples context: %d examples (%s), %d chars.",
-        len(selected), selection, len(context),
-    )
-    return context
+    # build_rules_context and build_examples_context removed in phase refactoring
 
 
 # ---------------------------------------------------------------------------
@@ -915,7 +824,9 @@ def run_export(
     Loads contexts once, then iterates over all active datasets.
     Confusion context is per-dataset; rules/examples are global; retrieval is per-sample.
     """
-    use_conf, use_rules, use_fewshot, use_self = COMBO_COMPONENTS[combo_id]
+    use_conf, use_self = COMBO_COMPONENTS[combo_id]
+    use_rules = False  # Removed in phase refactoring
+    use_fewshot = False  # Removed in phase refactoring
 
     output_path = combo_dir / "inference_input.jsonl"
     combo_dir.mkdir(parents=True, exist_ok=True)
@@ -940,21 +851,32 @@ def run_export(
     if use_conf and loader_conf is not None:
         pooled = build_pooled_matrices(phase1_dir, loader_conf, all_dataset_names)
 
-    rules_context = build_rules_context(config) if use_rules else ""
-    examples_context = build_examples_context(config) if use_fewshot else ""
+    # rules_context and examples_context removed in phase refactoring
 
     pats_insights_context = ""
     khatt_insights_context = ""
     word_pairs_context = ""
+    overcorrection_context = ""
     if use_self:
+        from src.data.knowledge_base import (
+            load_unfixed_word_pairs, load_introduced_word_pairs,
+            format_word_examples_for_prompt, format_overcorrection_warnings,
+        )
+
+        phase4_cfg = config.get("phase4", {})
+        training_dir = _PROJECT_ROOT / phase4_cfg.get(
+            "training_artifacts_dir", "results/phase2-training/analysis"
+        )
+        failures_path = training_dir / "word_pairs_llm_failures.txt"
+
+        # Load insights from Phase 4D results
         phase4d_dir = _PROJECT_ROOT / "results" / "phase4d"
         insights_dir = phase4d_dir / "insights"
         pats_path = insights_dir / "PATS-A01_insights.json"
         khatt_path = insights_dir / "KHATT_insights.json"
 
         insights_loader = LLMInsightsLoader()
-        phase4d_cfg = config.get("phase4d", {})
-        insight_cfg = phase4d_cfg.get("insights", {})
+        insight_cfg = phase4_cfg.get("insights", {})
         format_kwargs = {
             "min_fix_rate_strength":  float(insight_cfg.get("min_fix_rate_strength",  0.6)),
             "max_fix_rate_weakness":  float(insight_cfg.get("max_fix_rate_weakness",  0.4)),
@@ -970,11 +892,7 @@ def run_export(
             )
             logger.info("Loaded PATS-A01 insights (%d chars).", len(pats_insights_context))
         else:
-            logger.warning(
-                "Phase 4D PATS-A01 insights not found: %s\n"
-                "Run: python pipelines/run_phase4d.py --mode analyze-train",
-                pats_path,
-            )
+            logger.warning("Phase 4 PATS-A01 insights not found: %s", pats_path)
 
         if khatt_path.exists():
             khatt_insights_context = insights_loader.format_for_prompt(
@@ -982,36 +900,44 @@ def run_export(
             )
             logger.info("Loaded KHATT insights (%d chars).", len(khatt_insights_context))
         else:
-            logger.warning(
-                "Phase 4D KHATT insights not found: %s\n"
-                "Run: python pipelines/run_phase4d.py --mode analyze-train",
-                khatt_path,
-            )
+            logger.warning("Phase 4 KHATT insights not found: %s", khatt_path)
 
-        # Load word-error pairs (auto-generated alongside insights)
-        pairs_path = phase4d_dir / "word_error_pairs.txt"
-        if pairs_path.exists():
-            pairs_loader = WordErrorPairsLoader()
-            try:
-                all_pairs = pairs_loader.load(pairs_path)
-                selected = pairs_loader.select(
-                    all_pairs,
-                    n=int(phase4d_cfg.get("word_pairs_n", 15)),
-                    strategy=str(phase4d_cfg.get("word_pairs_strategy", "random")),
-                    seed=int(phase4d_cfg.get("word_pairs_seed", 42)),
-                )
-                word_pairs_context = pairs_loader.format_for_prompt(selected)
-                logger.info("Loaded %d word-error pairs (%d chars).", len(selected), len(word_pairs_context))
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Could not load word-error pairs: %s", exc)
+        # Load word pairs + overcorrections from training artifacts
+        if failures_path.exists():
+            unfixed = load_unfixed_word_pairs(failures_path)
+            if unfixed:
+                n_pairs = int(phase4_cfg.get("word_pairs_n", 15))
+                word_pairs_context = format_word_examples_for_prompt(unfixed, n=n_pairs)
+                logger.info("Loaded %d unfixed word pairs -> %d chars.", len(unfixed), len(word_pairs_context))
+
+            introduced = load_introduced_word_pairs(failures_path)
+            if introduced:
+                n_over = int(phase4_cfg.get("overcorrection_n", 10))
+                overcorrection_context = format_overcorrection_warnings(introduced, n=n_over)
+                logger.info("Loaded %d introduced pairs -> %d chars.", len(introduced), len(overcorrection_context))
         else:
-            logger.info("Word-error pairs file not found: %s", pairs_path)
+            # Fallback: legacy word_error_pairs.txt
+            pairs_path = phase4d_dir / "word_error_pairs.txt"
+            if pairs_path.exists():
+                pairs_loader = WordErrorPairsLoader()
+                try:
+                    all_pairs = pairs_loader.load(pairs_path)
+                    selected = pairs_loader.select(
+                        all_pairs,
+                        n=int(phase4_cfg.get("word_pairs_n", 15)),
+                        strategy=str(phase4_cfg.get("word_pairs_strategy", "random")),
+                        seed=int(phase4_cfg.get("word_pairs_seed", 42)),
+                    )
+                    word_pairs_context = pairs_loader.format_for_prompt(selected)
+                    logger.info("Loaded %d word-error pairs (legacy) (%d chars).", len(selected), len(word_pairs_context))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Could not load word-error pairs: %s", exc)
 
         if not pats_insights_context and not khatt_insights_context and not word_pairs_context:
             logger.error(
-                "use_self=True but no Phase 4D outputs found. "
+                "use_self=True but no Phase 4 outputs found. "
                 "Cannot export combo '%s'. "
-                "Run: python pipelines/run_phase4d.py --mode analyze-train",
+                "Run: python pipelines/run_phase4d.py --mode analyze-train first.",
                 combo_id,
             )
             return
@@ -1051,8 +977,7 @@ def run_export(
                 insights_context = ""
 
             # Determine prompt_type
-            any_context = any([confusion_context, rules_context, examples_context,
-                               insights_context, word_pairs_context])
+            any_context = any([confusion_context, insights_context, word_pairs_context])
             prompt_type = "combined" if any_context else "zero_shot"
 
             try:
@@ -1070,11 +995,10 @@ def run_export(
                     "prompt_type":        prompt_type,
                     "combo_id":           combo_id,
                     "prompt_version":     PromptBuilder.COMBINED_PROMPT_VERSION,
-                    "confusion_context":  confusion_context or None,
-                    "rules_context":      rules_context or None,
-                    "examples_context":   examples_context or None,
-                    "insights_context":   insights_context or None,
-                    "word_pairs_context": word_pairs_context or None,
+                    "confusion_context":        confusion_context or None,
+                    "insights_context":         insights_context or None,
+                    "word_pairs_context":       word_pairs_context or None,
+                    "overcorrection_context":   overcorrection_context or None,
                 }
                 if use_conf:
                     record["confusion_source"] = conf_source
@@ -1441,14 +1365,12 @@ def run_validate(
 ) -> tuple[dict[str, MetricResult], dict[str, dict]]:
     """Apply CAMeL post-processing to a base combo for all active datasets."""
     # Determine base combo directory
-    if combo_id == "full_system":
-        base_combo_id = "full_prompt"
-    elif combo_id == "pair_best_camel":
-        base_combo_id = config.get("phase5", {}).get("pair_best")
+    if combo_id == "best_camel":
+        base_combo_id = config.get("phase6", {}).get("best_combo")
         if not base_combo_id:
             logger.error(
-                "phase5.pair_best not set in config.yaml. "
-                "Review pair results and set it before running pair_best_camel."
+                "phase6.best_combo not set in config.yaml. "
+                "Review inference combo results and set it before running best_camel."
             )
             sys.exit(1)
     else:
@@ -1817,7 +1739,7 @@ def run_summarize(
     logger.info("Phase 5 SUMMARIZE")
     logger.info("=" * 60)
 
-    p6_stats_cfg = config.get("phase5", {}).get("stats", {})
+    p6_stats_cfg = config.get("phase6", {}).get("stats", {})
     alpha = p6_stats_cfg.get("alpha", 0.05)
     n_bootstrap = p6_stats_cfg.get("n_bootstrap", 1000)
 
@@ -1847,10 +1769,8 @@ def run_summarize(
     isolated_cers: dict[str, float] = {}
     for phase_key, phase_dir in [
         ("phase3", Path("results/phase3")),
-        ("phase4a", Path("results/phase4a")),
-        ("phase4b", Path("results/phase4b")),
-        ("phase4c", Path("results/phase4c")),
-        ("phase4d", Path("results/phase4d")),
+        ("phase4", Path("results/phase4")),
+        ("phase5_camel", Path("results/phase5")),
     ]:
         v = _load_isolated_phase_avg_cer(phase_dir)
         if v is not None:
@@ -1859,15 +1779,12 @@ def run_summarize(
     # Component -> isolated phase mapping for synergy
     _component_to_phase = {
         "confusion": "phase3",
-        "rules":     "phase4a",
-        "fewshot":   "phase4b",
-        "self":      "phase4d",
+        "self":      "phase4",
     }
 
     # --- Combinations summary ---
-    pair_combos = ["pair_conf_rules", "pair_conf_fewshot", "pair_rules_fewshot"]
     combinations: dict[str, dict] = {}
-    for cid in pair_combos + ["pair_best_camel", "full_prompt", "full_system"]:
+    for cid in ALL_COMBOS:
         if cid not in combo_metrics:
             continue
         m = combo_metrics[cid]
@@ -1898,74 +1815,98 @@ def run_summarize(
     save_json(combinations_summary, results_dir / "combinations_summary.json")
 
     # --- Ablation summary ---
-    full_prompt_cer = combo_metrics.get("full_prompt", {}).get("avg_cer")
-    full_system_cer = combo_metrics.get("full_system", {}).get("avg_cer")
-    abl_combos = ["abl_no_confusion", "abl_no_rules", "abl_no_fewshot"]
+    # With 2 components (confusion + self), ablation is implicit:
+    #   conf_only = conf_self minus self   (ablate self)
+    #   self_only = conf_self minus conf   (ablate confusion)
+    conf_self_cer = combo_metrics.get("conf_self", {}).get("avg_cer")
+    best_camel_cer = combo_metrics.get("best_camel", {}).get("avg_cer")
     ablations: dict[str, dict] = {}
-    for abl_id in abl_combos:
-        if abl_id not in combo_metrics:
-            continue
-        m = combo_metrics[abl_id]
-        entry = {
-            "components_remaining": _active_component_names(abl_id),
-            "avg_cer": m["avg_cer"],
-        }
-        if full_system_cer is not None:
-            delta_from_full = m["avg_cer"] - full_system_cer
-            entry["delta_from_full_system"] = round(delta_from_full, 6)
-        if full_prompt_cer is not None:
-            delta_from_full_prompt = m["avg_cer"] - full_prompt_cer
-            entry["delta_from_full_prompt"] = round(delta_from_full_prompt, 6)
-        ablations[abl_id] = entry
 
-    # abl_no_camel = full_prompt (no separate run)
-    if full_prompt_cer is not None:
-        ablations["abl_no_camel"] = {
-            "components_remaining": _active_component_names("full_prompt"),
-            "avg_cer": full_prompt_cer,
-            "note": "Same as full_prompt (no CAMeL applied). No separate inference needed.",
-            "delta_from_full_system": (
-                round(full_prompt_cer - full_system_cer, 6)
-                if full_system_cer is not None else None
+    # Ablate self-reflective (keep confusion only)
+    if "conf_only" in combo_metrics and conf_self_cer is not None:
+        m = combo_metrics["conf_only"]
+        delta = m["avg_cer"] - conf_self_cer
+        ablations["ablate_self"] = {
+            "combo": "conf_only",
+            "component_removed": "self",
+            "components_remaining": ["confusion"],
+            "avg_cer": m["avg_cer"],
+            "delta_from_conf_self": round(delta, 6),
+            "interpretation": (
+                "Removing self-reflective hurts" if delta > 0
+                else "Self-reflective was interfering" if delta < -0.001
+                else "Self-reflective has minimal effect"
             ),
         }
 
+    # Ablate confusion (keep self only)
+    if "self_only" in combo_metrics and conf_self_cer is not None:
+        m = combo_metrics["self_only"]
+        delta = m["avg_cer"] - conf_self_cer
+        ablations["ablate_confusion"] = {
+            "combo": "self_only",
+            "component_removed": "confusion",
+            "components_remaining": ["self"],
+            "avg_cer": m["avg_cer"],
+            "delta_from_conf_self": round(delta, 6),
+            "interpretation": (
+                "Removing confusion matrix hurts" if delta > 0
+                else "Confusion matrix was interfering" if delta < -0.001
+                else "Confusion matrix has minimal effect"
+            ),
+        }
+
+    # Ablate CAMeL (best_camel vs its base combo)
+    if best_camel_cer is not None:
+        base_combo_id = config.get("phase6", {}).get("best_combo")
+        base_cer = combo_metrics.get(base_combo_id, {}).get("avg_cer") if base_combo_id else None
+        if base_cer is not None:
+            delta = base_cer - best_camel_cer
+            ablations["ablate_camel"] = {
+                "combo": "best_camel",
+                "component_removed": "camel",
+                "base_combo": base_combo_id,
+                "avg_cer_with_camel": best_camel_cer,
+                "avg_cer_without_camel": base_cer,
+                "delta": round(delta, 6),
+                "interpretation": (
+                    "CAMeL post-processing helps" if delta > 0
+                    else "CAMeL post-processing hurts" if delta < -0.001
+                    else "CAMeL has minimal effect"
+                ),
+            }
+
     ablation_summary = {
         "meta": {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
-        "full_prompt": {"avg_cer": full_prompt_cer},
-        "full_system": {"avg_cer": full_system_cer},
+        "conf_self": {"avg_cer": conf_self_cer},
+        "best_camel": {"avg_cer": best_camel_cer},
         "ablations": ablations,
         "interpretation": (
-            "delta_from_full_system > 0: removing this component hurts (CER rises). "
-            "delta_from_full_system < 0: component was interfering (CER drops without it)."
+            "delta_from_conf_self > 0: removing this component hurts (CER rises). "
+            "delta_from_conf_self < 0: component was interfering (CER drops without it)."
         ),
     }
     save_json(ablation_summary, results_dir / "ablation_summary.json")
 
-    # --- Synergy analysis (pairs only) ---
+    # --- Synergy analysis ---
+    # With 2 components: does conf_self beat the sum of conf_only + self_only improvements?
     synergy: dict[str, dict] = {}
-    pair_component_map = {
-        "pair_conf_rules":    ("confusion", "rules"),
-        "pair_conf_fewshot":  ("confusion", "fewshot"),
-        "pair_rules_fewshot": ("rules", "fewshot"),
-    }
-    for cid, (comp_a, comp_b) in pair_component_map.items():
-        if cid not in combo_metrics or p2_avg is None:
-            continue
-        delta_pair = p2_avg - combo_metrics[cid]["avg_cer"]
-        ph_a = _component_to_phase.get(comp_a)
-        ph_b = _component_to_phase.get(comp_b)
-        delta_a = (p2_avg - isolated_cers[ph_a]) if ph_a and ph_a in isolated_cers else None
-        delta_b = (p2_avg - isolated_cers[ph_b]) if ph_b and ph_b in isolated_cers else None
+    if "conf_self" in combo_metrics and p2_avg is not None:
+        delta_combined = p2_avg - combo_metrics["conf_self"]["avg_cer"]
+
+        # Use Phase 6 combo results (conf_only, self_only) rather than isolated phases
+        # because these are the same prompt framework (combined prompt) with one component
+        delta_conf = (p2_avg - combo_metrics["conf_only"]["avg_cer"]) if "conf_only" in combo_metrics else None
+        delta_self = (p2_avg - combo_metrics["self_only"]["avg_cer"]) if "self_only" in combo_metrics else None
 
         entry: dict = {
-            "delta_pair": round(delta_pair, 6),
-            "delta_a": round(delta_a, 6) if delta_a is not None else None,
-            "delta_b": round(delta_b, 6) if delta_b is not None else None,
+            "delta_combined": round(delta_combined, 6),
+            "delta_conf_only": round(delta_conf, 6) if delta_conf is not None else None,
+            "delta_self_only": round(delta_self, 6) if delta_self is not None else None,
         }
-        if delta_a is not None and delta_b is not None:
-            sum_individual = delta_a + delta_b
-            synergy_val = delta_pair - sum_individual
+        if delta_conf is not None and delta_self is not None:
+            sum_individual = delta_conf + delta_self
+            synergy_val = delta_combined - sum_individual
             entry["sum_individual"] = round(sum_individual, 6)
             entry["synergy"] = round(synergy_val, 6)
             if synergy_val > 0.001:
@@ -1975,11 +1916,11 @@ def run_summarize(
             else:
                 entry["interpretation"] = "Near-additive: components are approximately independent."
 
-        synergy[cid] = entry
+        synergy["conf_self"] = entry
 
     save_json(
         {"meta": {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
-         "methodology": "synergy = delta_pair - (delta_a + delta_b); positive = super-additive.",
+         "methodology": "synergy = delta_combined - (delta_conf_only + delta_self_only); positive = super-additive.",
          "pairs": synergy},
         results_dir / "synergy_analysis.json",
     )
@@ -2075,11 +2016,9 @@ def run_summarize(
     for ph_key, ph_dir in [
         ("phase1_ocr", Path("results/phase1")),
         ("phase2_zero_shot", phase2_dir),
-        ("phase3_confusion", Path("results/phase3")),
-        ("phase4a_rules", Path("results/phase4a")),
-        ("phase4b_fewshot", Path("results/phase4b")),
-        ("phase4c_camel", Path("results/phase4c")),
-        ("phase4d_self", Path("results/phase4d")),
+        ("phase3_ocr_aware", Path("results/phase3")),
+        ("phase4_self_reflective", Path("results/phase4")),
+        ("phase5_camel", Path("results/phase5")),
     ]:
         # Phase 1 stores OCR metrics differently
         if ph_key == "phase1_ocr":
@@ -2144,13 +2083,13 @@ def run_summarize(
                     entry["avg_wer_nd"] = wer_nd
                 final_systems[ph_key] = entry
 
-    # Add Phase 5 combos
+    # Add Phase 6 combos
     for cid, m in combo_metrics.items():
         entry: dict = {"avg_cer": m["avg_cer"], "avg_wer": m["avg_wer"]}
         if "avg_cer_nd" in m:
             entry["avg_cer_nd"] = m["avg_cer_nd"]
             entry["avg_wer_nd"] = m["avg_wer_nd"]
-        final_systems[f"phase5_{cid}"] = entry
+        final_systems[f"phase6_{cid}"] = entry
 
     save_json(
         {
@@ -2199,18 +2138,16 @@ def _generate_paper_tables(
     lines.append(f"\nGenerated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     lines.append("")
 
-    # Order: phase1 -> phase2 -> phases 3-4 -> phase5 combos
+    # Order: phase1 -> phase2 -> phases 3-5 -> phase6 combos
     system_order = [
-        ("phase1_ocr",           "Phase 1 (OCR only)"),
-        ("phase2_zero_shot",     "Phase 2 (Zero-shot)"),
-        ("phase3_confusion",     "Phase 3 (+Confusion)"),
-        ("phase4a_rules",        "Phase 4A (+Rules)"),
-        ("phase4b_fewshot",      "Phase 4B (+Few-Shot)"),
-        ("phase4c_camel",        "Phase 4C (+CAMeL)"),
-        ("phase4d_self",         "Phase 4D (+Self-Reflective)"),
+        ("phase1_ocr",              "Phase 1 (OCR only)"),
+        ("phase2_zero_shot",        "Phase 2 (Zero-shot)"),
+        ("phase3_ocr_aware",        "Phase 3 (OCR-Aware)"),
+        ("phase4_self_reflective",  "Phase 4 (Self-Reflective)"),
+        ("phase5_camel",            "Phase 5 (CAMeL Validation)"),
     ]
     for cid in INFERENCE_COMBOS + sorted(CAMEL_COMBOS):
-        system_order.append((f"phase5_{cid}", f"Phase 5: {COMBO_DESCRIPTIONS.get(cid, cid)}"))
+        system_order.append((f"phase6_{cid}", f"Phase 6: {COMBO_DESCRIPTIONS.get(cid, cid)}"))
 
     # Table 1: With Diacritics
     lines.append("## Main Results Table (With Diacritics)")
@@ -2298,30 +2235,30 @@ def _generate_summary_report(
 
     lines.append("## Ablation Results\n")
     abls = ablation_summary.get("ablations", {})
-    full_s = (ablation_summary.get("full_system") or {}).get("avg_cer")
     if abls:
-        lines.append("| Ablation | Avg CER | Delta from Full System |")
-        lines.append("|----------|---------|------------------------|")
+        lines.append("| Ablation | Removed | Avg CER | Delta | Interpretation |")
+        lines.append("|----------|---------|---------|-------|----------------|")
         for abl_id, a in abls.items():
-            delta_val = a.get('delta_from_full_system')
-            delta_s = (
-                f"{delta_val*100:+.2f}%"
-                if delta_val is not None else "—"
-            )
+            delta_key = "delta_from_conf_self" if "delta_from_conf_self" in a else "delta"
+            delta_val = a.get(delta_key)
+            delta_s = f"{delta_val*100:+.2f}%" if delta_val is not None else "---"
+            removed = a.get("component_removed", "?")
+            interp = a.get("interpretation", "---")
+            cer_val = a.get("avg_cer") or a.get("avg_cer_with_camel", 0)
             lines.append(
-                f"| {abl_id} | {a.get('avg_cer', 0)*100:.2f}% | {delta_s} |"
+                f"| {abl_id} | {removed} | {cer_val*100:.2f}% | {delta_s} | {interp} |"
             )
     lines.append("")
 
     lines.append("## Synergy Analysis\n")
     if synergy:
-        lines.append("| Pair | Delta Pair | Sum Individual | Synergy | Interpretation |")
-        lines.append("|------|-----------|----------------|---------|----------------|")
+        lines.append("| Combo | Delta Combined | Sum Individual | Synergy | Interpretation |")
+        lines.append("|-------|---------------|----------------|---------|----------------|")
         for cid, s in synergy.items():
-            interp = s.get("interpretation", "—")
+            interp = s.get("interpretation", "---")
             lines.append(
                 f"| {cid} "
-                f"| {s.get('delta_pair', 0)*100:+.3f}% "
+                f"| {s.get('delta_combined', 0)*100:+.3f}% "
                 f"| {s.get('sum_individual', 0)*100:+.3f}% "
                 f"| {s.get('synergy', 0)*100:+.3f}% "
                 f"| {interp} |"
@@ -2398,7 +2335,7 @@ def main() -> None:
         if args.mode in ("validate",):
             print(
                 "ERROR: --combo all is not supported for --mode validate. "
-                "Specify combo explicitly: pair_best_camel or full_system.",
+                "Specify combo explicitly: best_camel.",
                 file=sys.stderr,
             )
             sys.exit(1)

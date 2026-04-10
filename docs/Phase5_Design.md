@@ -1,4 +1,13 @@
-# Phase 5: Combinations & Ablation Study — Design Document
+# Phase 5: Combinations & Ablation Study — Design Document (DEPRECATED)
+
+> **DEPRECATED as of v1.0.0** — This document described the old Phase 5/6 combination design with 5 components (Confusion, Rules, Few-Shot, RAG, CAMeL) and 10+ combo experiments.
+>
+> **Current Phase 6** (Combinations) uses 3 inference combos + 1 CAMeL combo:
+> `conf_only`, `self_only`, `conf_self`, `best_camel`
+>
+> See `docs/Architecture.md` for the current 7-phase design.
+
+# Phase 5: Combinations & Ablation Study — Design Document (Historical)
 
 ## 1. Overview
 

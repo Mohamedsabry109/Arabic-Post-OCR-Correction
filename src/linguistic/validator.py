@@ -130,6 +130,7 @@ class WordValidator:
         llm_text: str,
         ocr_text: str,
         strategy: str = "revert",
+        known_overcorrections: set[tuple[str, str]] | None = None,
     ) -> TextCorrectionResult:
         """Apply post-processing validation to a single LLM-corrected text.
 
@@ -139,9 +140,11 @@ class WordValidator:
         output.
 
         Strategy ``"revert"``:
-            If the LLM word is morphologically *invalid* **and** the OCR word is
-            morphologically *valid*, revert to the OCR word.  In all other cases
-            keep the LLM word (LLM is trusted to correct OCR noise).
+            1. If ``known_overcorrections`` is provided and ``(llm_word, ocr_word)``
+               is in the set, revert to OCR (known bad LLM correction).
+            2. If the LLM word is morphologically *invalid* **and** the OCR word is
+               morphologically *valid*, revert to the OCR word.
+            3. Otherwise keep the LLM word (LLM is trusted to correct OCR noise).
 
         Words that are identical in both texts are counted as ``unchanged`` and
         always kept as-is.
@@ -155,6 +158,10 @@ class WordValidator:
             ocr_text: Original OCR text (used as fallback source).
             strategy: Revert strategy to apply.  Currently only ``"revert"``
                 is supported.
+            known_overcorrections: Optional set of ``(llm_word, ocr_word)`` tuples
+                that are known bad LLM corrections (from training INTRODUCED
+                section).  These are reverted unconditionally before morphological
+                checks.
 
         Returns:
             TextCorrectionResult with the final text and word-level statistics.
@@ -195,39 +202,46 @@ class WordValidator:
                 revert_rate=0.0,
             )
 
-        # Build word-level revert decisions
-        revert_map: dict[str, str] = {}  # llm_word -> ocr_word (for reverted tokens)
+        # Build position-indexed revert decisions
+        revert_positions: dict[int, str] = {}  # position -> ocr_word (to revert to)
         reverted_words: list[str] = []
         reverted_count = 0
         kept_count = 0
         unchanged_count = 0
 
-        for llm_word, ocr_word in zip(llm_arabic, ocr_arabic):
+        for idx, (llm_word, ocr_word) in enumerate(zip(llm_arabic, ocr_arabic)):
             if llm_word == ocr_word:
                 unchanged_count += 1
                 continue
 
+            # Check 1: known overcorrection (revert unconditionally)
+            if known_overcorrections and (llm_word, ocr_word) in known_overcorrections:
+                revert_positions[idx] = ocr_word
+                reverted_words.append(llm_word)
+                reverted_count += 1
+                continue
+
+            # Check 2: morphological validity
             llm_valid = self.validate_word(llm_word).is_valid
             ocr_valid = self.validate_word(ocr_word).is_valid
 
             if not llm_valid and ocr_valid:
-                revert_map[llm_word] = ocr_word
+                revert_positions[idx] = ocr_word
                 reverted_words.append(llm_word)
                 reverted_count += 1
             else:
                 kept_count += 1
 
-        # Rebuild the final text by replacing reverted words
+        # Rebuild the final text by replacing reverted words (position-indexed)
         final_tokens: list[str] = []
         arabic_idx = 0
         for token in llm_tokens:
             if is_arabic_word(token) and arabic_idx < len(llm_arabic):
-                llm_word = llm_arabic[arabic_idx]
-                arabic_idx += 1
-                if llm_word in revert_map:
-                    final_tokens.append(revert_map[llm_word])
+                if arabic_idx in revert_positions:
+                    final_tokens.append(revert_positions[arabic_idx])
                 else:
                     final_tokens.append(token)
+                arabic_idx += 1
             else:
                 final_tokens.append(token)
 

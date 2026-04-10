@@ -1,5 +1,10 @@
 # Local Development Guide — Running Without a GPU
 
+> **NOTE (v1.0.0)**: Phase numbering changed. Phases 4A (Rules) and 4B (QALB Few-Shot) were removed.
+> Phase 4C → Phase 5 (CAMeL Validation). Phase 4D → Phase 4 (Self-Reflective).
+> Phase 5/6 Combinations → Phase 6 (use `run_phase5.py --combo`).
+> Commands in this guide reference old phase names — update accordingly.
+
 This guide explains how to run the entire pipeline end-to-end on your local
 machine without Kaggle or Colab. Use this to verify all pipeline stages work,
 tune prompts and parameters, and iterate quickly before spending GPU compute.

@@ -78,7 +78,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Dataset-type helpers (shared with run_phase4d.py)
+# Dataset-type helpers
 # ---------------------------------------------------------------------------
 
 

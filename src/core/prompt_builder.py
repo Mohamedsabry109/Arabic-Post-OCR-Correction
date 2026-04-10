@@ -13,24 +13,19 @@ XML sections following the same convention.
 Prompt language
 ~~~~~~~~~~~~~~~
 Section wrappers and labels are in English.  Arabic-specific content
-(confusion pairs, spelling rules, word-error examples, insights) remains
+(confusion pairs, word-error examples, insights) remains
 in Arabic — it is the knowledge payload, not the meta-language.
 
 Injection strategy
 ~~~~~~~~~~~~~~~~~~
-* **Knowledge sections** (phases 3, 4A, 4D) — injected as XML tags
+* **Knowledge sections** (phases 3, 4) — injected as XML tags
   immediately *before* ``<examples>`` so the model sees them before the
   few-shot pairs:
 
-    - Phase 3  → ``<confusion_patterns>``
-    - Phase 4A → ``<additional_rules>``
-    - Phase 4D → ``<self_analysis>`` (bundles insights + word-error pairs)
+    - Phase 3 → ``<confusion_patterns>``
+    - Phase 4 → ``<self_analysis>`` (bundles insights + word pairs + overcorrection warnings)
 
-* **Extra few-shot examples** (phase 4B) — injected as
-  ``<additional_examples>`` immediately *before* ``<output_format>`` so
-  the output constraint always stays last.
-
-* **Phase 5** (combined) injects all of the above in order; each section
+* **Phase 6** (combined) injects all of the above in order; each section
   is only included if its context is non-empty.
 """
 from __future__ import annotations
@@ -71,10 +66,8 @@ class PromptBuilder:
 
     PROMPT_VERSION: str = "p2v2"                  # Phase 2 — crafted base
     OCR_AWARE_PROMPT_VERSION: str = "p3v2"         # Phase 3
-    RULES_PROMPT_VERSION: str = "p4av2"            # Phase 4A
-    FEWSHOT_PROMPT_VERSION: str = "p4bv2"          # Phase 4B
-    SELF_REFLECTIVE_PROMPT_VERSION: str = "p4dv3"  # Phase 4D (insights + word pairs)
-    COMBINED_PROMPT_VERSION: str = "p5v1"          # Phase 5
+    SELF_REFLECTIVE_PROMPT_VERSION: str = "p4v1"    # Phase 4 (insights + word pairs)
+    COMBINED_PROMPT_VERSION: str = "p6v1"          # Phase 6
     CRAFTED_PROMPT_VERSION: str = "crafted_v1"     # standalone crafted
     META_PROMPT_VERSION: str = "meta_v1"           # meta-prompting
 
@@ -107,13 +100,9 @@ class PromptBuilder:
     # The prompt uses XML-like section tags; injections follow that pattern.
     # -----------------------------------------------------------------------
 
-    # Knowledge sections (phases 3, 4A, 4D) are inserted immediately before
+    # Knowledge sections (phases 3, 4) are inserted immediately before
     # the <examples> block so the model sees them before the few-shot pairs.
     _INJECT_ANCHOR: str = "<examples>"
-
-    # Additional few-shot examples (phase 4B) are inserted immediately before
-    # <output_format> so the output constraint always stays last.
-    _EXAMPLES_ANCHOR: str = "<output_format>"
 
     # -----------------------------------------------------------------------
     # Per-phase XML section templates.
@@ -127,35 +116,12 @@ class PromptBuilder:
         "</confusion_patterns>"
     )
 
-    _RULES_SECTION: str = (
-        "<additional_rules>\n"
-        "Additional Arabic orthographic rules to observe:\n"
-        "{rules_context}\n"
-        "</additional_rules>"
-    )
-
-    _FEWSHOT_EXTRA_HEADER: str = (
-        "<additional_examples>\n"
-        "{examples_context}\n"
-        "</additional_examples>"
-    )
-
-    # Combined-phase section bodies — knowledge-only (no number prefix; XML tags).
+    # Combined-phase section body for confusion (same as standalone).
     _COMBINED_CONFUSION: str = (
         "<confusion_patterns>\n"
         "Character confusions specific to this OCR system:\n"
         "{confusion_context}\n"
         "</confusion_patterns>"
-    )
-    _COMBINED_RULES: str = (
-        "<additional_rules>\n"
-        "{rules_context}\n"
-        "</additional_rules>"
-    )
-    _COMBINED_EXAMPLES_HEADER: str = (
-        "<additional_examples>\n"
-        "{examples_context}\n"
-        "</additional_examples>"
     )
 
     # Self-analysis section is built dynamically (bundles insights + word pairs).
@@ -220,19 +186,6 @@ class PromptBuilder:
             )
         return base.rstrip() + "\n\n" + section
 
-    def _append_examples(self, base: str, extra: str) -> str:
-        """Insert *extra* immediately before ``<output_format>`` (always last).
-
-        Falls back to appending at the very end if the anchor is absent.
-        """
-        if self._EXAMPLES_ANCHOR in base:
-            return base.replace(
-                self._EXAMPLES_ANCHOR,
-                extra + "\n\n" + self._EXAMPLES_ANCHOR,
-                1,
-            )
-        return base.rstrip() + "\n\n" + extra
-
     def _messages(self, system: str, ocr_text: str) -> list[dict]:
         """Return standard two-element OpenAI chat messages."""
         return [
@@ -272,18 +225,27 @@ class PromptBuilder:
     # Phase 3 — OCR-Aware Prompting
     # -----------------------------------------------------------------------
 
-    def build_ocr_aware(self, ocr_text: str, confusion_context: str) -> list[dict]:
+    def build_ocr_aware(
+        self,
+        ocr_text: str,
+        confusion_context: str,
+        word_examples: str = "",
+    ) -> list[dict]:
         """Build OCR-aware correction prompt (Phase 3).
 
-        Injects Qaari's top-N character confusion pairs as a new numbered rule
-        (rule 7) into the crafted system prompt, immediately before the output
-        constraints block.  Falls back to zero-shot if *confusion_context* is
-        empty.
+        Injects Qaari's top-N character confusion pairs into the crafted
+        system prompt.  If *word_examples* is provided (Phase 3 enhanced),
+        appends concrete word-level failure examples inside the same
+        ``<confusion_patterns>`` section.
+
+        Falls back to zero-shot if *confusion_context* is empty.
 
         Args:
             ocr_text: OCR prediction text to correct.
             confusion_context: Pre-formatted Arabic confusion-pairs string
                 produced by ``ConfusionMatrixLoader.format_for_prompt()``.
+            word_examples: Optional pre-formatted word-level failure examples
+                from training cross-reference.
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -292,6 +254,12 @@ class PromptBuilder:
             return self.build_zero_shot(ocr_text)
         base = self._load_crafted_base()
         section = self._OCR_AWARE_SECTION.format(confusion_context=confusion_context)
+        if word_examples.strip():
+            # Insert word examples inside the confusion_patterns section
+            section = section.replace(
+                "</confusion_patterns>",
+                "\n\n" + word_examples + "\n</confusion_patterns>",
+            )
         return self._messages(self._inject_knowledge(base, section), ocr_text)
 
     @property
@@ -300,66 +268,7 @@ class PromptBuilder:
         return self.OCR_AWARE_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
-    # Phase 4A — Rule-Augmented Prompting
-    # -----------------------------------------------------------------------
-
-    def build_rule_augmented(self, ocr_text: str, rules_context: str) -> list[dict]:
-        """Build rule-augmented correction prompt (Phase 4A).
-
-        Injects Arabic orthographic rules as rule 7 into the crafted system
-        prompt.  Falls back to zero-shot if *rules_context* is empty.
-
-        Args:
-            ocr_text: OCR prediction text to correct.
-            rules_context: Pre-formatted Arabic rules string produced by
-                ``RulesLoader.format_for_prompt()``.
-
-        Returns:
-            Two-element messages list in OpenAI chat format.
-        """
-        if not rules_context.strip():
-            return self.build_zero_shot(ocr_text)
-        base = self._load_crafted_base()
-        section = self._RULES_SECTION.format(rules_context=rules_context)
-        return self._messages(self._inject_knowledge(base, section), ocr_text)
-
-    @property
-    def rules_prompt_version(self) -> str:
-        """Phase 4A prompt version string."""
-        return self.RULES_PROMPT_VERSION
-
-    # -----------------------------------------------------------------------
-    # Phase 4B — Few-Shot Learning (QALB)
-    # -----------------------------------------------------------------------
-
-    def build_few_shot(self, ocr_text: str, examples_context: str) -> list[dict]:
-        """Build few-shot correction prompt (Phase 4B).
-
-        Appends QALB error-correction examples after the crafted prompt's
-        existing examples section (i.e. after the ``---`` separator).  Falls
-        back to zero-shot if *examples_context* is empty.
-
-        Args:
-            ocr_text: OCR prediction text to correct.
-            examples_context: Pre-formatted QALB correction pairs produced by
-                ``QALBLoader.format_for_prompt()``.
-
-        Returns:
-            Two-element messages list in OpenAI chat format.
-        """
-        if not examples_context.strip():
-            return self.build_zero_shot(ocr_text)
-        base = self._load_crafted_base()
-        extra = self._FEWSHOT_EXTRA_HEADER.format(examples_context=examples_context)
-        return self._messages(self._append_examples(base, extra), ocr_text)
-
-    @property
-    def few_shot_prompt_version(self) -> str:
-        """Phase 4B prompt version string."""
-        return self.FEWSHOT_PROMPT_VERSION
-
-    # -----------------------------------------------------------------------
-    # Phase 4D — Self-Reflective Prompting
+    # Phase 4 — Self-Reflective Prompting (was Phase 4D)
     # -----------------------------------------------------------------------
 
     def build_self_reflective(
@@ -367,26 +276,29 @@ class PromptBuilder:
         ocr_text: str,
         insights_context: str,
         word_pairs_context: str = "",
+        overcorrection_context: str = "",
     ) -> list[dict]:
-        """Build Phase 4D correction prompt: self-reflective insights + word-error pairs.
+        """Build Phase 4 correction prompt: self-reflective insights + word-error pairs.
 
-        Injects both signals as a single ``<self_analysis>`` section before
-        ``<examples>``.  Falls back to zero-shot if both contexts are empty.
+        Injects all signals as a single ``<self_analysis>`` section before
+        ``<examples>``.  Falls back to zero-shot if all contexts are empty.
 
         Args:
             ocr_text: OCR prediction text to correct.
-            insights_context: Pre-formatted Arabic insights string produced by
-                ``LLMInsightsLoader.format_for_prompt()``.  May be empty.
-            word_pairs_context: Pre-formatted Arabic word-pair string produced
-                by ``WordErrorPairsLoader.format_for_prompt()``.  Optional;
-                auto-generated by ``run_phase4d.py --mode analyze-train``.
+            insights_context: Pre-formatted Arabic insights string from
+                training analysis.  May be empty.
+            word_pairs_context: Pre-formatted Arabic word-pair string from
+                training analysis (UNFIXED errors).  Optional.
+            overcorrection_context: Pre-formatted warnings about common
+                over-corrections the LLM makes (INTRODUCED errors).  Optional.
 
         Returns:
             Two-element messages list in OpenAI chat format.
         """
         has_insights = bool(insights_context.strip())
         has_pairs = bool(word_pairs_context.strip())
-        if not has_insights and not has_pairs:
+        has_overcorrections = bool(overcorrection_context.strip())
+        if not has_insights and not has_pairs and not has_overcorrections:
             return self.build_zero_shot(ocr_text)
         base = self._load_crafted_base()
         inner_parts: list[str] = []
@@ -400,6 +312,11 @@ class PromptBuilder:
                 "Common word-level OCR errors found in training data:\n"
                 + word_pairs_context
             )
+        if has_overcorrections:
+            inner_parts.append(
+                "WARNING - Common over-corrections to AVOID (do NOT make these changes):\n"
+                + overcorrection_context
+            )
         section = (
             "<self_analysis>\n"
             + "\n\n".join(inner_parts)
@@ -409,23 +326,22 @@ class PromptBuilder:
 
     @property
     def self_reflective_prompt_version(self) -> str:
-        """Phase 4D prompt version string."""
+        """Phase 4 prompt version string."""
         return self.SELF_REFLECTIVE_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
-    # Phase 5 — Combined Prompting
+    # Phase 6 — Combined Prompting (was Phase 5)
     # -----------------------------------------------------------------------
 
     def build_combined(
         self,
         ocr_text: str,
         confusion_context: str = "",
-        rules_context: str = "",
-        examples_context: str = "",
         insights_context: str = "",
         word_pairs_context: str = "",
+        overcorrection_context: str = "",
     ) -> list[dict]:
-        """Build a combined correction prompt (Phase 5).
+        """Build a combined correction prompt (Phase 6).
 
         Uses the crafted system prompt as the base and injects any non-empty
         context sources as XML sections, following the prompt's tag structure.
@@ -434,29 +350,23 @@ class PromptBuilder:
 
         Injection order (all appear before ``<examples>``):
             1. ``<confusion_patterns>``  — Phase 3 confusion matrix
-            2. ``<additional_rules>``    — Phase 4A spelling rules
-            3. ``<self_analysis>``       — Phase 4D insights + word pairs (bundled)
-
-        Few-shot examples (Phase 4B) are injected as ``<additional_examples>``
-        immediately before ``<output_format>``.
+            2. ``<self_analysis>``       — Phase 4 insights + word pairs + overcorrection warnings
 
         Args:
             ocr_text: OCR prediction text to correct.
             confusion_context: Pre-formatted confusion pairs (Phase 3 format).
-            rules_context: Pre-formatted Arabic rules (Phase 4A format).
-            examples_context: Pre-formatted few-shot pairs (Phase 4B format).
-            insights_context: Pre-formatted self-reflective insights (Phase 4D).
-            word_pairs_context: Pre-formatted word-error pairs (Phase 4D).
+            insights_context: Pre-formatted self-reflective insights (Phase 4).
+            word_pairs_context: Pre-formatted word-error pairs (Phase 4).
+            overcorrection_context: Pre-formatted over-correction warnings (Phase 4).
 
         Returns:
             Two-element messages list in OpenAI chat format.
         """
         all_empty = not any([
             confusion_context.strip(),
-            rules_context.strip(),
-            examples_context.strip(),
             insights_context.strip(),
             word_pairs_context.strip(),
+            overcorrection_context.strip(),
         ])
         if all_empty:
             return self.build_zero_shot(ocr_text)
@@ -467,13 +377,11 @@ class PromptBuilder:
         if confusion_context.strip():
             section = self._COMBINED_CONFUSION.format(confusion_context=confusion_context)
             base = self._inject_knowledge(base, section)
-        if rules_context.strip():
-            section = self._COMBINED_RULES.format(rules_context=rules_context)
-            base = self._inject_knowledge(base, section)
-        # Bundle Phase 4D signals into one <self_analysis> section.
+        # Bundle Phase 4 signals into one <self_analysis> section.
         has_insights = bool(insights_context.strip())
         has_pairs = bool(word_pairs_context.strip())
-        if has_insights or has_pairs:
+        has_overcorrections = bool(overcorrection_context.strip())
+        if has_insights or has_pairs or has_overcorrections:
             inner: list[str] = []
             if has_insights:
                 inner.append(
@@ -485,6 +393,11 @@ class PromptBuilder:
                     "Common word-level OCR errors found in training data:\n"
                     + word_pairs_context
                 )
+            if has_overcorrections:
+                inner.append(
+                    "WARNING - Common over-corrections to AVOID (do NOT make these changes):\n"
+                    + overcorrection_context
+                )
             section = (
                 "<self_analysis>\n"
                 + "\n\n".join(inner)
@@ -492,18 +405,11 @@ class PromptBuilder:
             )
             base = self._inject_knowledge(base, section)
 
-        # Additional few-shot examples go before <output_format>.
-        if examples_context.strip():
-            extra = self._COMBINED_EXAMPLES_HEADER.format(
-                examples_context=examples_context
-            )
-            base = self._append_examples(base, extra)
-
         return self._messages(base, ocr_text)
 
     @property
     def combined_prompt_version(self) -> str:
-        """Phase 5 prompt version string."""
+        """Phase 6 prompt version string."""
         return self.COMBINED_PROMPT_VERSION
 
     # -----------------------------------------------------------------------

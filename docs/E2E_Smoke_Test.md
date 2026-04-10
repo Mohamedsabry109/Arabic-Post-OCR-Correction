@@ -1,6 +1,11 @@
 # End-to-End Smoke Test — Test Samples (250)
 
-Tests all 6 phases + automatic prompt engineering using 250 test samples
+> **NOTE (v1.0.0)**: Phase numbering changed. Phases 4A (Rules) and 4B (QALB Few-Shot) were removed.
+> Phase 4C → Phase 5 (CAMeL Validation). Phase 4D → Phase 4 (Self-Reflective). 
+> Old Phase 5/6 Combinations → Phase 6. The steps below reference the old phase names — update
+> commands to use `run_phase4.py` (Phase 4), `run_phase5.py` (Phase 5 CAMeL + Phase 6 combos).
+
+Tests all 7 phases + automatic prompt engineering using 250 test samples
 selected across all PATS-A01 train fonts + KHATT-train. Samples are stratified
 by CER difficulty (correct / easy / medium / hard) with font diversity and
 randomization.

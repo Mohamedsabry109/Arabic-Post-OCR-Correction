@@ -64,7 +64,9 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
-from src.data.knowledge_base import RulesLoader, ArabicRule, QALBLoader, QALBPair
+# NOTE: RulesLoader/QALBLoader removed in phase refactoring.
+# This file (run_phase4.py) handles legacy 4a/4b/4c and will be deleted
+# once Phase 5 (CAMeL) is extracted to its own pipeline.
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
 from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
@@ -1297,6 +1299,7 @@ def process_dataset_validate(
     phase2_dir: Path,
     strategy: str,
     limit: Optional[int],
+    known_overcorrections: set[tuple[str, str]] | None = None,
 ) -> MetricResult:
     """Apply CAMeL revert strategy to Phase 2 corrections for one dataset.
 
@@ -1336,7 +1339,10 @@ def process_dataset_validate(
             ocr_text = r.get("ocr_text", "")
             gt_text  = r.get("gt_text", "")
 
-            revert_result = validator.validate_correction(llm_text, ocr_text, strategy=strategy)
+            revert_result = validator.validate_correction(
+                llm_text, ocr_text, strategy=strategy,
+                known_overcorrections=known_overcorrections,
+            )
             revert_results.append(revert_result)
 
             out_record = {
@@ -1613,6 +1619,31 @@ def run_validate_4c(
 
     validator = WordValidator(analyzer)
 
+    # Load known overcorrections (INTRODUCED pairs from training analysis)
+    known_overcorrections: set[tuple[str, str]] | None = None
+    phase5_cfg = config.get("phase5", {})
+    if phase5_cfg.get("use_known_overcorrections", True):
+        overcorrections_path_str = phase5_cfg.get(
+            "overcorrections_path",
+            "results/phase2-training/analysis/word_pairs_llm_failures.txt",
+        )
+        overcorrections_path = _PROJECT_ROOT / overcorrections_path_str
+        if overcorrections_path.exists():
+            from src.data.knowledge_base import load_introduced_word_pairs
+            introduced = load_introduced_word_pairs(overcorrections_path)
+            if introduced:
+                known_overcorrections = set(introduced)
+                logger.info(
+                    "Loaded %d known overcorrection pairs from %s",
+                    len(known_overcorrections), overcorrections_path,
+                )
+        else:
+            logger.warning(
+                "Known overcorrections file not found: %s — "
+                "proceeding with morphological validation only.",
+                overcorrections_path,
+            )
+
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
 
@@ -1661,6 +1692,7 @@ def run_validate_4c(
                 phase2_dir=phase2_dir,
                 strategy=strategy,
                 limit=limit,
+                known_overcorrections=known_overcorrections,
             )
             all_corrected[ds_key] = metric_result
 
@@ -2026,18 +2058,21 @@ def print_summary(
 def main() -> None:
     args = parse_args()
 
+    # Phase 4A (Rules) and 4B (Few-Shot QALB) were removed in the phase refactoring.
+    # Only 4C (CAMeL Validation) is supported.
+    if args.sub_phase in ("4a", "4b"):
+        print(
+            f"ERROR: Phase {args.sub_phase.upper()} was removed in the phase refactoring. "
+            "Only --sub-phase 4c (CAMeL Validation) is supported.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Validate mode/sub-phase compatibility
     if args.sub_phase == "4c" and args.mode in ("export", "analyze"):
         print(
             f"ERROR: --sub-phase 4c does not support --mode {args.mode}. "
             "Use --mode validate for Phase 4C.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    if args.sub_phase in ("4a", "4b") and args.mode == "validate":
-        print(
-            f"ERROR: --sub-phase {args.sub_phase} does not support --mode validate. "
-            "Use --mode export or --mode analyze.",
             file=sys.stderr,
         )
         sys.exit(1)

@@ -20,10 +20,9 @@ def builder() -> PromptBuilder:
 
 OCR_TEXT = "النص المدخل للاختبار"
 CONFUSION_CTX = "ي → ب (300 مرة)"
-RULES_CTX = "التاء المربوطة تُكتب هكذا"
-EXAMPLES_CTX = "مثال: خطأ → صواب"
 INSIGHTS_CTX = "Weakness: dot confusion fix_rate=0.30"
 WORD_PAIRS_CTX = "خطأ > صواب"
+OVERCORRECTION_CTX = "قال > فقال (10 مرات)"
 
 
 # ---------------------------------------------------------------------------
@@ -108,58 +107,17 @@ class TestBuildOcrAware:
 
 
 # ---------------------------------------------------------------------------
-# build_rule_augmented
-# ---------------------------------------------------------------------------
-
-class TestBuildRuleAugmented:
-    def test_returns_two_messages(self, builder):
-        msgs = builder.build_rule_augmented(OCR_TEXT, RULES_CTX)
-        _assert_chat_format(msgs)
-
-    def test_rules_context_in_system(self, builder):
-        msgs = builder.build_rule_augmented(OCR_TEXT, RULES_CTX)
-        assert RULES_CTX in _system_text(msgs)
-
-    def test_empty_rules_falls_back_to_zero_shot(self, builder):
-        zero = builder.build_zero_shot(OCR_TEXT)
-        rule = builder.build_rule_augmented(OCR_TEXT, "")
-        assert rule == zero
-
-    def test_prompt_version_property(self, builder):
-        assert builder.rules_prompt_version == "p4av2"
-
-
-# ---------------------------------------------------------------------------
-# build_few_shot
-# ---------------------------------------------------------------------------
-
-class TestBuildFewShot:
-    def test_returns_two_messages(self, builder):
-        msgs = builder.build_few_shot(OCR_TEXT, EXAMPLES_CTX)
-        _assert_chat_format(msgs)
-
-    def test_examples_context_in_system(self, builder):
-        msgs = builder.build_few_shot(OCR_TEXT, EXAMPLES_CTX)
-        assert EXAMPLES_CTX in _system_text(msgs)
-
-    def test_empty_examples_falls_back_to_zero_shot(self, builder):
-        zero = builder.build_zero_shot(OCR_TEXT)
-        fs = builder.build_few_shot(OCR_TEXT, "")
-        assert fs == zero
-
-    def test_prompt_version_property(self, builder):
-        assert builder.few_shot_prompt_version == "p4bv2"
-
-
-# ---------------------------------------------------------------------------
 # build_combined
 # ---------------------------------------------------------------------------
 
 class TestBuildCombined:
     def test_returns_two_messages_all_contexts(self, builder):
         msgs = builder.build_combined(
-            OCR_TEXT, CONFUSION_CTX, RULES_CTX, EXAMPLES_CTX,
-            insights_context=INSIGHTS_CTX, word_pairs_context=WORD_PAIRS_CTX,
+            OCR_TEXT,
+            confusion_context=CONFUSION_CTX,
+            insights_context=INSIGHTS_CTX,
+            word_pairs_context=WORD_PAIRS_CTX,
+            overcorrection_context=OVERCORRECTION_CTX,
         )
         _assert_chat_format(msgs)
 
@@ -169,38 +127,38 @@ class TestBuildCombined:
 
     def test_all_non_empty_contexts_included(self, builder):
         msgs = builder.build_combined(
-            OCR_TEXT, CONFUSION_CTX, RULES_CTX, EXAMPLES_CTX,
-            insights_context=INSIGHTS_CTX, word_pairs_context=WORD_PAIRS_CTX,
+            OCR_TEXT,
+            confusion_context=CONFUSION_CTX,
+            insights_context=INSIGHTS_CTX,
+            word_pairs_context=WORD_PAIRS_CTX,
+            overcorrection_context=OVERCORRECTION_CTX,
         )
         system = _system_text(msgs)
         assert CONFUSION_CTX in system
-        assert RULES_CTX in system
-        assert EXAMPLES_CTX in system
         assert INSIGHTS_CTX in system
         assert WORD_PAIRS_CTX in system
+        assert OVERCORRECTION_CTX in system
 
     def test_empty_contexts_excluded(self, builder):
         msgs = builder.build_combined(
             OCR_TEXT,
             confusion_context=CONFUSION_CTX,
-            rules_context="",
-            examples_context="",
             insights_context="",
             word_pairs_context="",
+            overcorrection_context="",
         )
         system = _system_text(msgs)
         assert CONFUSION_CTX in system
-        assert RULES_CTX not in system
-        assert EXAMPLES_CTX not in system
+        assert INSIGHTS_CTX not in system
 
     def test_all_empty_falls_back_to_zero_shot(self, builder):
         zero = builder.build_zero_shot(OCR_TEXT)
-        combined = builder.build_combined(OCR_TEXT, "", "", "", "", "")
+        combined = builder.build_combined(OCR_TEXT, "", "", "", "")
         assert combined == zero
 
     def test_whitespace_only_contexts_treated_as_empty(self, builder):
         zero = builder.build_zero_shot(OCR_TEXT)
-        combined = builder.build_combined(OCR_TEXT, "  ", "\t", "  \n  ", "", "")
+        combined = builder.build_combined(OCR_TEXT, "  ", "\t", "  \n  ", "")
         assert combined == zero
 
     def test_single_context_confusion_only(self, builder):
@@ -213,40 +171,17 @@ class TestBuildCombined:
         system = _system_text(msgs)
         assert INSIGHTS_CTX in system
 
-    def test_context_order_confusion_before_rules(self, builder):
+    def test_confusion_before_self_analysis(self, builder):
         msgs = builder.build_combined(
-            OCR_TEXT, confusion_context=CONFUSION_CTX, rules_context=RULES_CTX
+            OCR_TEXT,
+            confusion_context=CONFUSION_CTX,
+            insights_context=INSIGHTS_CTX,
         )
         system = _system_text(msgs)
-        assert system.index(CONFUSION_CTX) < system.index(RULES_CTX)
-
-    def test_context_order_rules_before_examples(self, builder):
-        msgs = builder.build_combined(
-            OCR_TEXT, rules_context=RULES_CTX, examples_context=EXAMPLES_CTX
-        )
-        system = _system_text(msgs)
-        assert system.index(RULES_CTX) < system.index(EXAMPLES_CTX)
-
-    def test_pair_confusion_rules(self, builder):
-        msgs = builder.build_combined(
-            OCR_TEXT, confusion_context=CONFUSION_CTX, rules_context=RULES_CTX
-        )
-        system = _system_text(msgs)
-        assert CONFUSION_CTX in system
-        assert RULES_CTX in system
-        assert EXAMPLES_CTX not in system
-
-    def test_pair_rules_fewshot(self, builder):
-        msgs = builder.build_combined(
-            OCR_TEXT, rules_context=RULES_CTX, examples_context=EXAMPLES_CTX
-        )
-        system = _system_text(msgs)
-        assert RULES_CTX in system
-        assert EXAMPLES_CTX in system
-        assert CONFUSION_CTX not in system
+        assert system.index(CONFUSION_CTX) < system.index(INSIGHTS_CTX)
 
     def test_prompt_version_property(self, builder):
-        assert builder.combined_prompt_version == "p5v1"
+        assert builder.combined_prompt_version == "p6v1"
 
     def test_combined_system_differs_from_zero_shot(self, builder):
         zero = _system_text(builder.build_zero_shot(OCR_TEXT))

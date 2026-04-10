@@ -41,19 +41,6 @@ PLACEHOLDER_CONFUSION = (
     "- يحذف (ء) في 6% من الحالات"
 )
 
-PLACEHOLDER_RULES = (
-    "قواعد إملائية عربية:\n"
-    "- التاء المربوطة (ة) والتاء المفتوحة (ت): تكتب التاء مربوطة في آخر الاسم المفرد المؤنث\n"
-    "- الهمزة: همزة القطع (أ، إ، ؤ، ئ) وهمزة الوصل (ا)\n"
-    "- الألف المقصورة (ى) والياء (ي): تكتب الألف مقصورة في آخر الفعل الثلاثي"
-)
-
-PLACEHOLDER_EXAMPLES = (
-    "1. المدخل: الحكومه قررت تطوبر التعليم\n"
-    "   المخرج: الحكومة قررت تطوير التعليم\n"
-    "2. المدخل: فى المحافظه الشماليه\n"
-    "   المخرج: في المحافظة الشمالية"
-)
 
 PLACEHOLDER_INSIGHTS = (
     "نقاط القوة:\n"
@@ -98,42 +85,6 @@ def _load_real_confusion(dataset: str | None) -> str | None:
                     return loader.format_for_prompt(pairs, n=10)
             except Exception:
                 pass
-    return None
-
-
-def _load_real_rules() -> str | None:
-    """Try to load real rules context."""
-    from src.data.knowledge_base import RulesLoader
-
-    loader = RulesLoader()
-    try:
-        rules = loader.load()
-        if rules:
-            return loader.format_for_prompt(rules, style="compact_arabic")
-    except Exception:
-        pass
-    return None
-
-
-def _load_real_qalb() -> str | None:
-    """Try to load real QALB few-shot examples."""
-    from src.data.knowledge_base import QALBLoader
-
-    qalb_root = PROJECT_ROOT / "data" / "QALB-0.9.1-Dec03-2021-SharedTasks" / "QALB-0.9.1-Dec03-2021-SharedTasks"
-    if not qalb_root.exists():
-        return None
-    try:
-        loader = QALBLoader(qalb_root)
-        pairs = loader.load(splits=["train"], years=["2014"])
-        if pairs:
-            selected = loader.select(
-                pairs, n=5, strategy="diverse", seed=42,
-                max_length=300, min_length=10, max_words_changed=15,
-            )
-            if selected:
-                return loader.format_for_prompt(selected)
-    except Exception:
-        pass
     return None
 
 
@@ -239,26 +190,6 @@ def preview_phase3(
     )
 
 
-def preview_phase4a(pb: PromptBuilder, full: bool, **_: object) -> None:
-    real = _load_real_rules()
-    ctx = real if real else PLACEHOLDER_RULES
-    msgs = pb.build_rule_augmented(SAMPLE_OCR_TEXT, ctx)
-    _print_messages(
-        msgs, "Phase 4A: Rule-Augmented", pb.rules_prompt_version, full,
-        real_data=real is not None,
-    )
-
-
-def preview_phase4b(pb: PromptBuilder, full: bool, **_: object) -> None:
-    real = _load_real_qalb()
-    ctx = real if real else PLACEHOLDER_EXAMPLES
-    msgs = pb.build_few_shot(SAMPLE_OCR_TEXT, ctx)
-    _print_messages(
-        msgs, "Phase 4B: Few-Shot (QALB)", pb.few_shot_prompt_version, full,
-        real_data=real is not None,
-    )
-
-
 def preview_phase4d(pb: PromptBuilder, full: bool, **_: object) -> None:
     real_insights = _load_real_insights()
     real_pairs = _load_real_word_pairs()
@@ -276,24 +207,20 @@ def preview_phase5(
     pb: PromptBuilder, full: bool, dataset: str | None = None, **_: object,
 ) -> None:
     real_conf = _load_real_confusion(dataset)
-    real_rules = _load_real_rules()
-    real_qalb = _load_real_qalb()
     real_insights = _load_real_insights()
     real_pairs = _load_real_word_pairs()
 
     msgs = pb.build_combined(
         SAMPLE_OCR_TEXT,
         confusion_context=real_conf or PLACEHOLDER_CONFUSION,
-        rules_context=real_rules or PLACEHOLDER_RULES,
-        examples_context=real_qalb or PLACEHOLDER_EXAMPLES,
         insights_context=real_insights or PLACEHOLDER_INSIGHTS,
         word_pairs_context=real_pairs or PLACEHOLDER_WORD_PAIRS,
     )
     has_real = any(x is not None for x in [
-        real_conf, real_rules, real_qalb, real_insights, real_pairs,
+        real_conf, real_insights, real_pairs,
     ])
     _print_messages(
-        msgs, "Phase 5: Combined (all contexts)",
+        msgs, "Phase 6: Combined (all contexts)",
         pb.combined_prompt_version, full, real_data=has_real,
     )
 
@@ -315,10 +242,8 @@ def preview_phase7(pb: PromptBuilder, full: bool, **_: object) -> None:
 PHASES: dict[str, callable] = {
     "2":  preview_phase2,
     "3":  preview_phase3,
-    "4a": preview_phase4a,
-    "4b": preview_phase4b,
-    "4d": preview_phase4d,
-    "5":  preview_phase5,
+    "4":  preview_phase4d,
+    "6":  preview_phase5,
     "7":  preview_phase7,
 }
 

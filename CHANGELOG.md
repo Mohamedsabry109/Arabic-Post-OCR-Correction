@@ -6,6 +6,45 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-09 — Phase refactoring: remove 4A/4B, enhance 3/4/5, redesign combos
+
+### Removed
+- **Phase 4A (Rule-Augmented)**: rules duplicated base prompt, no measurable gain
+- **Phase 4B (Few-Shot QALB)**: QALB corpus teaches grammar not OCR correction
+- `ArabicRule`, `RulesLoader`, `QALBPair`, `QALBLoader` from `src/data/knowledge_base.py`
+- `build_rule_augmented()`, `build_few_shot()` from `src/core/prompt_builder.py`
+- `rule_augmented`, `few_shot` dispatch from `scripts/infer.py`
+- Related tests from `test_prompt_builder.py`, `test_knowledge_base.py`
+- Old 10-combo structure from Phase 5/6 (pair_conf_rules, abl_no_*, full_prompt, etc.)
+
+### Changed
+- **Phase 3 (OCR-Aware)**: enhanced with training cross-reference
+  - `ConfusionMatrixLoader.filter_by_llm_failures()` filters confusion pairs by LLM failure data
+  - `format_word_examples_for_prompt()` adds concrete word-level failure examples
+  - Config: `phase3.use_training_failures`, `phase3.training_failures_path`
+- **Phase 4 (Self-Reflective)**: reads pre-computed training artifacts (no circular re-analysis)
+  - Loads UNFIXED/INTRODUCED sections from `word_pairs_llm_failures.txt`
+  - New `overcorrection_context` warns LLM about known bad corrections
+  - `PromptBuilder.build_self_reflective()` accepts `overcorrection_context` param
+  - Config: `phase4.training_artifacts_dir`, `phase4.overcorrection_n`
+- **Phase 5 (CAMeL Validation)**: enhanced with known-overcorrection revert
+  - `WordValidator.validate_correction()` accepts `known_overcorrections` set
+  - Reverts known bad LLM corrections BEFORE morphological checks
+  - Fixed position-indexed revert bug (was keyed by word, not position)
+- **Phase 6 (Combinations)**: redesigned from 10+ combos to 3+1
+  - Inference combos: `conf_only`, `self_only`, `conf_self`
+  - CAMeL combo: `best_camel` (best inference combo + CAMeL post-processing)
+  - Updated summarize: simplified ablation, synergy analysis for 2-component structure
+- **New phase numbering**: 1, 2, 3, 4, 5, 6, 7 (was 1, 2, 3, 4A-4D, 5, 7)
+- `CLAUDE.md`: updated to 7-phase structure
+- `run_all.py`: updated phase dispatch, removed 4A/4B entries
+- `configs/config.yaml`: removed `data.qalb`/`data.rules`, old phase4 sections
+
+### Added
+- `load_unfixed_word_pairs()`, `load_introduced_word_pairs()` in `knowledge_base.py`
+- `format_word_examples_for_prompt()`, `format_overcorrection_warnings()` in `knowledge_base.py`
+- `ConfusionMatrixLoader._char_confusions_from_word_pair()` for difflib-based extraction
+
 ## [0.9.0] - 2026-03-26 — Rename Phase 6 to Phase 5; add Phase 7 (DSPy)
 
 ### Added

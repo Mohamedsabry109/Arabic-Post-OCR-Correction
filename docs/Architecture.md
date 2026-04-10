@@ -12,15 +12,15 @@
 |-------|----------------------|------------|
 | Phase 1 | What errors does Qaari make? How severe? | N/A (No LLM) |
 | Phase 2 | Can vanilla LLM correct Arabic OCR errors? | vs Phase 1 (OCR baseline) |
-| Phase 3 | Does OCR-specific error knowledge help? | vs Phase 2 (isolated) |
-| Phase 4A | Do explicit linguistic rules help? | vs Phase 2 (isolated) |
-| Phase 4B | Do correction examples help? | vs Phase 2 (isolated) |
-| Phase 4C | Does morphological validation help? | vs Phase 2 (isolated) |
-| Phase 4D | Do the LLM's own error patterns help (self-reflection)? | vs Phase 2 (isolated) |
-| Phase 5 | Does corpus grounding help? | vs Phase 2 (isolated) |
-| Phase 5 | What combination is optimal? What contributes? | Combinations + ablation |
+| Phase 3 | Does OCR-specific error knowledge help? (enhanced: filtered by LLM failures) | vs Phase 2 (isolated) |
+| Phase 4 | Do error patterns + overcorrection warnings help? (self-reflective) | vs Phase 2 (isolated) |
+| Phase 5 | Does morphological post-processing help? (enhanced: known-overcorrection revert) | vs Phase 2 (isolated) |
+| Phase 6 | What combination is optimal? What contributes? | conf_only, self_only, conf_self, best_camel |
+| Phase 7 | Can automated prompt optimization beat hand-crafted prompts? | vs Phase 2 |
 
-**Key Design Principle**: Phases 3-5 (including 4A–4D) are **isolated experiments** comparing to Phase 2 baseline. This measures each knowledge type's independent contribution before combining them in Phase 5.
+**Key Design Principle**: Phases 3–5 are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests 3 inference combos (confusion only, self-reflective only, both) plus 1 CAMeL combo. Phase 7 uses DSPy to automatically discover optimal prompts.
+
+**Removed phases**: Phase 4A (Rules) and Phase 4B (Few-Shot QALB) were removed — rules duplicated the base prompt, QALB taught grammar not OCR correction.
 
 ### 1.3 Datasets
 
@@ -31,13 +31,11 @@
 
 ### 1.4 Knowledge Sources
 
-| Source | Contents | How We Use It |
-|--------|----------|---------------|
-| **Confusion Matrix** | Qaari's character errors | Tell LLM what to watch for |
-| **QALB Corpus** | Human error→correction pairs | Few-shot examples |
-| **Arabic Rules** | Orthographic rules (hamza, taa marbuta, etc.) | Inject into prompts |
-| **OpenITI Corpus** | Large Arabic text corpus | RAG retrieval + vocabulary |
-| **CAMeL Tools** | Morphological analyzer, disambiguator | Validate corrections, error categorization |
+| Source | Contents | How We Use It | Used In |
+|--------|----------|---------------|---------|
+| **Confusion Matrix** | Qaari's character errors (Phase 1 output) | Tell LLM what to watch for | Phase 3, 6 |
+| **Training Artifacts** | LLM failure word pairs + sample classification | Overcorrection warnings, failure context | Phase 3, 4, 5, 6 |
+| **CAMeL Tools** | Morphological analyzer, disambiguator | Validate corrections, error categorization | Phase 1, 5, 6 |
 
 ### 1.5 CAMeL Tools Integration
 
@@ -60,8 +58,8 @@
 
 **Integration Points:**
 1. **Phase 1**: Enhanced error categorization (morphologically invalid vs valid-but-wrong)
-2. **Phase 4A**: Morphology-aware rule application
-3. **Phase 5**: Post-LLM validation layer (optional)
+2. **Phase 5**: Post-LLM validation with known-overcorrection revert strategy
+3. **Phase 6**: CAMeL combo (`best_camel`) applies morphological post-processing on best inference combo
 
 ---
 
@@ -78,28 +76,33 @@
 │         │                                                                             │
 │         ▼                                                                             │
 │  ┌─────────────┐                                                                     │
-│  │   PHASE 2   │  Zero-Shot LLM ═══════════════════════════════════════════╗         │
-│  │  BASELINE   │  → BASELINE FOR ALL COMPARISONS                           ║         │
-│  └──────┬──────┘                                                           ║         │
-│         │                                                                  ║         │
-│         ├────────────────┬────────────────┬────────────────┬───────────────╫───┐     │
-│         │                │                │                │               ║   │     │
-│         ▼                ▼                ▼                ▼               ▼   ▼     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐  │
-│  │ PHASE 3  │  │ PHASE 4A │  │ PHASE 4B │  │ PHASE 4C │  │ PHASE 4D │  │ PHASE 5  │  │
-│  │Confusion │  │  Rules   │  │ Few-Shot │  │  CAMeL   │  │  Self-   │  │   RAG    │  │
-│  │ Matrix   │  │(Symbolic)│  │  (QALB)  │  │ (Morph.) │  │Reflective│  │(OpenITI) │  │
-│  │vs Ph2 ▲  │  │vs Ph2 ▲  │  │vs Ph2 ▲  │  │vs Ph2 ▲  │  │vs Ph2 ▲  │  │vs Ph2 ▲  │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘  │
-│       │             │             │             │             │             │          │
-│       └─────────────┴─────────────┴─────────────┴─────────────┴─────────────┘         │
-│                                          │                                            │
-│                                          ▼                                            │
-│                               ┌─────────────────────┐                                │
-│                               │      PHASE 6        │                                │
-│                               │  Combinations +     │                                │
-│                               │  Ablation Study     │                                │
-│                               └─────────────────────┘                                │
+│  │   PHASE 2   │  Zero-Shot LLM ════════════════════════════════════════╗            │
+│  │  BASELINE   │  → BASELINE FOR ALL COMPARISONS                        ║            │
+│  └──────┬──────┘                                                        ║            │
+│         │                                                               ║            │
+│         ├─────────────────────┬─────────────────────┐                  ║            │
+│         │                     │                     │                  ║            │
+│         ▼                     ▼                     ▼                  ▼            │
+│  ┌──────────────┐  ┌──────────────────┐  ┌──────────────┐  ┌─────────────────┐     │
+│  │   PHASE 3    │  │    PHASE 4       │  │   PHASE 5    │  │    PHASE 7      │     │
+│  │  OCR-Aware   │  │  Self-Reflective │  │    CAMeL     │  │  DSPy Prompt    │     │
+│  │ (+confusion  │  │ (+error patterns │  │  Validation  │  │  Optimization   │     │
+│  │  +LLM fails) │  │  +overcorrection │  │ (+known-bad  │  │  (auto-tuned)   │     │
+│  │  vs Ph2 ▲   │  │   warnings)      │  │   revert)    │  │  vs Ph2 ▲      │     │
+│  └──────┬───────┘  │  vs Ph2 ▲       │  │  vs Ph2 ▲   │  └─────────────────┘     │
+│         │          └────────┬─────────┘  └──────┬───────┘                          │
+│         │                   │                   │                                   │
+│         └───────────────────┴───────────────────┘                                   │
+│                                     │                                               │
+│                                     ▼                                               │
+│                          ┌─────────────────────┐                                   │
+│                          │      PHASE 6        │                                   │
+│                          │   Combinations:     │                                   │
+│                          │  conf_only          │                                   │
+│                          │  self_only          │                                   │
+│                          │  conf_self          │                                   │
+│                          │  best_camel         │                                   │
+│                          └─────────────────────┘                                   │
 │                                                                                       │
 │  Legend: ▲ = Isolated comparison to Phase 2 baseline                                 │
 │                                                                                       │
@@ -108,10 +111,10 @@
 
 ### Design Principles
 
-1. **Phase 2 is the hub**: All knowledge-enhanced phases (3-5, including 4A–4D) compare to Phase 2
-2. **Isolated experiments**: Each phase tests ONE knowledge addition
-3. **Incremental complexity**: Simple injection (3,4A) → Examples (4B) → Post-processing (4C) → Self-reflection (4D) → Retrieval (5)
-4. **Final synthesis**: Phase 5 combines all and measures individual contributions
+1. **Phase 2 is the hub**: All knowledge-enhanced phases (3–5) compare to Phase 2 baseline
+2. **Isolated experiments**: Each of phases 3–5 tests ONE knowledge addition in isolation
+3. **Training artifacts**: Phases 3, 4, 5, 6 read pre-computed artifacts from `results/phase2-training/analysis/` — no circular re-analysis
+4. **Final synthesis**: Phase 6 tests 3 inference combos + 1 CAMeL combo to find optimal configuration
 
 ---
 
@@ -180,7 +183,7 @@ results/phase1/
 ## Phase 2: Zero-Shot LLM Correction (BASELINE)
 
 > **CRITICAL**: Phase 2 is the **baseline for ALL subsequent comparisons**.
-> Phases 3, 4A, 4B, and 5 are isolated experiments comparing to Phase 2.
+> Phases 3, 4, and 5 are isolated experiments comparing to Phase 2.
 
 ### Research Question
 **Can a vanilla LLM correct Arabic OCR errors without task-specific guidance?**
@@ -226,32 +229,33 @@ results/phase2/
 
 ## Phase 3: OCR-Aware Prompting (Confusion Matrix Injection)
 
-> **Comparison**: Phase 3 vs Phase 2 (isolated effect of confusion matrix)
+> **Comparison**: Phase 3 vs Phase 2 (isolated effect of confusion matrix + LLM failure context)
 
 ### Research Question
 **Does telling the LLM about Qaari's specific error patterns improve correction?**
 
-### Hypothesis
-If the LLM knows "Qaari often mistakes ب for ت", it can pay special attention to these cases.
+### Enhancement (v1.0)
+Phase 3 is enhanced with training cross-reference:
+- `ConfusionMatrixLoader.filter_by_llm_failures()` filters confusion pairs to those where Phase 2 also failed
+- `format_word_examples_for_prompt()` adds concrete word-level failure examples
+- Config: `phase3.use_training_failures`, `phase3.training_failures_path`
 
 ### Prompt Design
 ```
 System: أنت مصحح نصوص عربية متخصص في تصحيح مخرجات نظام Qaari للتعرف الضوئي.
 
-أخطاء Qaari الشائعة:
+أخطاء Qaari الشائعة (مُصفّاة بحالات فشل النموذج):
 - يخلط بين ب و ت و ث (نقط)
 - يخلط بين ة و ه
-- يخلط بين أ و ا و إ
-[... top N confusions from Phase 1 ...]
+[... top N confusions filtered by LLM failures ...]
+
+أمثلة كلمات لم يُصحَّح فيها بشكل صحيح:
+[... word-level failure examples from training ...]
 
 صحح النص التالي مع الانتباه لهذه الأخطاء:
 
 User: [OCR text]
 ```
-
-### Variables to Test
-- Number of confusions to include (5, 10, 20)
-- Format of confusion information (list, examples, statistics)
 
 ### Outputs
 ```
@@ -259,440 +263,144 @@ results/phase3/
 ├── corrected/
 ├── metrics.json
 ├── comparison_vs_phase2.json  # ISOLATED comparison to Phase 2
-├── confusion_impact.json      # Which confusions were addressed
 └── report.md
 ```
 
 ### Research Value
-- **Measures isolated effect of OCR-specific knowledge**
-- Answers: Does knowing Qaari's error patterns help the LLM?
-- Comparison: Phase 3 CER vs Phase 2 CER
+- **Measures isolated effect of OCR-specific knowledge cross-referenced with LLM failures**
+- Answers: Does knowing where both Qaari AND the LLM fail help correction?
 
 ---
 
-## Phase 4: Linguistic Knowledge Enhancement
+## Phase 4: Self-Reflective Prompting
 
-> **Comparisons**:
-> - Phase 4A vs Phase 2 (isolated effect of rules)
-> - Phase 4B vs Phase 2 (isolated effect of examples)
-> - Phase 4A vs Phase 4B (symbolic vs data-driven approaches)
+> **Comparison**: Phase 4 vs Phase 2 (isolated effect of self-reflective error context)
 
 ### Research Question
-**Does linguistic knowledge improve LLM correction? Which type works better?**
+**Do error patterns and overcorrection warnings from training data help the LLM avoid repeating mistakes?**
 
-### Sub-Experiments
+### Design
+Phase 4 reads pre-computed training artifacts — no circular re-analysis:
+- Reads `results/phase2-training/analysis/word_pairs_llm_failures.txt` (UNFIXED + INTRODUCED sections)
+- Reads `results/phase2-training/analysis/sample_classification.json`
+- Builds `overcorrection_context` from INTRODUCED word pairs (words the LLM wrongly changed)
+- Config: `phase4.training_artifacts_dir`, `phase4.overcorrection_n`
 
-#### Phase 4A: Arabic Orthographic Rules (Symbolic Approach)
-
-Inject explicit Arabic spelling rules into the prompt.
-
-> **Comparison**: Phase 4A vs Phase 2 — Does telling the LLM rules help?
-
-**Rules to Include:**
-1. همزة القطع vs همزة الوصل (Hamza types)
-2. التاء المربوطة vs الهاء (Taa Marbuta vs Ha)
-3. الألف المقصورة vs الياء (Alef Maksura vs Ya)
-4. ال الشمسية والقمرية (Sun/Moon letters)
-5. التنوين (Tanwin rules)
-
-**Prompt Design:**
+### Prompt Design
 ```
-System: أنت مصحح نصوص عربية. راعِ القواعد الإملائية التالية:
+System: أنت مصحح نصوص عربية.
 
-1. همزة القطع تُكتب في أول الأفعال الرباعية: أَكْرَمَ، أَحْسَنَ
-2. همزة الوصل تُكتب في أول الأفعال الخماسية والسداسية: استَغْفَرَ، انْطَلَقَ
-3. التاء المربوطة (ة) تُنطق هاءً عند الوقف: مدرسة، جامعة
-[... more rules ...]
+أخطاء شائعة لم يُصلَّح فيها في التدريب (UNFIXED):
+[... word pairs the LLM failed to fix ...]
+
+تحذير: تجنب هذه التصحيحات الخاطئة (INTRODUCED - كلمات غيّرت بشكل خاطئ):
+[... word pairs the LLM wrongly introduced ...]
 
 صحح النص التالي:
 
 User: [OCR text]
 ```
 
-#### Phase 4B: QALB Few-Shot Examples (Data-Driven Approach)
-
-Use real error-correction pairs from QALB corpus as few-shot examples.
-
-> **Comparison**: Phase 4B vs Phase 2 — Do correction examples help?
-
-**Process:**
-1. Extract error-correction pairs from QALB
-2. Categorize by error type
-3. Select diverse, representative examples
-4. Include in prompt as demonstrations
-
-**Prompt Design:**
-```
-System: أنت مصحح نصوص عربية. إليك أمثلة على التصحيح:
-
-خطأ: انا ذاهب الى المدرسه
-صحيح: أنا ذاهب إلى المدرسة
-
-خطأ: هذة الكتاب جميل
-صحيح: هذا الكتاب جميل
-
-[... more examples ...]
-
-صحح النص التالي بنفس الطريقة:
-
-User: [OCR text]
-```
-
-**Variables to Test:**
-- Number of examples (1, 3, 5, 10)
-- Selection strategy (random vs error-type-matched)
-
 ### Outputs
 ```
 results/phase4/
-├── phase4a_rules/
-│   ├── corrected/
-│   ├── metrics.json
-│   ├── comparison_vs_phase2.json  # ISOLATED comparison
-│   └── report.md
-├── phase4b_fewshot/
-│   ├── corrected/
-│   ├── metrics.json
-│   ├── comparison_vs_phase2.json  # ISOLATED comparison
-│   ├── example_impact.json        # Which examples helped
-│   └── report.md
-├── comparison_4a_vs_4b.json       # Rules vs Examples
+├── corrected/
+├── metrics.json
+├── comparison_vs_phase2.json  # ISOLATED comparison to Phase 2
 └── report.md
 ```
 
 ### Research Value
-- **Measures isolated effect of linguistic knowledge**
-- **Compares symbolic (rules) vs data-driven (examples) approaches**
-- Answers: Which type of linguistic knowledge helps more?
-- Note: QALB has human typing errors, not OCR errors — interesting to see if it transfers
-
-#### Phase 4C: CAMeL Morphological Validation (Post-Processing Approach)
-
-Apply morphological validation as a post-processing step after zero-shot LLM correction.
-
-> **Comparison**: Phase 4C vs Phase 2 — Does morphological validation alone improve results?
-
-**Rationale:**
-Unlike Phases 3, 4A, 4B (prompt modifications), CAMeL validation is applied **after** the LLM generates output. This tests whether symbolic validation can catch and correct LLM errors.
-
-**Process:**
-1. Run zero-shot LLM correction (same as Phase 2)
-2. For each word in LLM output:
-   - Check if morphologically valid using CAMeL analyzer
-   - If invalid, attempt correction:
-     - Option A: Flag for human review
-     - Option B: Use CAMeL suggestions
-     - Option C: Revert to OCR original (if it was valid)
-3. Produce validated output
-
-**Validation Strategies:**
-| Strategy | Description | Trade-off |
-|----------|-------------|-----------|
-| Flag only | Mark invalid words | Conservative, no new errors |
-| Suggest | Use CAMeL's suggestions | May improve, may introduce errors |
-| Revert | Use original if LLM broke it | Prevents LLM hallucination |
-
-**Outputs:**
-```
-results/phase4/
-├── phase4c_camel/
-│   ├── corrected/
-│   ├── metrics.json
-│   ├── comparison_vs_phase2.json  # ISOLATED comparison
-│   ├── validation_stats.json      # % words validated, rejected, etc.
-│   └── report.md
-```
-
-**Research Value:**
-- **Tests morphological validation in isolation** (consistent with Phases 3-5 design)
-- Answers: Can symbolic post-processing improve neural correction?
-- Compares: Prompt-based knowledge (3, 4A, 4B) vs post-processing (4C)
-- Provides baseline for CAMeL's contribution before Phase 5 combines everything
-
-#### Phase 4D: Self-Reflective Prompting
-
-Inject the LLM's own known failure patterns (derived from training-split predictions) into the validation prompt.
-
-> **Comparison**: Phase 4D vs Phase 2 — Does self-knowledge of failure patterns improve correction?
-
-**Rationale:**
-Unlike Phases 3, 4A, 4B (external knowledge), Phase 4D feeds the model information about its *own* systematic errors on training data. This is a form of meta-learning without fine-tuning.
-
-**Process:**
-1. Run Phase 2 (or any source phase) on **training splits** to get corrected texts where GT is available
-2. Run `LLMErrorAnalyzer` to compare LLM outputs vs GT, computing per-ErrorType fix_rate and introduction_rate
-3. Aggregate by dataset type (PATS-A01, KHATT) to get statistically robust insight
-4. Format weaknesses (low fix_rate) and over-corrections (high introduction_rate) as Arabic text
-5. Inject as self-reflective context into validation-split prompts
-
-**Prompt Design:**
-```
-System: أنت مصحح نصوص عربية متخصص. بناءً على تحليل أخطائك السابقة في تصحيح نصوص عربية
-مشابهة، إليك ملاحظات مهمة لتحسين أدائك:
-
-{insights_context}
-
-صحح النص التالي مع مراعاة هذه الملاحظات.
-أعد النص المصحح فقط بدون أي شرح أو تعليق إضافي.
-
-User: [OCR text]
-```
-
-**Outputs:**
-```
-results/phase4d/
-├── insights/
-│   ├── PATS-A01_insights.json   # Per-ErrorType fix/intro rates (pooled across fonts)
-│   └── KHATT_insights.json      # KHATT-specific insights
-├── inference_input.jsonl        # Val-split export with self-reflective prompts
-├── corrections.jsonl            # Inference output (place here before analyze)
-└── {dataset_name}/
-    ├── metrics.json
-    ├── comparison_vs_phase2.json
-    └── error_changes.json
-```
-
-**Research Value:**
-- **Tests self-reflective prompting in isolation** (consistent with Phase 4A/4B/4C design)
-- Novel application: using the model's own error statistics to improve future corrections
-- Answers: Can a model improve by knowing where it previously failed?
-- Implemented in `pipelines/run_phase4d.py` with prompt version `p4dv1`
+- **Tests self-reflective prompting**: Can a model improve by knowing its own failure patterns?
+- Novel application: using training-phase error statistics to guide inference
+- Pipeline: `pipelines/run_phase4.py`
 
 ---
 
-## Phase 5: Retrieval-Augmented Generation (RAG)
+## Phase 5: CAMeL Morphological Validation
 
-> **Comparison**: Phase 5 vs Phase 2 (isolated effect of corpus grounding)
+> **Comparison**: Phase 5 vs Phase 2 (isolated effect of morphological post-processing)
 
 ### Research Question
-**Does grounding in a large Arabic corpus improve OCR correction?**
+**Does morphological validation with known-overcorrection revert improve OCR correction?**
 
-### Hypothesis
-If the LLM sees similar correct sentences from OpenITI, it has better context for correction.
+### Enhancement (v1.0)
+Phase 5 is enhanced beyond simple morphological validation:
+- `WordValidator.validate_correction()` accepts `known_overcorrections` set
+- Reverts known bad LLM corrections BEFORE morphological checks
+- This prevents CAMeL from accepting incorrect but morphologically valid words
+- Fixed position-indexed revert bug (was keyed by word, not position)
 
 ### Process
-
-#### 5.1 Build Retrieval Index
-1. Process OpenITI corpus
-2. Split into sentences/chunks
-3. Create embeddings (using Arabic embedding model)
-4. Build vector index (FAISS or similar)
-
-#### 5.2 Retrieval-Augmented Correction
-1. For each OCR text, retrieve top-K similar sentences from OpenITI
-2. Include retrieved sentences in prompt as context
-3. LLM corrects with awareness of similar correct text
-
-### Prompt Design
-```
-System: أنت مصحح نصوص عربية.
-
-نصوص مشابهة صحيحة من المكتبة العربية:
-1. [Retrieved sentence 1]
-2. [Retrieved sentence 2]
-3. [Retrieved sentence 3]
-
-استخدم هذه النصوص كمرجع لتصحيح النص التالي:
-
-User: [OCR text]
-```
-
-### Alternative: Vocabulary Validation
-Instead of full RAG, simpler approach:
-1. Build vocabulary from OpenITI
-2. After LLM correction, validate words against vocabulary
-3. Flag or re-correct words not in vocabulary
+1. Run Phase 2 LLM inference (no new inference needed)
+2. Load known overcorrections from training artifacts
+3. For each corrected text: revert known-bad corrections, then apply CAMeL validation
+4. Words failing morphological validation revert to OCR original
 
 ### Outputs
 ```
 results/phase5/
-├── retrieval_index/           # Built index (for reuse)
 ├── corrected/
 ├── metrics.json
-├── comparison_vs_phase2.json  # ISOLATED comparison
-├── retrieval_analysis.json    # How often retrieval helped
+├── comparison_vs_phase2.json  # ISOLATED comparison to Phase 2
 └── report.md
 ```
 
 ### Research Value
-- **Measures isolated effect of corpus grounding**
-- Novel application of RAG to OCR correction
-- Answers: Does seeing correct Arabic text help correction?
-- Most technically complex phase (embeddings, vector index)
+- **Measures isolated effect of CAMeL morphological post-processing**
+- Answers: Does symbolic validation catch LLM hallucinations?
+- The known-overcorrection revert prevents false positives from morphologically-valid-but-wrong corrections
 
 ---
 
-## Phase 5: Combinations & Ablation Study
+## Phase 6: Combinations
 
 ### Research Questions
 1. **What is the optimal combination of knowledge sources?**
-2. **Which components synergize?** (interaction effects)
-3. **What does each component contribute to the full system?** (ablation)
+2. **Do combinations synergize?** (interaction effects)
 
-### Purpose
-Phase 5 goes beyond simple ablation to test meaningful combinations, answering both "what works best together?" and "what does each part contribute?"
+### Design: 3 Inference Combos + 1 CAMeL Combo
 
-### Experimental Design Rationale
+| Combo | Components | Tests |
+|-------|------------|-------|
+| `conf_only` | Confusion matrix only | OCR-specific knowledge alone |
+| `self_only` | Self-reflective only | Error pattern awareness alone |
+| `conf_self` | Confusion + Self-reflective | Both prompt enhancements together |
+| `best_camel` | Best inference combo + CAMeL post-processing | Optimal prompt + morphological validation |
 
-**Why not test all 32 combinations?**
-- 5 components → 2^5 = 32 combinations
-- Computationally expensive
-- Many combinations are uninteresting
+**Selection strategy**: `best_camel` applies CAMeL on whichever of the 3 inference combos performed best.
 
-**Hierarchical approach (what we do):**
-
-| Level | What We Test | Research Question |
-|-------|--------------|-------------------|
-| Level 1 | Isolated (Phases 3-5) | Individual effects ✓ |
-| Level 2 | Top pairs | Which components synergize? |
-| Level 3 | Best triple (optional) | Diminishing returns? |
-| Level 4 | Full system | Maximum performance |
-| Level 5 | Ablation (Full - 1) | Component necessity |
-
-### 6.1 Component Categories
-
-Components fall into two categories:
-
-| Category | Components | How Applied |
-|----------|------------|-------------|
-| **Prompt-based** | Confusion, Rules, Few-shot, RAG | Modify LLM input |
-| **Post-processing** | CAMeL Validation | Modify LLM output |
-
-This distinction matters: prompt-based components may compete for context window, while CAMeL is additive.
-
-### 6.2 Combination Experiments
-
-#### Pair Combinations (select based on Phase 3-5 results)
-
-Test pairs of top-performing isolated components:
-
-| Experiment | Components | Tests |
-|------------|------------|-------|
-| Pair A | Confusion + Rules | OCR-specific + linguistic |
-| Pair B | Confusion + Few-shot | OCR-specific + examples |
-| Pair C | Confusion + RAG | OCR-specific + grounding |
-| Pair D | Rules + Few-shot | Symbolic + data-driven |
-| Pair E | Best prompt + CAMeL | Prompt + post-processing |
-
-**Selection Strategy:** After running Phases 3-5, select top 3-5 pairs based on:
-1. Top 2 isolated performers paired together
-2. Complementary approaches (e.g., symbolic + data-driven)
-3. Prompt-based + post-processing combinations
-
-#### Full System
-
-```
-┌─────────────────────────────────────────────────────┐
-│                 FULL PIPELINE                        │
-│                                                      │
-│  OCR Text                                           │
-│      │                                              │
-│      ▼                                              │
-│  ┌─────────────┐                                    │
-│  │  Retrieve   │ ← OpenITI (Phase 5)               │
-│  │  Similar    │                                    │
-│  └──────┬──────┘                                    │
-│         │                                           │
-│         ▼                                           │
-│  ┌─────────────────────────────────────────┐       │
-│  │           LLM Prompt                     │       │
-│  │  • Confusion matrix (Phase 3)           │       │
-│  │  • Rules (Phase 4A)                     │       │
-│  │  • Few-shot examples (Phase 4B)         │       │
-│  │  • Retrieved context (Phase 5)          │       │
-│  └──────────────────┬──────────────────────┘       │
-│                     │                               │
-│                     ▼                               │
-│  ┌─────────────────────────────────────────┐       │
-│  │     Morphological Validation (Phase 4C) │       │
-│  │  • Validate corrected words              │       │
-│  │  • Flag/correct non-words                │       │
-│  └──────────────────┬──────────────────────┘       │
-│                     │                               │
-│                     ▼                               │
-│              Corrected Text                         │
-│                                                      │
-└─────────────────────────────────────────────────────┘
-```
-
-### 6.3 Ablation Studies
-
-Remove one component at a time from the full system:
-
-| Experiment | Components | Measures |
-|------------|------------|----------|
-| Full | All 5 | Upper bound |
-| −Confusion | Rules + QALB + RAG + CAMeL | Confusion matrix necessity |
-| −Rules | Confusion + QALB + RAG + CAMeL | Rules necessity |
-| −QALB | Confusion + Rules + RAG + CAMeL | Few-shot necessity |
-| −RAG | Confusion + Rules + QALB + CAMeL | Retrieval necessity |
-| −CAMeL | Confusion + Rules + QALB + RAG | Morphological validation necessity |
-| None | Zero-shot (Phase 2) | Lower bound |
-
-**Interpretation:**
-- Large Δ from Full = component is essential
-- Small Δ from Full = component is redundant (other components compensate)
-- Negative Δ = component hurts when combined (interference)
-
-### 6.4 Statistical Analysis
-
-For all comparisons:
-- Paired t-tests (same samples)
-- 95% confidence intervals
-- Cohen's d effect sizes
-- Per-dataset breakdown (PATS-A01 vs KHATT)
-- Bonferroni correction for multiple comparisons
-
-### 6.5 Key Analyses
-
-| Analysis | Purpose |
-|----------|---------|
-| Synergy detection | Do pairs outperform sum of individuals? |
-| Redundancy analysis | Which components overlap in what they fix? |
-| Error-type breakdown | Which combinations fix which error types? |
-| Efficiency analysis | Performance vs computational cost |
+### Analysis
+- All combos vs Phase 2 (primary comparison)
+- Synergy analysis: does `conf_self` outperform `conf_only` + `self_only` improvements summed?
+- CAMeL contribution: `best_camel` vs its base inference combo
 
 ### Outputs
 ```
-results/phase5/
-├── combinations/
-│   ├── pair_confusion_rules/
-│   ├── pair_confusion_fewshot/
-│   ├── pair_confusion_rag/
-│   ├── pair_rules_fewshot/
-│   ├── pair_best_camel/
-│   └── combinations_summary.json
-├── full_system/
+results/phase6/
+├── conf_only/
 │   ├── corrected/
 │   └── metrics.json
-├── ablation/
-│   ├── no_confusion/
-│   ├── no_rules/
-│   ├── no_qalb/
-│   ├── no_rag/
-│   ├── no_camel/
-│   └── ablation_summary.json
-├── analysis/
-│   ├── synergy_analysis.json
-│   ├── redundancy_matrix.json
-│   └── error_type_breakdown.json
+├── self_only/
+│   ├── corrected/
+│   └── metrics.json
+├── conf_self/
+│   ├── corrected/
+│   └── metrics.json
+├── best_camel/
+│   ├── corrected/
+│   └── metrics.json
+├── combinations_summary.json
 ├── statistical_tests.json
-├── final_comparison.json
-├── figures/
-│   ├── improvement_chart.png
-│   ├── combination_heatmap.png
-│   ├── ablation_chart.png
-│   ├── error_breakdown.png
-│   └── dataset_comparison.png
-├── paper_tables.md
 └── report.md
 ```
 
 ### Research Value
 - **Combination insights**: Which components work well together?
-- **Ablation insights**: What's necessary vs redundant?
 - **Practical guidance**: Minimal effective combination for deployment
-- **Publication-ready**: Final numbers, figures, tables
+- **Publication-ready**: Final comparison numbers for paper
+
+---
 
 ---
 
@@ -710,8 +418,8 @@ results/phase5/
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
 │  │ DataLoader   │ │ KnowledgeBase│ │ TextUtils    │             │
 │  │ - load OCR   │ │ - confusion  │ │ - normalize  │             │
-│  │ - load GT    │ │ - rules      │ │ - clean      │             │
-│  │ - align      │ │ - QALB       │ │ - tokenize   │             │
+│  │ - load GT    │ │ - word pairs │ │ - clean      │             │
+│  │ - align      │ │ - artifacts  │ │ - tokenize   │             │
 │  └──────────────┘ └──────────────┘ └──────────────┘             │
 │                                                                  │
 │  LINGUISTIC LAYER (CAMeL Tools)                                  │
@@ -719,18 +427,18 @@ results/phase5/
 │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
 │  │ Morphology   │ │ Disambig     │ │ Validator    │             │
 │  │ - analyze    │ │ - context    │ │ - is_valid   │             │
-│  │ - features   │ │ - disambig   │ │ - suggest    │             │
-│  │ - lemma/root │ │ - tag        │ │ - score      │             │
+│  │ - features   │ │ - disambig   │ │ - revert     │             │
+│  │ - lemma/root │ │ - tag        │ │ - validate   │             │
 │  └──────────────┘ └──────────────┘ └──────────────┘             │
 │                                                                  │
 │  CORE ENGINE                                                     │
 │  ───────────                                                     │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
-│  │ LLMCorrector │ │ PromptBuilder│ │ RAGRetriever │             │
-│  │ - inference  │ │ - zero-shot  │ │ - index      │             │
-│  │ - batch      │ │ - few-shot   │ │ - search     │             │
-│  │ - retry      │ │ - combined   │ │ - embed      │             │
-│  └──────────────┘ └──────────────┘ └──────────────┘             │
+│  ┌──────────────┐ ┌──────────────┐                               │
+│  │ LLMCorrector │ │ PromptBuilder│                               │
+│  │ - inference  │ │ - zero-shot  │                               │
+│  │ - batch      │ │ - ocr_aware  │                               │
+│  │ - retry      │ │ - combined   │                               │
+│  └──────────────┘ └──────────────┘                               │
 │                                                                  │
 │  ANALYSIS LAYER                                                  │
 │  ──────────────                                                  │
@@ -757,7 +465,7 @@ results/phase5/
 | Module | Classes/Functions | Responsibility |
 |--------|-------------------|----------------|
 | `data_loader.py` | `DataLoader` | Load and align OCR/GT pairs |
-| `knowledge_base.py` | `ConfusionMatrixLoader`, `RulesLoader`, `QALBLoader`, `OpenITILoader`, `LLMInsightsLoader` | Load knowledge sources |
+| `knowledge_base.py` | `ConfusionMatrixLoader`, `LLMInsightsLoader`, `WordErrorPairsLoader` | Load knowledge sources |
 | `text_utils.py` | `normalize_arabic()`, `clean_text()` | Text preprocessing |
 
 #### Linguistic Layer (`src/linguistic/`) — CAMeL Tools Wrapper
@@ -779,9 +487,8 @@ results/phase5/
 
 | Module | Classes/Functions | Responsibility |
 |--------|-------------------|----------------|
-| `llm_corrector.py` | `LLMCorrector` | LLM inference wrapper |
-| `prompt_builder.py` | `PromptBuilder` | Construct phase-specific prompts |
-| `rag_retriever.py` | `RAGRetriever` | OpenITI retrieval system |
+| `llm_corrector.py` | `LLMCorrector`, `TransformersCorrector` | LLM inference wrapper |
+| `prompt_builder.py` | `PromptBuilder` | Construct phase-specific prompts (zero_shot, ocr_aware, self_reflective, combined) |
 
 #### Analysis Layer (`src/analysis/`)
 
@@ -789,7 +496,7 @@ results/phase5/
 |--------|-------------------|----------------|
 | `metrics.py` | `calculate_cer()`, `calculate_wer()` | Metric calculation |
 | `error_analyzer.py` | `ErrorAnalyzer`, `ErrorType` | Build confusion matrix, categorize |
-| `llm_error_analyzer.py` | `LLMErrorAnalyzer` | Analyse LLM vs GT per ErrorType (Phase 4D) |
+| `llm_error_analyzer.py` | `LLMErrorAnalyzer` | Analyse LLM vs GT per ErrorType (Phase 4D / training analysis) |
 | `stats_tester.py` | `StatsTester` | Statistical significance tests |
 | `visualizer.py` | `Visualizer` | Generate charts and tables |
 
@@ -822,24 +529,24 @@ Arabic-Post-OCR-Correction/
 ├── pipelines/
 │   ├── run_phase1.py
 │   ├── run_phase2.py
-│   ├── run_phase3.py
-│   ├── run_phase4.py
-│   ├── run_phase4d.py
-│   ├── run_phase5.py
-│   ├── run_phase5.py
+│   ├── run_phase3.py        # Phase 3: OCR-Aware
+│   ├── run_phase4.py        # Phase 4: Self-Reflective
+│   ├── run_phase4d.py       # Training artifact generator
+│   ├── run_phase5.py        # Phase 5 (CAMeL) + Phase 6 (Combinations --combo flag)
+│   ├── run_phase7.py        # Phase 7: DSPy Optimization
 │   └── run_all.py
 ├── configs/
 │   └── config.yaml
 ├── results/
 │   ├── phase1/
 │   ├── phase2/
+│   ├── phase2-training/     # Training-split artifacts
+│   │   └── analysis/
 │   ├── phase3/
-│   ├── phase4a/
-│   ├── phase4b/
-│   ├── phase4c/
-│   ├── phase4d/
+│   ├── phase4/
 │   ├── phase5/
-│   └── phase5/
+│   ├── phase6/
+│   └── phase7/
 ├── docs/
 ├── tests/
 ├── scripts/
@@ -850,34 +557,42 @@ Arabic-Post-OCR-Correction/
     ├── ocr-raw-data/               # Original ground-truth texts
     │   ├── PATS_A01_Dataset/
     │   └── KHATT/
-    ├── OpenITI/                    # Arabic corpus for RAG
-    ├── QALB-0.9.1-Dec03-2021-SharedTasks/  # Error-correction pairs
-    └── rules/                      # Arabic spelling rules
+    └── pats_splits.json            # PATS train/val split file
 ```
 
 ### 4.2 Data & Comparison Dependencies
 
 ```
-Phase 1 ────────────────────────────────────────────────────────────────────────┐
-    │                                                                           │
-    │ confusion_matrix.json, error_taxonomy.json                                │
-    ▼                                                                           │
-Phase 2 (BASELINE) ═════════════════════════════════════════════════════════════╗
-    ║                                                                           ║
-    ║  All phases below compare to Phase 2 (isolated experiments)               ║
-    ║                                                                           ║
-    ╠══════╦══════╦══════╦══════╦══════╦══════╣
-    ▼      ▼      ▼      ▼      ▼      ▼      ║
-  Ph3    Ph4A   Ph4B   Ph4C   Ph4D   Ph5     ║
-(+Conf) (+Rul) (+FS) (+CAMeL)(+Self)(+RAG)  ║
-    │      │      │      │      │      │      ║
- P1 CM  rules/ QALB/ CAMeL  P2 train OpenIT ║
-    │      │      │      │   insights  │      ║
-    └──────┴──────┴──────┴──────┴──────┘      ║
-                                        │                                       ║
-                                        ▼                                       ║
-                                  Phase 5 ◄═════════════════════════════════════╝
-                                  (Combinations + Ablation)
+Phase 1 ──────────────────────────────────────────────────────────┐
+    │                                                             │
+    │ confusion_matrix.json, error_taxonomy.json                  │
+    ▼                                                             │
+Phase 2 training-split ──────────────────────────────────────────►│
+    │                                                             │
+    │ results/phase2-training/analysis/                           │
+    │   word_pairs_llm_failures.txt                               │
+    │   sample_classification.json                                │
+    ▼                                                             │
+Phase 2 (BASELINE) ════════════════════════════════════════════╗  │
+    ║                                                          ║  │
+    ║  Isolated experiments: compare each to Phase 2          ║  │
+    ║                                                          ║  │
+    ╠══════════╦══════════╦══════════╣                         ║  │
+    ▼          ▼          ▼          ║                         ║  │
+  Ph3        Ph4        Ph5         ║                         ║  │
+(+Conf      (+Self-    (+CAMeL      ║                         ║  │
+ +LLM fails) reflective) +known-bad) ║                         ║  │
+    │          │          │          ║                         ║  │
+  P1 CM +    training   training     ║                         ║  │
+  training   artifacts  artifacts    ║                         ║  │
+    │          │          │          ║                         ║  │
+    └──────────┴──────────┘          ║                         ║  │
+                    │                ║                         ║  │
+                    ▼                ▼                         ║  │
+              Phase 6 (Combinations) ◄════════════════════════╝  │
+              conf_only | self_only | conf_self | best_camel      │
+                                                                  │
+              Phase 7 (DSPy Optimization) ◄═══════════════════════╝
 ```
 
 **Key**: `═══` indicates comparison dependency (not data dependency)
@@ -894,36 +609,36 @@ data:
   ocr_root: "./data/ocr-results"   # root for all OCR model outputs
   ocr_model: "qaari-results"       # active model sub-folder
   ground_truth: "./data/ocr-raw-data"
-  openiti: "./data/OpenITI"
-  qalb: "./data/QALB-0.9.1-Dec03-2021-SharedTasks/QALB-0.9.1-Dec03-2021-SharedTasks"
-  rules: "./data/rules"
+  pats_splits_file: "./data/ocr-raw-data/PATS_A01_Dataset/pats_splits.json"
 
-# Datasets
+# Datasets (list; one entry per font x split)
 datasets:
-  - name: "PATS-A01"
-    ocr_path: "pats-a01-data/A01-Akhbar"
-    gt_path: "PATS_A01_Dataset"
-  - name: "KHATT"
-    ocr_path: "khatt-data"
-    gt_path: "KHATT"
+  - key: "PATS-A01-Akhbar-train"
+    type: "pats"
+    font: "Akhbar"
+    pats_split: "train"
+  - key: "KHATT-train"
+    type: "khatt"
+    split: "train"
+  # ... (see config.yaml for full list)
 
 # Model settings
 model:
-  name: "Qwen/Qwen2.5-3B-Instruct"
+  name: "Qwen/Qwen3-4B-Instruct-2507"
+  backend: "transformers"          # or "mock" for local testing
   temperature: 0.1
-  max_tokens: 1024
+  max_new_tokens: 1024
   device: "auto"
 
-# RAG settings (Phase 5)
-rag:
-  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-  top_k: 3
-  chunk_size: 200
+# Phase-specific settings
+phase3:
+  use_training_failures: true
+  training_failures_path: "results/phase2-training/analysis/word_pairs_llm_failures.txt"
+  top_n_confusions: 10
 
-# Few-shot settings (Phase 4B)
-few_shot:
-  num_examples: 5
-  selection: "diverse"  # or "random"
+phase4:
+  training_artifacts_dir: "results/phase2-training/analysis/"
+  overcorrection_n: 10
 
 # CAMeL Tools settings
 camel:
@@ -931,16 +646,11 @@ camel:
   morphology:
     db: "calima-msa-r13"     # Morphological database
     cache_size: 10000        # Cache analyzed words
-  validation:
-    enabled: true            # Enable post-LLM validation
-    re_correct: false        # Re-send invalid words to LLM
-    min_confidence: 0.5      # Minimum validation score
 
-# Output
-output:
-  results_dir: "results"
-  save_corrected: true
-  save_comparisons: true
+# Evaluation
+evaluation:
+  strip_diacritics: true
+  report_both: true            # report both with and without diacritics
 
 # Processing
 processing:
@@ -958,33 +668,19 @@ processing:
 |-------|--------|--------------|--------------|-----------|-----------|
 | 1 | Baseline (Qaari) | X.XX% | X.XX% | X.XX% | X.XX% |
 | 2 | Zero-shot LLM | X.XX% | X.XX% | X.XX% | X.XX% |
-| 3 | + Confusion Matrix | X.XX% | X.XX% | X.XX% | X.XX% |
-| 4A | + Arabic Rules | X.XX% | X.XX% | X.XX% | X.XX% |
-| 4B | + QALB Few-shot | X.XX% | X.XX% | X.XX% | X.XX% |
-| 4C | + CAMeL Validation | X.XX% | X.XX% | X.XX% | X.XX% |
-| 4D | + Self-Reflective | X.XX% | X.XX% | X.XX% | X.XX% |
-| 5 | + RAG (OpenITI) | X.XX% | X.XX% | X.XX% | X.XX% |
+| 3 | + OCR-Aware (confusion + LLM failures) | X.XX% | X.XX% | X.XX% | X.XX% |
+| 4 | + Self-Reflective (error patterns + overcorrection) | X.XX% | X.XX% | X.XX% | X.XX% |
+| 5 | + CAMeL Validation (+ known-overcorrection revert) | X.XX% | X.XX% | X.XX% | X.XX% |
+| 7 | DSPy Optimized | X.XX% | X.XX% | X.XX% | X.XX% |
 
-### 6.2 Combination Results Table
+### 6.2 Combination Results Table (Phase 6)
 
-| Combination | Components | PATS-A01 CER | KHATT CER | vs Best Isolated |
-|-------------|------------|--------------|-----------|------------------|
-| Pair A | Confusion + Rules | X.XX% | X.XX% | ΔX.XX% |
-| Pair B | Confusion + Few-shot | X.XX% | X.XX% | ΔX.XX% |
-| Pair C | Confusion + RAG | X.XX% | X.XX% | ΔX.XX% |
-| Pair D | Best prompt + CAMeL | X.XX% | X.XX% | ΔX.XX% |
-| Full | All components | X.XX% | X.XX% | ΔX.XX% |
-
-### 6.3 Ablation Results Table
-
-| Configuration | PATS-A01 CER | KHATT CER | Δ from Full |
-|---------------|--------------|-----------|-------------|
-| Full System | X.XX% | X.XX% | - |
-| − Confusion | X.XX% | X.XX% | +X.XX% |
-| − Rules | X.XX% | X.XX% | +X.XX% |
-| − QALB | X.XX% | X.XX% | +X.XX% |
-| − RAG | X.XX% | X.XX% | +X.XX% |
-| − CAMeL | X.XX% | X.XX% | +X.XX% |
+| Combo | Components | PATS-A01 CER | KHATT CER | vs Phase 2 |
+|-------|------------|--------------|-----------|------------|
+| conf_only | Confusion only | X.XX% | X.XX% | ΔX.XX% |
+| self_only | Self-reflective only | X.XX% | X.XX% | ΔX.XX% |
+| conf_self | Confusion + Self-reflective | X.XX% | X.XX% | ΔX.XX% |
+| best_camel | Best combo + CAMeL | X.XX% | X.XX% | ΔX.XX% |
 
 ---
 
@@ -995,22 +691,22 @@ processing:
 | Order | Phase | Dependencies | Complexity |
 |-------|-------|--------------|------------|
 | 1 | Phase 1 | None | Medium |
-| 2 | Phase 2 | Phase 1 (for comparison) | Low |
-| 3 | Phase 3 | Phase 1 (confusion matrix) | Low |
-| 4 | Phase 4A | Rules files | Low |
-| 5 | Phase 4B | QALB corpus | Medium |
-| 6 | Phase 4C | CAMeL Tools, Phase 2 output | Medium |
-| 7 | Phase 4D | Phase 2 train-split corrections | Medium |
-| 8 | Phase 5 | OpenITI, embedding model | High |
-| 9 | Phase 5 | All previous phases | High |
+| 2 | Phase 2 (training splits) | Phase 1 (for comparison) | Low |
+| 3 | Phase 2 (validation splits) | Phase 1 | Low |
+| 4 | Phase 4D training analysis | Phase 2 train corrections | Medium |
+| 5 | Phase 3 | Phase 1 confusion matrix + Phase 4D artifacts | Low |
+| 6 | Phase 4 | Phase 4D artifacts (training artifacts) | Medium |
+| 7 | Phase 5 | CAMeL Tools + Phase 4D artifacts | Medium |
+| 8 | Phase 6 | Phases 3, 4, 5 | Medium |
+| 9 | Phase 7 | Phase 2 | High |
 
 ### Shared Components to Build First
 
 1. `DataLoader` - needed by all phases
 2. `Metrics` - needed by all phases
-3. `LLMCorrector` - needed by phases 2-6
+3. `LLMCorrector` / `TransformersCorrector` - needed by phases 2–7
 4. `TextUtils` - needed by all phases
-5. `MorphAnalyzer` - CAMeL wrapper (needed for Phase 1, 4C, 6)
+5. `MorphAnalyzer` - CAMeL wrapper (needed for Phase 1, 5, 6)
 
 ---
 
@@ -1038,38 +734,17 @@ processing:
 }
 ```
 
-### A.2 QALB Few-Shot Examples
+### A.2 Training Artifacts (`word_pairs_llm_failures.txt`)
 
-```json
-{
-  "examples": [
-    {
-      "source": "انا ذاهب الى المدرسه",
-      "target": "أنا ذاهب إلى المدرسة",
-      "error_types": ["hamza", "taa_marbuta"],
-      "context": "sentence about going to school"
-    }
-  ]
-}
 ```
+SECTION: UNFIXED
+OCR: كتابه
+GT: كتابة
 
-### A.3 Arabic Rules
-
-```json
-{
-  "rules": [
-    {
-      "name": "همزة القطع",
-      "name_en": "Hamza al-Qat",
-      "description": "تُكتب في أول الأفعال الرباعية",
-      "examples": {
-        "correct": ["أَكْرَمَ", "أَحْسَنَ"],
-        "incorrect": ["اكرم", "احسن"]
-      },
-      "pattern": "^[اأإآ]"
-    }
-  ]
-}
+SECTION: INTRODUCED
+OCR: ذلك
+LLM: ذالك
+GT: ذلك
 ```
 
 ---
@@ -1083,8 +758,7 @@ processing:
 | Methodology | Architecture.md | - |
 | Baseline Results | baseline_metrics.json | Phase 1 |
 | Zero-shot Results | metrics.json | Phase 2 |
-| Knowledge-Enhanced Results | metrics.json | Phase 3-5 |
-| Ablation Study | ablation_summary.json | Phase 5 |
-| Error Analysis | error_taxonomy.json | Phase 1, 6 |
-| Figures | figures/*.png | Phase 5 |
-| Tables | paper_tables.md | Phase 5 |
+| Knowledge-Enhanced Results | metrics.json | Phase 3, 4, 5 |
+| Combination Results | metrics.json | Phase 6 |
+| DSPy Results | metrics.json | Phase 7 |
+| Error Analysis | error_taxonomy.json | Phase 1 |

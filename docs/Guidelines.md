@@ -504,15 +504,16 @@ The pipeline, PromptBuilder, and all analysis modules require **zero changes**.
              → reads corrections.jsonl, computes metrics, writes report
 ```
 
-**Phase 4D special case** — has an extra prerequisite stage that runs entirely locally before export:
+**Phase 4 special case** — has an extra prerequisite stage that generates training artifacts:
 
 ```
 0. LOCAL (once) → python pipelines/run_phase4d.py --mode analyze-train
-                  → reads Phase 2 train corrections vs GT
-                  → saves results/phase4d/insights/{PATS-A01,KHATT}_insights.json
+                  → reads Phase 2 training-split corrections vs GT
+                  → saves results/phase2-training/analysis/word_pairs_llm_failures.txt
+                  → saves results/phase2-training/analysis/sample_classification.json
 ```
 
-Then the standard 3-stage pipeline (export → infer → analyze) runs on validation splits only.
+These artifacts are then consumed by Phases 3, 4, 5, and 6 during export. Run this once before running those phases.
 
 ### 12.8 API Extension (Future)
 

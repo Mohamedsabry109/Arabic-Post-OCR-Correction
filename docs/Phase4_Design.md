@@ -1,4 +1,13 @@
-# Phase 4: Linguistic Knowledge Enhancement — Design Document
+# Phase 4: Linguistic Knowledge Enhancement — Design Document (DEPRECATED)
+
+> **DEPRECATED as of v1.0.0** — This document described the old sub-phase structure (4A Rules, 4B QALB Few-Shot, 4C CAMeL Validation).
+> - **Phase 4A** (Rules) and **Phase 4B** (Few-Shot QALB) were removed — rules duplicated the base prompt, QALB taught grammar not OCR correction.
+> - **Phase 4C** (CAMeL Validation) is now **Phase 5** — enhanced with known-overcorrection revert.
+> - **Phase 4D** (Self-Reflective) is now **Phase 4** — reads pre-computed training artifacts.
+>
+> See `docs/Architecture.md` for the current 7-phase design.
+
+# Phase 4: Linguistic Knowledge Enhancement — Design Document (Historical)
 
 ## 1. Overview
 

@@ -12,40 +12,38 @@
 - **Metrics**: CER (Character Error Rate), WER (Word Error Rate)
 - **Model**: Qwen3-4B-Instruct-2507 (primary)
 
-## Experimental Structure (8 Phases)
+## Experimental Structure (7 Phases)
 
 | Phase | Name | Research Question | Comparison |
 |-------|------|-------------------|------------|
 | **1** | Baseline & Error Taxonomy | How bad is Qaari? What errors? | N/A (no LLM) |
 | **2** | Zero-Shot LLM | Can vanilla LLM fix OCR? | vs Phase 1 |
-| **3** | OCR-Aware Prompting | Does OCR-specific knowledge help? | vs Phase 2 (**isolated**) |
-| **4A** | Rule-Augmented | Do spelling rules help? | vs Phase 2 (**isolated**) |
-| **4B** | Few-Shot Learning | Do correction examples help? | vs Phase 2 (**isolated**) |
-| **4C** | CAMeL Validation | Does morphological post-processing help? | vs Phase 2 (**isolated**) |
-| **4D** | Self-Reflective + Word Pairs | Do error patterns + concrete examples help? | vs Phase 2 (**isolated**) |
-| **5** | Combinations + Ablation | What's optimal? What contributes? | Pairs + Full + Ablation |
+| **3** | OCR-Aware Prompting | Does OCR-specific knowledge help? (enhanced: filtered by LLM failures) | vs Phase 2 (**isolated**) |
+| **4** | Self-Reflective | Do error patterns + overcorrection warnings help? (reads training artifacts) | vs Phase 2 (**isolated**) |
+| **5** | CAMeL Validation | Does morphological post-processing help? (enhanced: known-overcorrection revert) | vs Phase 2 (**isolated**) |
+| **6** | Combinations | What's optimal? What contributes? | conf_only, self_only, conf_self, best_camel |
 | **7** | DSPy Prompt Optimization | Can automated optimization beat hand-crafted prompts? | vs Phase 2 |
 
-**Key Design**: Phases 3-4 (including 4A-4D) are **isolated experiments** comparing to Phase 2 baseline. Phase 5 tests meaningful combinations before ablation. Phase 7 uses DSPy to automatically discover optimal prompts.
+**Key Design**: Phases 3-5 are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests 3 inference combos (confusion only, self-reflective only, both) plus 1 CAMeL combo. Phase 7 uses DSPy to automatically discover optimal prompts.
 
-**Phase 4D pipeline**: `analyze-train` auto-generates both `insights/*.json` (error-type fix/intro rates) and `word_error_pairs.txt` (concrete OCR→GT word samples). Export mode uses both signals.
+**Phase 4 pipeline**: Reads pre-computed training artifacts from `results/phase2-training/analysis/` — `word_pairs_llm_failures.txt` (UNFIXED + INTRODUCED sections) and `sample_classification.json`. No circular re-analysis.
+
+**Removed phases**: Phase 4A (Rules) and Phase 4B (Few-Shot QALB) were removed — rules duplicated the base prompt, QALB taught grammar not OCR correction.
 
 ## Knowledge Sources
 
 | Source | Location | Used In |
 |--------|----------|---------|
-| Confusion Matrix | Generated in Phase 1 | Phase 3, 5 |
-| Arabic Rules | `./data/rules/` | Phase 4A, 5 |
-| QALB Corpus | `./data/QALB-*/` | Phase 4B, 5 |
-| CAMeL Tools | `pip install camel-tools` | Phase 1, 4C, 5 |
-| Phase 4D outputs | `results/phase4d/insights/` + `word_error_pairs.txt` | Phase 4D, 5 |
+| Confusion Matrix | Generated in Phase 1 | Phase 3, 6 |
+| Training Artifacts | `results/phase2-training/analysis/` | Phase 3, 4, 5, 6 |
+| CAMeL Tools | `pip install camel-tools` | Phase 1, 5, 6 |
 
 ### CAMeL Tools (Morphological Analysis)
 
 [CAMeL Tools](https://github.com/CAMeL-Lab/camel_tools) provides Arabic NLP utilities:
 - **Morphological Analyzer**: Validate word existence, extract root/pattern
 - **Disambiguator**: Context-aware analysis
-- **Use Cases**: Error categorization (Phase 1), **Isolated validation test (Phase 4C)**, Combined system (Phase 5)
+- **Use Cases**: Error categorization (Phase 1), **Validation + known-overcorrection revert (Phase 5)**, Combined system (Phase 6)
 
 ## Project Structure
 
@@ -75,8 +73,6 @@ Arabic-Post-OCR-Correction/
 ├── ocr-raw-data/                   # Original ground-truth texts
 │   ├── PATS_A01_Dataset/
 │   └── KHATT/
-├── QALB-*/                         # Error-correction pairs
-└── rules/                          # Arabic spelling rules
 ```
 
 To switch OCR models: set `data.ocr_model` in `configs/config.yaml`.
@@ -116,15 +112,13 @@ See `docs/Guidelines.md` for full standards.
 
 ## Current Status
 
-- [x] Architecture document created (8 phases)
+- [x] Architecture document created (7 phases)
 - [x] Guidelines established
 - [x] CAMeL Tools integration designed
 - [x] Phase 1: Baseline & Error Taxonomy
 - [x] Phase 2: Zero-Shot LLM
-- [x] Phase 3: OCR-Aware Prompting
-- [x] Phase 4A: Rule-Augmented
-- [x] Phase 4B: Few-Shot (QALB)
-- [x] Phase 4C: CAMeL Validation (isolated)
-- [x] Phase 4D: Self-Reflective + Word Pairs (isolated; fused from 4D+4E)
-- [x] Phase 5: Combinations + Ablation (was Phase 6)
+- [x] Phase 3: OCR-Aware Prompting (enhanced: cross-referenced with LLM failures)
+- [x] Phase 4: Self-Reflective (enhanced: reads training artifacts, overcorrection warnings)
+- [x] Phase 5: CAMeL Validation (enhanced: known-overcorrection revert)
+- [x] Phase 6: Combinations (redesigned: 3 inference + 1 CAMeL combo)
 - [x] Phase 7: DSPy Prompt Optimization

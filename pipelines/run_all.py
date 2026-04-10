@@ -25,7 +25,7 @@ Usage
     python pipelines/run_all.py --mode export --limit 50 --datasets KHATT-train
 
     # Specific phases only
-    python pipelines/run_all.py --mode export --phases 2 3 4a
+    python pipelines/run_all.py --mode export --phases 2 3 4
 """
 
 import argparse
@@ -67,29 +67,21 @@ _PHASE_STEPS: dict[str, list[dict]] = {
         {"script": "pipelines/run_phase3.py", "mode": "export",  "stage": "export"},
         {"script": "pipelines/run_phase3.py", "mode": "analyze", "stage": "analyze"},
     ],
-    "4a": [
-        {"script": "pipelines/run_phase4.py", "mode": "export",  "stage": "export",
-         "extra": ["--sub-phase", "4a"]},
-        {"script": "pipelines/run_phase4.py", "mode": "analyze", "stage": "analyze",
-         "extra": ["--sub-phase", "4a"]},
+    "4": [
+        {"script": "pipelines/run_phase4d.py", "mode": "export",  "stage": "export"},
+        {"script": "pipelines/run_phase4d.py", "mode": "analyze", "stage": "analyze"},
     ],
-    "4b": [
-        {"script": "pipelines/run_phase4.py", "mode": "export",  "stage": "export",
-         "extra": ["--sub-phase", "4b"]},
-        {"script": "pipelines/run_phase4.py", "mode": "analyze", "stage": "analyze",
-         "extra": ["--sub-phase", "4b"]},
-    ],
-    "4c": [
+    "5": [
+        # Phase 5: CAMeL Validation (local post-processing, no Kaggle step)
         {"script": "pipelines/run_phase4.py", "mode": "validate", "stage": "analyze",
          "extra": ["--sub-phase", "4c"]},
     ],
-    "5": [
+    "6": [
+        # Phase 6: Combinations (3 inference combos + 1 CAMeL)
         {"script": "pipelines/run_phase5.py", "mode": "export",   "stage": "export",
          "extra": ["--combo", "all"]},
         {"script": "pipelines/run_phase5.py", "mode": "analyze",  "stage": "analyze",
          "extra": ["--combo", "all"]},
-        {"script": "pipelines/run_phase5.py", "mode": "validate", "stage": "analyze",
-         "extra": ["--combo", "full_system"]},
         {"script": "pipelines/run_phase5.py", "mode": "summarize","stage": "analyze"},
     ],
     "7": [
@@ -98,15 +90,13 @@ _PHASE_STEPS: dict[str, list[dict]] = {
     ],
 }
 
-_ALL_PHASES = ["1", "2", "3", "4a", "4b", "4c", "4d", "5", "7"]
+_ALL_PHASES = ["1", "2", "3", "4", "5", "6", "7"]
 
 # Inference input/output paths per phase (for --mode full)
 _INFERENCE_IO: dict[str, tuple[str, str]] = {
     "2":  ("results/phase2/inference_input.jsonl",  "results/phase2/corrections.jsonl"),
     "3":  ("results/phase3/inference_input.jsonl",  "results/phase3/corrections.jsonl"),
-    "4a": ("results/phase4a/inference_input.jsonl", "results/phase4a/corrections.jsonl"),
-    "4b": ("results/phase4b/inference_input.jsonl", "results/phase4b/corrections.jsonl"),
-    "4d": ("results/phase4d/inference_input.jsonl", "results/phase4d/corrections.jsonl"),
+    "4":  ("results/phase4/inference_input.jsonl",  "results/phase4/corrections.jsonl"),
 }
 
 
@@ -136,8 +126,8 @@ def parse_args() -> argparse.Namespace:
         metavar="PHASE",
         help=(
             "Phases to run (default: all). "
-            "Options: 1 2 3 4a 4b 4c 4d 5 7. "
-            "Example: --phases 2 3 4a"
+            "Options: 1 2 3 4 5 6 7. "
+            "Example: --phases 2 3 4"
         ),
     )
     parser.add_argument(
@@ -261,10 +251,7 @@ def _run_inference(phase_key: str, args: argparse.Namespace) -> bool:
 def _run_phase5_inference_full(args: argparse.Namespace) -> bool:
     """Run infer.py for each Phase 5 inference combo (--mode full only)."""
     inference_combos = [
-        "pair_conf_rules", "pair_conf_fewshot",
-        "pair_rules_fewshot", "full_prompt",
-        "abl_no_confusion", "abl_no_rules", "abl_no_fewshot",
-        "self_reflective", "pair_self_conf", "full_with_self",
+        "conf_only", "self_only", "conf_self",
     ]
     for combo in inference_combos:
         input_path  = f"results/phase5/{combo}/inference_input.jsonl"
