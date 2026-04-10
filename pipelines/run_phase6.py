@@ -917,7 +917,7 @@ def run_export(
                 logger.info("Loaded %d introduced pairs -> %d chars.", len(introduced), len(overcorrection_context))
         else:
             # Fallback: legacy word_error_pairs.txt
-            pairs_path = phase4d_dir / "word_error_pairs.txt"
+            pairs_path = phase4_dir / "word_error_pairs.txt"
             if pairs_path.exists():
                 pairs_loader = WordErrorPairsLoader()
                 try:

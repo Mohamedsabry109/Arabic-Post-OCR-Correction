@@ -1073,7 +1073,7 @@ def aggregate_comparisons(
         "datasets": all_comparisons,
         "note": (
             "Phase 2 CER/WER are the reference baseline for all subsequent phases "
-            "(3, 4A, 4B, 4C, 5). Negative delta = improvement."
+            "(3, 4, 5, 6). Negative delta = improvement."
         ),
     }
     save_json(output, results_dir / "comparison.json")

@@ -11,7 +11,7 @@ Reads corrections.jsonl (OCR text + LLM correction + ground truth) and produces:
   analysis/summary.md                   - Human-readable overview
 
 The word_pairs_ocr.txt file uses the same format as WordErrorPairsLoader expects
-(``ocr_word > gt_word``), so it can be directly consumed by Phase 4D and Phase 5.
+(``ocr_word > gt_word``), so it can be directly consumed by Phase 4 and Phase 6.
 
 Usage:
     python scripts/analyze_training.py
@@ -569,7 +569,7 @@ def run_analysis(args: argparse.Namespace) -> None:
     logger.info("Analysis complete. Outputs in %s", output_dir)
     logger.info("")
     logger.info("Key artifacts:")
-    logger.info("  word_pairs_ocr.txt           - for Phase 4D / prompt <error_patterns>")
+    logger.info("  word_pairs_ocr.txt           - for Phase 4 / prompt <error_patterns>")
     logger.info("  word_pairs_llm_failures.txt  - LLM blind spots for prompt refinement")
     logger.info("  sentence_failures.jsonl      - for craft_prompt.py --mode refine")
     logger.info("  summary.md                   - human-readable overview")

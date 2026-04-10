@@ -68,6 +68,12 @@ from pipelines._utils import (
 
 logger = logging.getLogger(__name__)
 
+
+def load_phase2_dataset_metrics(phase2_dir: Path, dataset_key: str) -> dict | None:
+    """Load Phase 2 per-dataset corrected metrics for comparison."""
+    return load_phase2_full_metrics(phase2_dir, dataset_key)
+
+
 # Setup helpers
 # ---------------------------------------------------------------------------
 

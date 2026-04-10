@@ -2,7 +2,7 @@
 
 Provides WordValidator which checks individual tokens, aggregates
 validity rates across full texts, and applies a revert strategy for
-Phase 4C post-processing correction.
+Phase 5 post-processing correction.
 """
 
 import logging
@@ -27,7 +27,7 @@ class ValidationResult:
 class TextCorrectionResult:
     """Outcome of applying the revert strategy to one LLM-corrected text.
 
-    Used by WordValidator.validate_correction() in Phase 4C.
+    Used by WordValidator.validate_correction() in Phase 5.
     """
 
     final_text: str              # Text after applying the revert strategy

@@ -128,10 +128,10 @@ class TestGetCorrector:
         config = {"model": {"backend": "transformers"}}
         try:
             get_corrector(config)
-        except (ImportError, RuntimeError, OSError):
-            pass   # Expected: model not downloaded / no GPU
         except ValueError as exc:
             pytest.fail(f"ValueError raised for 'transformers' backend: {exc}")
+        except Exception:
+            pass   # Expected: model not downloaded / no GPU / incompatible tokenizer cache
 
     def test_api_backend_imported_without_error(self):
         # The "api" backend imports from api_corrector — should not raise ValueError

@@ -218,7 +218,7 @@ def _run_step(step: dict, args: argparse.Namespace, phase_key: str) -> bool:
 def _run_inference(phase_key: str, args: argparse.Namespace) -> bool:
     """Run scripts/infer.py for a given phase (--mode full only)."""
     if phase_key not in _INFERENCE_IO:
-        return True  # Phase 1, 4c, 5 combos handled separately
+        return True  # Phase 1, 5 (CAMeL), and 6 combos handled separately
 
     input_path, output_path = _INFERENCE_IO[phase_key]
     cmd = [

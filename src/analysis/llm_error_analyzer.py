@@ -1,4 +1,4 @@
-"""LLM error analysis for Phase 4D self-reflective prompting.
+"""LLM error analysis for Phase 4 self-reflective prompting.
 
 Analyses predictions made by the LLM on training-split samples (where
 ground truth is available) to identify systematic failure patterns.

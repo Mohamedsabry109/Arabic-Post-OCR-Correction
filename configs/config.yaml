@@ -235,7 +235,7 @@ phase4:
   prompt_version: "p4v1"
 
 # ---------------------------------------------------------------------------
-# Phase 5 specific (CAMeL validation — was Phase 4C)
+# Phase 5 specific (CAMeL morphological validation)
 # ---------------------------------------------------------------------------
 phase5:
   strategy: "revert"                 # "revert" = revert invalid/overcorrected LLM words

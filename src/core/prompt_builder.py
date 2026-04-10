@@ -268,7 +268,7 @@ class PromptBuilder:
         return self.OCR_AWARE_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
-    # Phase 4 — Self-Reflective Prompting (was Phase 4D)
+    # Phase 4 — Self-Reflective Prompting
     # -----------------------------------------------------------------------
 
     def build_self_reflective(
