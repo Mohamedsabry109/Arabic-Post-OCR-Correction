@@ -1,50 +1,54 @@
 #!/usr/bin/env python3
-"""Phase 4: Linguistic Knowledge Enhancement.
+"""Phase 4: Self-Reflective Prompting.
 
-Three isolated sub-phases, each compared against Phase 2 (zero-shot) baseline:
+Analyses the LLM's own predictions on training splits (where GT is available)
+to extract systematic failure patterns, then injects those patterns as a
+self-awareness context during validation inference.
 
-  4A -- Rule-Augmented Prompting
-        Injects Arabic orthographic rules into the system prompt.
-        Pipeline: export -> scripts/infer.py -> analyze
+Three-stage pipeline:
 
-  4B -- Few-Shot Prompting (QALB)
-        Injects QALB error-correction examples into the system prompt.
-        Pipeline: export -> scripts/infer.py -> analyze
+  --mode analyze-train -> Analyse LLM training-split predictions vs GT
+                          -> results/phase4/insights/PATS-A01_insights.json
+                             results/phase4/insights/KHATT_insights.json
 
-  4C -- CAMeL Tools Validation (local post-processing)
-        Applies morphological revert strategy to Phase 2 corrections.
-        Pipeline: validate  (no Kaggle/Colab step needed)
+  --mode export        -> Build self-reflective inference_input.jsonl (val splits only)
+                          -> results/phase4/inference_input.jsonl
+
+  --mode analyze       -> Load corrections.jsonl, compute metrics and reports
+                          -> results/phase4/{dataset}/metrics.json
+                             results/phase4/metrics.json
+                             results/phase4/comparison.json
+                             results/phase4/paper_tables.md
 
 Typical workflow
 ----------------
-Phase 4A:
-  1. LOCAL:  python pipelines/run_phase4.py --sub-phase 4a --mode export
-  2. REMOTE: python scripts/infer.py \\
-                 --input  results/phase4a/inference_input.jsonl \\
-                 --output results/phase4a/corrections.jsonl
-  3. LOCAL:  python pipelines/run_phase4.py --sub-phase 4a --mode analyze
+1. Prerequisite: Phase 2 train-split corrections must exist at
+   results/phase2/{dataset}/corrections.jsonl
 
-Phase 4B:
-  1. LOCAL:  python pipelines/run_phase4.py --sub-phase 4b --mode export
-  2. REMOTE: python scripts/infer.py \\
-                 --input  results/phase4b/inference_input.jsonl \\
-                 --output results/phase4b/corrections.jsonl
-  3. LOCAL:  python pipelines/run_phase4.py --sub-phase 4b --mode analyze
+2. LOCAL:  python pipelines/run_phase4.py --mode analyze-train
+   (reads Phase 2 train predictions, outputs insights JSON files)
 
-Phase 4C:
-  1. LOCAL:  python pipelines/run_phase4.py --sub-phase 4c --mode validate
+3. LOCAL:  python pipelines/run_phase4.py --mode export
+   (builds val-split inference JSONL with self-reflective prompts)
+
+4. REMOTE: git clone <repo> && python scripts/infer.py \\
+               --input  results/phase4/inference_input.jsonl \\
+               --output results/phase4/corrections.jsonl \\
+               --model  Qwen/Qwen3-4B-Instruct-2507
+   (see notebooks/kaggle_setup.ipynb or notebooks/colab_setup.ipynb)
+
+5. LOCAL:  python pipelines/run_phase4.py --mode analyze
 
 Usage
 -----
-    python pipelines/run_phase4.py --sub-phase 4a --mode export
-    python pipelines/run_phase4.py --sub-phase 4a --mode export   --limit 50
-    python pipelines/run_phase4.py --sub-phase 4a --mode export   --datasets KHATT-train
-    python pipelines/run_phase4.py --sub-phase 4a --mode analyze
-    python pipelines/run_phase4.py --sub-phase 4a --mode analyze  --no-error-analysis
-    python pipelines/run_phase4.py --sub-phase 4b --mode export   --num-examples 10
-    python pipelines/run_phase4.py --sub-phase 4b --mode analyze
-    python pipelines/run_phase4.py --sub-phase 4c --mode validate
-    python pipelines/run_phase4.py --sub-phase 4c --mode validate --datasets KHATT-train
+    python pipelines/run_phase4.py --mode analyze-train
+    python pipelines/run_phase4.py --mode analyze-train --source-phase phase2
+    python pipelines/run_phase4.py --mode export
+    python pipelines/run_phase4.py --mode export   --limit 50
+    python pipelines/run_phase4.py --mode export   --force
+    python pipelines/run_phase4.py --mode analyze
+    python pipelines/run_phase4.py --mode analyze  --datasets KHATT-validation
+    python pipelines/run_phase4.py --mode analyze  --no-error-analysis
 """
 
 import argparse
@@ -63,22 +67,18 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from src.data.data_loader import DataLoader, DataError, OCRSample
-# NOTE: RulesLoader/QALBLoader removed in phase refactoring.
-# This file (run_phase4.py) handles legacy 4a/4b/4c and will be deleted
-# once Phase 5 (CAMeL) is extracted to its own pipeline.
+from src.data.data_loader import DataLoader, DataError
+from src.data.knowledge_base import (
+    LLMInsightsLoader, WordErrorPairsLoader,
+    load_unfixed_word_pairs, load_introduced_word_pairs,
+    format_word_examples_for_prompt, format_overcorrection_warnings,
+)
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
 from src.analysis.report_formatter import write_corrections_report
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
+from src.analysis.llm_error_analyzer import LLMErrorAnalyzer
 from src.core.prompt_builder import PromptBuilder
-from src.core.llm_corrector import (
-    BaseLLMCorrector,
-    CorrectionResult,
-    CorrectedSample,
-    get_corrector,
-)
-from src.linguistic.morphology import MorphAnalyzer
-from src.linguistic.validator import WordValidator, TextCorrectionResult
+from src.core.llm_corrector import CorrectedSample
 from pipelines._utils import (
     resolve_datasets, load_sample_list, compute_group_aggregates,
     split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
@@ -89,100 +89,63 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Dataset-type classification helpers
+# ---------------------------------------------------------------------------
+
+def get_dataset_type(dataset_key: str) -> str:
+    """Return 'PATS-A01' or 'KHATT' based on dataset key prefix."""
+    if dataset_key.startswith("PATS-A01-"):
+        return "PATS-A01"
+    if dataset_key.startswith("KHATT-"):
+        return "KHATT"
+    return "unknown"
+
+
+def is_train_split(dataset_key: str) -> bool:
+    """Return True if the dataset key refers to a training split."""
+    key_lower = dataset_key.lower()
+    return key_lower.endswith("-train") or key_lower.endswith("train")
+
+
+def is_val_split(dataset_key: str) -> bool:
+    """Return True if the dataset key refers to a validation split."""
+    key_lower = dataset_key.lower()
+    return (
+        key_lower.endswith("-val")
+        or key_lower.endswith("-validation")
+        or key_lower.endswith("validation")
+    )
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Phase 4: Linguistic Knowledge Enhancement (4A/4B/4C)"
-    )
-    parser.add_argument(
-        "--sub-phase",
-        type=str,
-        required=True,
-        choices=["4a", "4b", "4c"],
-        dest="sub_phase",
-        help=(
-            "4a = Rule-Augmented Prompting; "
-            "4b = Few-Shot (QALB); "
-            "4c = CAMeL Tools Validation"
-        ),
+        description="Phase 4: Self-Reflective Prompting for Arabic Post-OCR Correction"
     )
     parser.add_argument(
         "--mode",
         type=str,
         required=True,
-        choices=["export", "analyze", "validate"],
+        choices=["analyze-train", "export", "analyze"],
         help=(
-            "export   -> write inference_input.jsonl (4A/4B only); "
-            "analyze  -> compute metrics from corrections.jsonl (4A/4B only); "
-            "validate -> apply local post-processing (4C only)"
+            "analyze-train -> analyse LLM train-split predictions to extract insights; "
+            "export        -> produce inference_input.jsonl with self-reflective prompts; "
+            "analyze       -> load corrections.jsonl and compute metrics"
         ),
     )
-    # Phase 4A options
     parser.add_argument(
-        "--n-rules",
-        type=int,
+        "--source-phase",
+        type=str,
         default=None,
-        dest="n_rules",
-        help="Max number of rules to inject (Phase 4A). Default: all rules.",
-    )
-    parser.add_argument(
-        "--rule-categories",
-        nargs="+",
-        default=None,
-        dest="rule_categories",
+        dest="source_phase",
         help=(
-            "Rule categories to include (Phase 4A). "
-            "Default: all. Options: taa_marbuta hamza alef_maksura "
-            "alef_forms dots similar_shapes"
+            "Phase whose train-split corrections to analyse (default: from config phase4.source_phase, "
+            "fallback: 'phase2')."
         ),
-    )
-    # Phase 4B options
-    parser.add_argument(
-        "--num-examples",
-        type=int,
-        default=5,
-        dest="num_examples",
-        help="Number of QALB few-shot examples (Phase 4B, default: 5).",
-    )
-    parser.add_argument(
-        "--selection",
-        type=str,
-        default="diverse",
-        choices=["diverse", "random", "most_common"],
-        help="Example selection strategy (Phase 4B, default: diverse).",
-    )
-    parser.add_argument(
-        "--qalb-years",
-        nargs="+",
-        default=["2014"],
-        dest="qalb_years",
-        metavar="YEAR",
-        help="QALB corpus years to use (Phase 4B, default: 2014).",
-    )
-    # Phase 4C options
-    parser.add_argument(
-        "--strategy",
-        type=str,
-        default="revert",
-        choices=["revert"],
-        help="Validation strategy (Phase 4C, default: revert).",
-    )
-    parser.add_argument(
-        "--phase2-dir",
-        type=Path,
-        default=Path("results/phase2"),
-        dest="phase2_dir",
-        help="Phase 2 results directory (baseline for comparison / 4C source).",
-    )
-    # Common options
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=None,
-        help="Max samples per dataset (for quick testing).",
     )
     parser.add_argument(
         "--datasets",
@@ -190,11 +153,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=None,
         metavar="DATASET",
-        help=(
-            "One or more dataset keys to process "
-            "(e.g. KHATT-train PATS-A01-Akhbar-train). "
-            "Defaults to all datasets from config."
-        ),
+        help="Subset of dataset keys to process. Defaults to all from config.",
     )
     parser.add_argument(
         "--sample-list",
@@ -204,22 +163,35 @@ def parse_args() -> argparse.Namespace:
         help="Path to test_samples.json to filter samples (overrides --datasets with relevant datasets).",
     )
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Max samples per dataset (for quick testing).",
+    )
+    parser.add_argument(
         "--force",
         action="store_true",
         default=False,
-        help="Re-process datasets that already have results.",
+        help="Re-process even if output already exists.",
     )
     parser.add_argument(
         "--no-error-analysis",
         action="store_true",
         default=False,
-        help="Skip error_changes.json computation (4A/4B analyze, faster).",
+        help="Skip error_changes.json computation in analyze mode (faster).",
     )
     parser.add_argument(
         "--config",
         type=Path,
         default=Path("configs/config.yaml"),
         help="Path to config YAML file.",
+    )
+    parser.add_argument(
+        "--results-dir",
+        type=Path,
+        default=Path("results/phase4"),
+        dest="results_dir",
+        help="Phase 4 results root directory.",
     )
     return parser.parse_args()
 
@@ -229,10 +201,10 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
-def setup_logging(results_dir: Path, phase_label: str) -> None:
+def setup_logging(results_dir: Path) -> None:
     """Configure logging to console (UTF-8) and log file."""
     results_dir.mkdir(parents=True, exist_ok=True)
-    log_path = results_dir / f"{phase_label}.log"
+    log_path = results_dir / "phase4.log"
 
     fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
@@ -259,15 +231,13 @@ def setup_logging(results_dir: Path, phase_label: str) -> None:
 
 
 def load_config(config_path: Path) -> dict:
-    """Load and return config YAML as a dict."""
     if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found: {config_path}")
+        raise FileNotFoundError(f"Config not found: {config_path}")
     with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
 def get_git_commit() -> str:
-    """Return short git commit hash, or 'unknown' on failure."""
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--short", "HEAD"],
@@ -280,22 +250,20 @@ def get_git_commit() -> str:
 
 
 def make_meta(
-    phase: str,
     dataset: str,
     num_samples: int,
     config: dict,
     limit: Optional[int],
     extra: Optional[dict] = None,
 ) -> dict:
-    """Build the standard metadata block for all Phase 4 output JSON files."""
     model_cfg = config.get("model", {})
     meta = {
-        "phase": phase,
-        "dataset": dataset,
-        "model": model_cfg.get("name", "Qwen/Qwen3-4B-Instruct-2507"),
-        "backend": model_cfg.get("backend", "transformers"),
+        "phase":       "phase4",
+        "dataset":     dataset,
+        "model":       model_cfg.get("name", "Qwen/Qwen3-4B-Instruct-2507"),
+        "backend":     model_cfg.get("backend", "transformers"),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "git_commit": get_git_commit(),
+        "git_commit":  get_git_commit(),
         "num_samples": num_samples,
         "limit_applied": limit,
     }
@@ -305,7 +273,6 @@ def make_meta(
 
 
 def save_json(data: dict, path: Path) -> None:
-    """Write data as indented JSON to path, creating parent dirs as needed."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
@@ -313,64 +280,12 @@ def save_json(data: dict, path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# corrections.jsonl loading (shared by 4A/4B analyze)
+# Shared helpers
 # ---------------------------------------------------------------------------
 
 
-def load_corrections(corrections_path: Path) -> list[CorrectedSample]:
-    """Load corrections.jsonl into CorrectedSample objects."""
-    if not corrections_path.exists():
-        raise FileNotFoundError(
-            f"corrections.jsonl not found: {corrections_path}\n"
-            "Did you download it from Kaggle/Colab?\n"
-            "Run the export + inference steps first."
-        )
-
-    corrected: list[CorrectedSample] = []
-    skipped = 0
-
-    with open(corrections_path, encoding="utf-8") as f:
-        for lineno, line in enumerate(f, 1):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except json.JSONDecodeError as exc:
-                logger.warning(
-                    "Skipping malformed line %d in %s: %s", lineno, corrections_path, exc
-                )
-                skipped += 1
-                continue
-
-            ocr_sample = OCRSample(
-                sample_id=r["sample_id"],
-                dataset=r.get("dataset", ""),
-                font=None,
-                split=None,
-                ocr_text=r["ocr_text"],
-                gt_text=r.get("gt_text", ""),
-                ocr_path=Path(""),
-                gt_path=None,
-            )
-            corrected.append(CorrectedSample(
-                sample=ocr_sample,
-                corrected_text=r.get("corrected_text", r["ocr_text"]),
-                prompt_tokens=r.get("prompt_tokens", 0),
-                output_tokens=r.get("output_tokens", 0),
-                latency_s=r.get("latency_s", 0.0),
-                success=r.get("success", True),
-                error=r.get("error"),
-            ))
-
-    if skipped:
-        logger.warning("Skipped %d malformed lines in %s", skipped, corrections_path)
-    logger.info("Loaded %d corrections from %s", len(corrected), corrections_path)
-    return corrected
-
-
 def _load_exported_datasets(output_path: Path) -> set[str]:
-    """Return dataset keys already present in an existing inference_input.jsonl."""
+    """Return dataset keys already written to an inference_input.jsonl."""
     if not output_path.exists():
         return set()
     found: set[str] = set()
@@ -394,7 +309,7 @@ def _load_exported_datasets(output_path: Path) -> set[str]:
 
 
 def _maybe_split_combined_corrections(results_dir: Path, force: bool = False) -> None:
-    """Split a combined corrections.jsonl into per-dataset files if needed.
+    """Split combined corrections.jsonl into per-dataset files if needed.
 
     When *force* is True, existing per-dataset files are overwritten.
     """
@@ -429,57 +344,95 @@ def _maybe_split_combined_corrections(results_dir: Path, force: bool = False) ->
         logger.info("  Split: %d records -> %s", len(records), out_path)
 
 
+def load_phase2_dataset_metrics(phase2_dir: Path, dataset_key: str) -> Optional[dict]:
+    """Load Phase 2 per-dataset metrics (full dict, new + old format compat)."""
+    return load_phase2_full_metrics(phase2_dir, dataset_key)
+
+
+def _nd_comparison_block(p2_nd: dict, corrected_nd: "MetricResult", phase_label: str) -> dict:
+    """Build no-diacritics comparison sub-dict for JSON output."""
+    if not p2_nd:
+        return {}
+    p2_cer_nd = float(p2_nd.get("cer", 0.0))
+    p2_wer_nd = float(p2_nd.get("wer", 0.0))
+    cer_d = p2_cer_nd - corrected_nd.cer
+    wer_d = p2_wer_nd - corrected_nd.wer
+    cer_r = (cer_d / p2_cer_nd * 100) if p2_cer_nd > 0 else 0.0
+    wer_r = (wer_d / p2_wer_nd * 100) if p2_wer_nd > 0 else 0.0
+    return {
+        "phase2_baseline_no_diacritics": {"cer": round(p2_cer_nd, 6), "wer": round(p2_wer_nd, 6)},
+        f"{phase_label}_corrected_no_diacritics": {"cer": round(corrected_nd.cer, 6), "wer": round(corrected_nd.wer, 6)},
+        "delta_no_diacritics": {
+            "cer_absolute": round(cer_d, 6), "wer_absolute": round(wer_d, 6),
+            "cer_relative_pct": round(cer_r, 2), "wer_relative_pct": round(wer_r, 2),
+        },
+    }
+
+
+def load_corrections_jsonl(corrections_path: Path) -> list[dict]:
+    """Load raw correction records from a corrections.jsonl file."""
+    if not corrections_path.exists():
+        raise FileNotFoundError(
+            f"corrections.jsonl not found: {corrections_path}\n"
+            "Did you download it from Kaggle/Colab?"
+        )
+
+    records: list[dict] = []
+    skipped = 0
+    with open(corrections_path, encoding="utf-8") as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError as exc:
+                logger.warning(
+                    "Skipping malformed line %d in %s: %s", lineno, corrections_path, exc
+                )
+                skipped += 1
+
+    if skipped:
+        logger.warning("Skipped %d malformed lines in %s", skipped, corrections_path)
+    logger.info("Loaded %d records from %s", len(records), corrections_path)
+    return records
+
+
 # ---------------------------------------------------------------------------
-# Error change analysis (shared by 4A, 4B)
+# Error change analysis (same pattern as Phase 5)
 # ---------------------------------------------------------------------------
 
 
 def run_error_change_analysis(
     corrected_samples: list[CorrectedSample],
     dataset_name: str,
-    phase_label: str,
 ) -> dict:
-    """Compare per-type error counts before (OCR) and after (corrected).
-
-    Args:
-        corrected_samples: List of CorrectedSample objects.
-        dataset_name: Dataset key label (for logging).
-        phase_label: Phase label for result keys (e.g. "phase4a").
-
-    Returns:
-        error_changes dict with summary and by_type breakdown.
-    """
+    """Compare per-type error counts before (OCR) and after (corrected)."""
     type_keys = [et.value for et in ErrorType]
-    ocr_counts:     dict[str, int] = {k: 0 for k in type_keys}
-    corr_counts:    dict[str, int] = {k: 0 for k in type_keys}
-    fixed_counts:   dict[str, int] = {k: 0 for k in type_keys}
-    intro_counts:   dict[str, int] = {k: 0 for k in type_keys}
+    ocr_counts:   dict[str, int] = {k: 0 for k in type_keys}
+    corr_counts:  dict[str, int] = {k: 0 for k in type_keys}
+    fixed_counts: dict[str, int] = {k: 0 for k in type_keys}
+    intro_counts: dict[str, int] = {k: 0 for k in type_keys}
 
     total_ocr_errors = 0
     total_corrected_errors = 0
-
     analyzer = ErrorAnalyzer()
 
     for cs in tqdm(corrected_samples, desc="  Error analysis", unit="sample"):
-        gt  = cs.sample.gt_text
-        ocr = cs.sample.ocr_text
-        corrected = cs.corrected_text
-
         try:
             class _Stub:
                 pass
-
             s1 = _Stub()
-            s1.sample_id = cs.sample.sample_id
-            s1.dataset   = cs.sample.dataset
-            s1.gt_text   = gt
-            s1.ocr_text  = ocr
+            s1.sample_id = cs.sample.sample_id   # type: ignore[attr-defined]
+            s1.dataset   = cs.sample.dataset      # type: ignore[attr-defined]
+            s1.gt_text   = cs.sample.gt_text      # type: ignore[attr-defined]
+            s1.ocr_text  = cs.sample.ocr_text     # type: ignore[attr-defined]
 
             s2 = _Stub()
-            s2.sample_id = cs.sample.sample_id
-            s2.dataset   = cs.sample.dataset
-            s2.gt_text   = gt
-            s2.ocr_text  = corrected
+            s2.sample_id = cs.sample.sample_id   # type: ignore[attr-defined]
+            s2.dataset   = cs.sample.dataset      # type: ignore[attr-defined]
+            s2.gt_text   = cs.sample.gt_text      # type: ignore[attr-defined]
+            s2.ocr_text  = cs.corrected_text      # type: ignore[attr-defined]
 
             err1 = analyzer.analyse_sample(s1)  # type: ignore[arg-type]
             err2 = analyzer.analyse_sample(s2)  # type: ignore[arg-type]
@@ -539,37 +492,396 @@ def run_error_change_analysis(
 
 
 # ---------------------------------------------------------------------------
-# Phase 2 baseline loading
+# ANALYZE-TRAIN MODE
 # ---------------------------------------------------------------------------
 
 
-def load_phase2_dataset_metrics(phase2_dir: Path, dataset_key: str) -> Optional[dict]:
-    """Load Phase 2 per-dataset metrics (full dict, new + old format compat)."""
-    return load_phase2_full_metrics(phase2_dir, dataset_key)
+def run_analyze_train(
+    config: dict,
+    all_dataset_names: list[str],
+    results_dir: Path,
+    source_phase: str,
+    force: bool,
+) -> None:
+    """Analyse LLM training-split predictions to extract self-reflective insights.
+
+    Reads corrections.jsonl for each train-split dataset from the source phase,
+    computes per-ErrorType fix/introduction rates using LLMErrorAnalyzer, and
+    saves aggregated insights JSON for PATS-A01 and KHATT separately.
+
+    Args:
+        config:             Parsed configuration dict.
+        all_dataset_names:  All dataset keys from config.
+        results_dir:        Phase 4 results root (e.g. results/phase4/).
+        source_phase:       Phase whose train-split corrections to analyse.
+        force:              Re-run even if insights files already exist.
+    """
+    insights_dir = results_dir / "insights"
+    insights_dir.mkdir(parents=True, exist_ok=True)
+
+    pats_path = insights_dir / "PATS-A01_insights.json"
+    khatt_path = insights_dir / "KHATT_insights.json"
+
+    if not force and pats_path.exists() and khatt_path.exists():
+        logger.info(
+            "Insights already exist (use --force to regenerate):\n  %s\n  %s",
+            pats_path, khatt_path,
+        )
+        return
+
+    source_dir = _PROJECT_ROOT / "results" / source_phase
+    if not source_dir.exists():
+        logger.error(
+            "Source phase directory not found: %s\n"
+            "Run inference for %s train splits first.",
+            source_dir, source_phase,
+        )
+        sys.exit(1)
+
+    # Identify train-split datasets
+    train_datasets = [ds for ds in all_dataset_names if is_train_split(ds)]
+    if not train_datasets:
+        logger.error("No train-split datasets found in config.")
+        sys.exit(1)
+
+    logger.info(
+        "analyze-train: source=%s, train datasets: %s",
+        source_phase, train_datasets,
+    )
+
+    llm_analyzer = LLMErrorAnalyzer()
+
+    # Collect results by dataset type
+    pats_results: list[dict] = []
+    khatt_results: list[dict] = []
+
+    for ds_key in train_datasets:
+        dataset_type = get_dataset_type(ds_key)
+        if dataset_type == "unknown":
+            logger.warning("Unknown dataset type for %s -- skipping.", ds_key)
+            continue
+
+        # Look for corrections in per-dataset subdir (split) or combined file
+        per_ds_path = source_dir / ds_key / "corrections.jsonl"
+        combined_path = source_dir / "corrections.jsonl"
+
+        if per_ds_path.exists():
+            src_path = per_ds_path
+        elif combined_path.exists():
+            src_path = combined_path
+        else:
+            logger.warning(
+                "[%s] No corrections.jsonl found at:\n  %s\n  %s -- skipping.",
+                ds_key, per_ds_path, combined_path,
+            )
+            continue
+
+        try:
+            records = load_corrections_jsonl(src_path)
+        except FileNotFoundError as exc:
+            logger.warning("[%s] %s", ds_key, exc)
+            continue
+
+        # If reading from combined file, filter to this dataset
+        if src_path == combined_path:
+            records = [r for r in records if r.get("dataset") == ds_key]
+
+        if not records:
+            logger.warning("[%s] No records found -- skipping.", ds_key)
+            continue
+
+        logger.info(
+            "[%s] Analysing %d records (dataset_type=%s) ...",
+            ds_key, len(records), dataset_type,
+        )
+
+        sample_results: list[dict] = []
+        for r in tqdm(records, desc=f"  Analyse {ds_key}", unit="sample"):
+            ocr_text = r.get("ocr_text", "")
+            gt_text  = r.get("gt_text", "")
+            llm_text = r.get("corrected_text", ocr_text)
+
+            if not gt_text:
+                continue  # GT required for analysis
+
+            sample_result = llm_analyzer.analyse_sample(
+                ocr_text=ocr_text,
+                gt_text=gt_text,
+                llm_text=llm_text,
+                sample_id=r.get("sample_id", ""),
+                dataset=ds_key,
+            )
+            sample_results.append(sample_result)
+
+        logger.info(
+            "[%s] Analysed %d samples with GT.", ds_key, len(sample_results)
+        )
+
+        if dataset_type == "PATS-A01":
+            pats_results.extend(sample_results)
+        else:
+            khatt_results.extend(sample_results)
+
+    # Aggregate and save
+    if pats_results:
+        insights = llm_analyzer.aggregate(pats_results, dataset_type="PATS-A01")
+        save_json(insights, pats_path)
+        overall = insights["overall"]
+        logger.info(
+            "PATS-A01 insights: %d samples, fix_rate=%.1f%%, intro_rate=%.1f%%",
+            insights["meta"]["total_samples"],
+            (overall.get("fix_rate") or 0) * 100,
+            (overall.get("introduction_rate") or 0) * 100,
+        )
+    else:
+        logger.warning(
+            "No PATS-A01 training results collected. "
+            "Ensure %s/PATS-A01-*/corrections.jsonl exist.", source_dir,
+        )
+
+    if khatt_results:
+        insights = llm_analyzer.aggregate(khatt_results, dataset_type="KHATT")
+        save_json(insights, khatt_path)
+        overall = insights["overall"]
+        logger.info(
+            "KHATT insights: %d samples, fix_rate=%.1f%%, intro_rate=%.1f%%",
+            insights["meta"]["total_samples"],
+            (overall.get("fix_rate") or 0) * 100,
+            (overall.get("introduction_rate") or 0) * 100,
+        )
+    else:
+        logger.warning(
+            "No KHATT training results collected. "
+            "Ensure %s/KHATT-train/corrections.jsonl exists.", source_dir,
+        )
+
+    logger.info("=" * 60)
+    logger.info("analyze-train complete. Insights saved to %s", insights_dir)
+    logger.info("")
+    logger.info("NEXT STEPS:")
+    logger.info(
+        "  python pipelines/run_phase4.py --mode export"
+    )
+    logger.info("=" * 60)
 
 
-def _nd_comparison_block(p2_nd: dict, corrected_nd: "MetricResult", phase_label: str) -> dict:
-    """Build no-diacritics comparison sub-dict for JSON output."""
-    if not p2_nd:
-        return {}
-    p2_cer_nd = float(p2_nd.get("cer", 0.0))
-    p2_wer_nd = float(p2_nd.get("wer", 0.0))
-    cer_d = p2_cer_nd - corrected_nd.cer
-    wer_d = p2_wer_nd - corrected_nd.wer
-    cer_r = (cer_d / p2_cer_nd * 100) if p2_cer_nd > 0 else 0.0
-    wer_r = (wer_d / p2_wer_nd * 100) if p2_wer_nd > 0 else 0.0
-    return {
-        "phase2_baseline_no_diacritics": {"cer": round(p2_cer_nd, 6), "wer": round(p2_wer_nd, 6)},
-        f"{phase_label}_corrected_no_diacritics": {"cer": round(corrected_nd.cer, 6), "wer": round(corrected_nd.wer, 6)},
-        "delta_no_diacritics": {
-            "cer_absolute": round(cer_d, 6), "wer_absolute": round(wer_d, 6),
-            "cer_relative_pct": round(cer_r, 2), "wer_relative_pct": round(wer_r, 2),
-        },
+# ---------------------------------------------------------------------------
+# EXPORT MODE
+# ---------------------------------------------------------------------------
+
+
+def run_export(
+    config: dict,
+    active_datasets: list[str],
+    results_dir: Path,
+    limit: Optional[int],
+    force: bool,
+    explicit_datasets: bool = False,
+    sample_ids: Optional[set[str]] = None,
+) -> None:
+    """Build inference_input.jsonl for Phase 4 (val splits only by default).
+
+    Loads PATS-A01 and KHATT insights, formats them as Arabic text, and builds
+    a self-reflective prompt per OCR sample.
+
+    When explicit_datasets=True (--datasets passed on CLI), the val-only filter
+    is skipped so any dataset (including train) can be exported for smoke tests.
+    """
+    output_path = results_dir / "inference_input.jsonl"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    phase4_cfg = config.get("phase4", {})
+    training_dir = _PROJECT_ROOT / phase4_cfg.get(
+        "training_artifacts_dir", "results/phase2-training/analysis"
+    )
+    failures_path = training_dir / "word_pairs_llm_failures.txt"
+
+    # --- Load insights (from analyze-train or legacy location) ---
+    insights_loader = LLMInsightsLoader()
+    insight_cfg = phase4_cfg.get("insights", {})
+    format_kwargs = {
+        "min_fix_rate_strength":  float(insight_cfg.get("min_fix_rate_strength",  0.6)),
+        "max_fix_rate_weakness":  float(insight_cfg.get("max_fix_rate_weakness",  0.4)),
+        "min_intro_rate":         float(insight_cfg.get("min_intro_rate",         0.05)),
+        "min_sample_size":        int(insight_cfg.get("min_sample_size",           10)),
+        "top_n_weaknesses":       int(insight_cfg.get("top_n_weaknesses",           3)),
+        "top_n_overcorrections":  int(insight_cfg.get("top_n_overcorrections",      2)),
     }
 
+    pats_insights: Optional[dict] = None
+    khatt_insights: Optional[dict] = None
+
+    # Try training artifacts dir first, then legacy results/phase4/insights/
+    insights_dir = results_dir / "insights"
+    for search_dir in [insights_dir]:
+        pats_path = search_dir / "PATS-A01_insights.json"
+        khatt_path = search_dir / "KHATT_insights.json"
+        if pats_path.exists() and pats_insights is None:
+            pats_insights = insights_loader.load(pats_path)
+            logger.info("Loaded PATS-A01 insights from %s", pats_path)
+        if khatt_path.exists() and khatt_insights is None:
+            khatt_insights = insights_loader.load(khatt_path)
+            logger.info("Loaded KHATT insights from %s", khatt_path)
+
+    if pats_insights is None and khatt_insights is None:
+        logger.error(
+            "No insights files found. Cannot export.\n"
+            "Run: python pipelines/run_phase4.py --mode analyze-train"
+        )
+        sys.exit(1)
+
+    # Pre-format insights contexts
+    pats_context = (
+        insights_loader.format_for_prompt(pats_insights, **format_kwargs)
+        if pats_insights is not None else ""
+    )
+    khatt_context = (
+        insights_loader.format_for_prompt(khatt_insights, **format_kwargs)
+        if khatt_insights is not None else ""
+    )
+
+    logger.info(
+        "Insights context lengths: PATS-A01=%d chars, KHATT=%d chars",
+        len(pats_context), len(khatt_context),
+    )
+
+    # --- Load word-error pairs (UNFIXED section) ---
+    word_pairs_context = ""
+    if failures_path.exists():
+        unfixed = load_unfixed_word_pairs(failures_path)
+        if unfixed:
+            n_pairs = int(phase4_cfg.get("word_pairs_n", 15))
+            word_pairs_context = format_word_examples_for_prompt(unfixed, n=n_pairs)
+            logger.info(
+                "Loaded %d unfixed word pairs -> %d chars context.",
+                len(unfixed), len(word_pairs_context),
+            )
+    else:
+        # Fallback: try legacy word_error_pairs.txt in results dir
+        legacy_path = results_dir / "word_error_pairs.txt"
+        if legacy_path.exists():
+            pairs_loader = WordErrorPairsLoader()
+            try:
+                all_pairs = pairs_loader.load(legacy_path)
+                selected = pairs_loader.select(
+                    all_pairs,
+                    n=int(phase4_cfg.get("word_pairs_n", 15)),
+                    strategy=str(phase4_cfg.get("word_pairs_strategy", "random")),
+                    seed=int(phase4_cfg.get("word_pairs_seed", 42)),
+                )
+                word_pairs_context = pairs_loader.format_for_prompt(selected)
+                logger.info(
+                    "Loaded %d word-error pairs from legacy %s (%d chars).",
+                    len(selected), legacy_path, len(word_pairs_context),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Could not load word-error pairs: %s", exc)
+        else:
+            logger.warning(
+                "No word pairs file found at %s or %s",
+                failures_path, legacy_path,
+            )
+
+    # --- Load overcorrection warnings (INTRODUCED section) ---
+    overcorrection_context = ""
+    if failures_path.exists():
+        introduced = load_introduced_word_pairs(failures_path)
+        if introduced:
+            n_over = int(phase4_cfg.get("overcorrection_n", 10))
+            overcorrection_context = format_overcorrection_warnings(introduced, n=n_over)
+            logger.info(
+                "Loaded %d introduced error pairs -> %d chars overcorrection context.",
+                len(introduced), len(overcorrection_context),
+            )
+    else:
+        logger.info("No overcorrection data (failures file missing).")
+
+    # By default only process val-split datasets; if --datasets was explicitly
+    # passed on the CLI, respect that and export whatever was requested.
+    if explicit_datasets:
+        export_datasets = active_datasets
+    else:
+        export_datasets = [ds for ds in active_datasets if is_val_split(ds)]
+        if not export_datasets:
+            logger.warning(
+                "No validation-split datasets in active set. "
+                "Phase 4 only exports val splits by default. Active: %s", active_datasets,
+            )
+            return
+
+    already_exported = _load_exported_datasets(output_path) if not force else set()
+    loader_data = DataLoader(config)
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
+    total_written = 0
+
+    with open(output_path, "a", encoding="utf-8") as f:
+        for ds_key in export_datasets:
+            if ds_key in already_exported:
+                logger.info(
+                    "[%s] Already exported -- skipping (use --force to re-export).",
+                    ds_key,
+                )
+                continue
+
+            dataset_type = get_dataset_type(ds_key)
+            insights_context = pats_context if dataset_type == "PATS-A01" else khatt_context
+
+            if not insights_context.strip() and not word_pairs_context.strip():
+                logger.warning(
+                    "[%s] No insights or word pairs context -- prompt will fall back to zero-shot.",
+                    ds_key,
+                )
+
+            try:
+                samples = list(loader_data.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
+            except DataError as exc:
+                logger.warning("Skipping %s: %s", ds_key, exc)
+                continue
+
+            for sample in tqdm(samples, desc=f"  Export {ds_key}", unit="sample"):
+                record: dict = {
+                    "sample_id":            sample.sample_id,
+                    "dataset":              ds_key,
+                    "ocr_text":             sample.ocr_text,
+                    "gt_text":              sample.gt_text,
+                    "prompt_type":          "self_reflective",
+                    "prompt_version":       builder.self_reflective_prompt_version,
+                    "insights_context":     insights_context or None,
+                    "word_pairs_context":   word_pairs_context or None,
+                    "overcorrection_context": overcorrection_context or None,
+                    "dataset_type":         dataset_type,
+                }
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                total_written += 1
+
+            logger.info(
+                "Exported %d samples for %s (dataset_type=%s, word_pairs=%s).",
+                len(samples), ds_key, dataset_type,
+                "yes" if word_pairs_context else "no",
+            )
+
+    logger.info("=" * 60)
+    logger.info(
+        "Phase 4 export complete: %d new samples -> %s", total_written, output_path
+    )
+    logger.info("")
+    logger.info("NEXT STEPS:")
+    logger.info("  1. Push latest code:  git push")
+    logger.info("  2. On Kaggle/Colab:")
+    logger.info("       python scripts/infer.py \\")
+    logger.info(
+        "           --input  %s \\", results_dir / "inference_input.jsonl"
+    )
+    logger.info(
+        "           --output %s", results_dir / "corrections.jsonl"
+    )
+    logger.info("  3. Run analysis locally:")
+    logger.info("       python pipelines/run_phase4.py --mode analyze")
+    logger.info("=" * 60)
+
 
 # ---------------------------------------------------------------------------
-# Generic analyze step (shared by 4A and 4B)
+# ANALYZE MODE
 # ---------------------------------------------------------------------------
 
 
@@ -579,31 +891,10 @@ def process_dataset_analyze(
     config: dict,
     results_dir: Path,
     phase2_dir: Path,
-    phase_label: str,
-    prompt_type: str,
-    prompt_version: str,
     limit: Optional[int],
     analyze_errors: bool,
-    extra_meta: Optional[dict] = None,
 ) -> MetricResult:
-    """Run all analysis steps for one dataset (4A or 4B).
-
-    Args:
-        dataset_key: e.g. "KHATT-train".
-        corrected_samples: Loaded from corrections.jsonl.
-        config: Parsed config dict.
-        results_dir: Phase 4A or 4B results root.
-        phase2_dir: Phase 2 results root (baseline metrics).
-        phase_label: "phase4a" or "phase4b" (for metadata and file labels).
-        prompt_type: "rule_augmented" or "few_shot".
-        prompt_version: e.g. "p4av1" or "p4bv1".
-        limit: Sample limit applied (for metadata only).
-        analyze_errors: If True, compute error_changes.json.
-        extra_meta: Additional metadata to merge into meta blocks.
-
-    Returns:
-        MetricResult for corrected text.
-    """
+    """Run CER/WER, comparison vs Phase 2, and optional error analysis for one dataset."""
     out_dir = results_dir / dataset_key
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -612,7 +903,6 @@ def process_dataset_analyze(
     total_prompt_tokens = sum(cs.prompt_tokens for cs in corrected_samples)
     total_output_tokens = sum(cs.output_tokens for cs in corrected_samples)
     total_latency = sum(cs.latency_s for cs in corrected_samples)
-    avg_latency = total_latency / max(n, 1)
 
     eval_cfg = config.get("evaluation", {})
     exclude_runaway = eval_cfg.get("exclude_runaway", False)
@@ -620,13 +910,11 @@ def process_dataset_analyze(
 
     logger.info("=" * 60)
     logger.info(
-        "Analyzing [%s] dataset: %s  (%d samples, %d failed)",
-        phase_label, dataset_key, n, n_failed,
+        "Analyzing [phase4 / %s]: %d samples, %d failed",
+        dataset_key, n, n_failed,
     )
 
-    # ------------------------------------------------------------------
     # Step 1: Split into normal / runaway, compute metrics for both
-    # ------------------------------------------------------------------
     normal_samples, runaway_samples, data_quality = split_runaway_samples(
         corrected_samples, threshold=threshold,
     )
@@ -634,812 +922,6 @@ def process_dataset_analyze(
         logger.info("[%s] %s", dataset_key, data_quality["description"])
 
     logger.info("[%s] Calculating OCR baseline + corrected CER/WER ...", dataset_key)
-
-    # OCR baseline
-    ocr_all, ocr_all_nd = calculate_metrics_dual(
-        corrected_samples, dataset_name=dataset_key, text_field="ocr_text",
-    )
-    ocr_normal, ocr_normal_nd = calculate_metrics_dual(
-        normal_samples, dataset_name=dataset_key, text_field="ocr_text",
-    )
-
-    # Corrected (LLM vs GT)
-    all_result, all_result_nd = calculate_metrics_dual(
-        corrected_samples, dataset_name=dataset_key, text_field="corrected_text",
-    )
-    normal_result, normal_result_nd = calculate_metrics_dual(
-        normal_samples, dataset_name=dataset_key, text_field="corrected_text",
-    )
-
-    if exclude_runaway:
-        primary, primary_nd = normal_result, normal_result_nd
-        primary_source = "normal_only"
-    else:
-        primary, primary_nd = all_result, all_result_nd
-        primary_source = "all"
-
-    metrics_extra = {
-        "prompt_type":              prompt_type,
-        "prompt_version":           prompt_version,
-        "total_prompt_tokens":      total_prompt_tokens,
-        "total_output_tokens":      total_output_tokens,
-        "total_latency_s":          round(total_latency, 2),
-        "avg_latency_per_sample_s": round(avg_latency, 3),
-        "failed_samples":           n_failed,
-        "primary_variant":          primary_source,
-    }
-    if extra_meta:
-        metrics_extra.update(extra_meta)
-
-    metrics_json = {
-        "meta": make_meta(phase_label, dataset_key, n, config, limit, extra=metrics_extra),
-        # OCR baseline
-        "ocr_all": ocr_all.to_dict(),
-        "ocr_all_no_diacritics": ocr_all_nd.to_dict(),
-        "ocr_normal_only": ocr_normal.to_dict(),
-        "ocr_normal_only_no_diacritics": ocr_normal_nd.to_dict(),
-        # Corrected
-        "corrected_all": all_result.to_dict(),
-        "corrected_all_no_diacritics": all_result_nd.to_dict(),
-        "corrected_normal_only": normal_result.to_dict(),
-        "corrected_normal_only_no_diacritics": normal_result_nd.to_dict(),
-        "data_quality": data_quality,
-    }
-    save_json(metrics_json, out_dir / "metrics.json")
-
-    logger.info(
-        "[%s] %s Primary (%s): OCR CER=%.2f%% -> LLM CER=%.2f%%  |  no-diac: %.2f%% -> %.2f%%",
-        dataset_key, phase_label.upper(), primary_source,
-        (ocr_all if not exclude_runaway else ocr_normal).cer * 100,
-        primary.cer * 100,
-        (ocr_all_nd if not exclude_runaway else ocr_normal_nd).cer * 100,
-        primary_nd.cer * 100,
-    )
-
-    # ------------------------------------------------------------------
-    # Step 2: Comparison vs Phase 2 baseline (ISOLATED)
-    # ------------------------------------------------------------------
-    p2_full = load_phase2_dataset_metrics(phase2_dir, dataset_key)
-    comparison: dict = {}
-    if p2_full is not None:
-        p2_corr, p2_nd, p2_src = pick_phase2_variant(p2_full, exclude_runaway)
-        p2_cer = float(p2_corr.get("cer", 0.0))
-        p2_wer = float(p2_corr.get("wer", 0.0))
-        cer_delta_abs = p2_cer - primary.cer
-        wer_delta_abs = p2_wer - primary.wer
-        cer_rel = (cer_delta_abs / p2_cer * 100) if p2_cer > 0 else 0.0
-        wer_rel = (wer_delta_abs / p2_wer * 100) if p2_wer > 0 else 0.0
-
-        comparison = {
-            "meta": make_meta(
-                phase_label, dataset_key, n, config, limit,
-                extra={"comparison": f"{phase_label}_vs_phase2"},
-            ),
-            "phase2_baseline": {
-                "cer": round(p2_cer, 6),
-                "wer": round(p2_wer, 6),
-                "source": str(phase2_dir / dataset_key / "metrics.json"),
-                "variant": p2_src,
-            },
-            f"{phase_label}_corrected": {
-                "cer": round(primary.cer, 6),
-                "wer": round(primary.wer, 6),
-                "variant": primary_source,
-            },
-            "delta": {
-                "cer_absolute":     round(cer_delta_abs, 6),
-                "wer_absolute":     round(wer_delta_abs, 6),
-                "cer_relative_pct": round(cer_rel, 2),
-                "wer_relative_pct": round(wer_rel, 2),
-            },
-            **(_nd_comparison_block(p2_nd, primary_nd, phase_label)),
-            "interpretation": (
-                f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
-                f"{abs(cer_rel):.1f}% vs Phase 2 "
-                f"({p2_cer*100:.2f}% -> {primary.cer*100:.2f}%). "
-                f"WER {'reduced' if wer_delta_abs >= 0 else 'increased'} by "
-                f"{abs(wer_rel):.1f}% "
-                f"({p2_wer*100:.2f}% -> {primary.wer*100:.2f}%)."
-            ),
-        }
-        save_json(comparison, out_dir / "comparison_vs_phase2.json")
-        logger.info(
-            "[%s] Phase2->%s CER: %.2f%% -> %.2f%% (%+.1f%%) | "
-            "WER: %.2f%% -> %.2f%% (%+.1f%%)",
-            dataset_key, phase_label.upper(),
-            p2_cer * 100, primary.cer * 100, cer_rel,
-            p2_wer * 100, primary.wer * 100, wer_rel,
-        )
-        if p2_nd:
-            p2_cer_nd_v = float(p2_nd.get("cer", 0.0))
-            p2_wer_nd_v = float(p2_nd.get("wer", 0.0))
-            cer_d_nd_v = p2_cer_nd_v - primary_nd.cer
-            wer_d_nd_v = p2_wer_nd_v - primary_nd.wer
-            cer_r_nd_v = (cer_d_nd_v / p2_cer_nd_v * 100) if p2_cer_nd_v > 0 else 0.0
-            wer_r_nd_v = (wer_d_nd_v / p2_wer_nd_v * 100) if p2_wer_nd_v > 0 else 0.0
-            logger.info(
-                "[%s] ND  CER: %.2f%% -> %.2f%% (%+.1f%%)  |  ND  WER: %.2f%% -> %.2f%% (%+.1f%%)",
-                dataset_key,
-                p2_cer_nd_v * 100, primary_nd.cer * 100, cer_r_nd_v,
-                p2_wer_nd_v * 100, primary_nd.wer * 100, wer_r_nd_v,
-            )
-    else:
-        logger.warning(
-            "[%s] Phase 2 metrics not found at %s -- skipping comparison_vs_phase2.json.",
-            dataset_key, phase2_dir / dataset_key / "metrics.json",
-        )
-
-    # ------------------------------------------------------------------
-    # Step 3: Error change analysis (optional)
-    # ------------------------------------------------------------------
-    if analyze_errors:
-        logger.info("[%s] Running error change analysis ...", dataset_key)
-        error_changes = run_error_change_analysis(
-            corrected_samples, dataset_key, phase_label
-        )
-        error_changes["meta"] = make_meta(
-            phase_label, dataset_key, n, config, limit,
-            extra={"prompt_type": prompt_type},
-        )
-        save_json(error_changes, out_dir / "error_changes.json")
-
-    return primary
-
-
-# ---------------------------------------------------------------------------
-# PHASE 4A -- Rule-Augmented Prompting
-# ---------------------------------------------------------------------------
-
-
-def build_rules_context(
-    config: dict,
-    categories: Optional[list[str]],
-    n_rules: Optional[int],
-) -> str:
-    """Build the rules context string to inject into prompts (Phase 4A).
-
-    Args:
-        config: Parsed config dict.
-        categories: Filter to these rule categories (None = all).
-        n_rules: Cap the number of rules injected (None = all).
-
-    Returns:
-        Pre-formatted Arabic rules string for prompt injection.
-    """
-    phase4_cfg = config.get("phase4", {}).get("rules", {})
-    cats = categories or phase4_cfg.get("categories")
-    n = n_rules or phase4_cfg.get("n_rules")
-    style = phase4_cfg.get("format_style", "compact_arabic")
-
-    loader = RulesLoader()
-    rules = loader.load(categories=cats)
-
-    if not rules:
-        logger.warning("No rules loaded. Falling back to zero-shot for all samples.")
-        return ""
-
-    context = loader.format_for_prompt(rules, n=n, style=style)
-    logger.info(
-        "Rules context: %d rules loaded, %d chars injected (style=%s).",
-        len(rules), len(context), style,
-    )
-    return context
-
-
-def run_export_4a(
-    config: dict,
-    active_datasets: list[str],
-    results_dir: Path,
-    categories: Optional[list[str]],
-    n_rules: Optional[int],
-    limit: Optional[int],
-    force: bool,
-    sample_ids: Optional[set[str]] = None,
-) -> None:
-    """Export OCR texts with rules context to inference_input.jsonl (Phase 4A).
-
-    Each line contains: sample_id, dataset, ocr_text, gt_text,
-    prompt_type ("rule_augmented"), rules_context.
-
-    Args:
-        config: Parsed config dict.
-        active_datasets: Dataset keys to process.
-        results_dir: Phase 4A results root.
-        categories: Rule categories to include (None = all).
-        n_rules: Max rules to inject (None = all).
-        limit: Max samples per dataset.
-        force: If True, ignore existing exported datasets.
-    """
-    output_path = results_dir / "inference_input.jsonl"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    loader_data = DataLoader(config)
-
-    # Build rules context once — same for all datasets
-    rules_context = build_rules_context(config, categories, n_rules)
-    prompt_type = "rule_augmented" if rules_context else "zero_shot"
-
-    already_exported = _load_exported_datasets(output_path) if not force else set()
-    total_written = 0
-
-    with open(output_path, "a", encoding="utf-8") as f:
-        for ds_key in active_datasets:
-            if ds_key in already_exported:
-                logger.info(
-                    "[%s] Already exported -- skipping (use --force to re-export).", ds_key
-                )
-                continue
-
-            try:
-                samples = list(loader_data.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
-            except DataError as exc:
-                logger.warning("Skipping %s: %s", ds_key, exc)
-                continue
-
-            for sample in samples:
-                record = {
-                    "sample_id":    sample.sample_id,
-                    "dataset":      ds_key,
-                    "ocr_text":     sample.ocr_text,
-                    "gt_text":      sample.gt_text,
-                    "prompt_type":  prompt_type,
-                    "rules_context": rules_context,
-                }
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                total_written += 1
-
-            logger.info(
-                "Exported %d samples for %s (prompt_type=%s, context_len=%d chars).",
-                len(samples), ds_key, prompt_type, len(rules_context),
-            )
-
-    logger.info("=" * 60)
-    logger.info("Phase 4A export complete: %d new samples -> %s", total_written, output_path)
-    logger.info("")
-    logger.info("NEXT STEPS:")
-    logger.info("  1. Push latest code:  git push")
-    logger.info("  2. On Kaggle/Colab:")
-    logger.info("       python scripts/infer.py \\")
-    logger.info("           --input  results/phase4a/inference_input.jsonl \\")
-    logger.info("           --output results/phase4a/corrections.jsonl")
-    logger.info("  3. Run analysis locally:")
-    logger.info("       python pipelines/run_phase4.py --sub-phase 4a --mode analyze")
-    logger.info("=" * 60)
-
-
-def run_analyze_4a(
-    config: dict,
-    active_datasets: list[str],
-    results_dir: Path,
-    phase2_dir: Path,
-    limit: Optional[int],
-    force: bool,
-    analyze_errors: bool,
-    categories: Optional[list[str]],
-    n_rules: Optional[int],
-) -> tuple[dict[str, MetricResult], dict[str, dict]]:
-    """Analyze Phase 4A corrections: compute metrics and comparisons.
-
-    Args:
-        config: Parsed config dict.
-        active_datasets: Dataset keys to process.
-        results_dir: Phase 4A results root.
-        phase2_dir: Phase 2 results root (baseline).
-        limit: Sample limit (for metadata).
-        force: If True, re-analyze already-done datasets.
-        analyze_errors: If True, compute error_changes.json.
-        categories: Rule categories used in export (for metadata).
-        n_rules: N rules cap used in export (for metadata).
-
-    Returns:
-        Tuple of (all_corrected, all_comparisons) dicts.
-    """
-    _maybe_split_combined_corrections(results_dir, force=force)
-
-    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
-    all_corrected: dict[str, MetricResult] = {}
-    all_comparisons: dict[str, dict] = {}
-
-    for ds_key in active_datasets:
-        try:
-            metrics_path = results_dir / ds_key / "metrics.json"
-            if metrics_path.exists() and not force:
-                logger.info(
-                    "[%s] Already analyzed -- skipping (use --force to re-analyze).", ds_key
-                )
-                with open(metrics_path, encoding="utf-8") as f:
-                    mdata = json.load(f)
-                exclude_r = config.get("evaluation", {}).get("exclude_runaway", False)
-                cd = _pick_corrected_key(mdata, exclude_r)
-                all_corrected[ds_key] = MetricResult(
-                    dataset=mdata.get("meta", {}).get("dataset", ds_key),
-                    num_samples=cd.get("num_samples", 0),
-                    num_chars_ref=cd.get("num_chars_ref", 0),
-                    num_words_ref=cd.get("num_words_ref", 0),
-                    cer=cd.get("cer", 0.0),
-                    wer=cd.get("wer", 0.0),
-                    cer_std=cd.get("cer_std", 0.0),
-                    wer_std=cd.get("wer_std", 0.0),
-                    cer_median=cd.get("cer_median", 0.0),
-                    wer_median=cd.get("wer_median", 0.0),
-                    cer_p95=cd.get("cer_p95", 0.0),
-                    wer_p95=cd.get("wer_p95", 0.0),
-                )
-                cmp_path = results_dir / ds_key / "comparison_vs_phase2.json"
-                if cmp_path.exists():
-                    with open(cmp_path, encoding="utf-8") as f:
-                        all_comparisons[ds_key] = json.load(f)
-                continue
-
-            corrections_path = results_dir / ds_key / "corrections.jsonl"
-            corrected_samples = load_corrections(corrections_path)
-            if limit:
-                corrected_samples = corrected_samples[:limit]
-
-            extra_meta = {
-                "rule_categories": categories,
-                "n_rules": n_rules,
-            }
-            metric_result = process_dataset_analyze(
-                dataset_key=ds_key,
-                corrected_samples=corrected_samples,
-                config=config,
-                results_dir=results_dir,
-                phase2_dir=phase2_dir,
-                phase_label="phase4a",
-                prompt_type="rule_augmented",
-                prompt_version=builder.rules_prompt_version,
-                limit=limit,
-                analyze_errors=analyze_errors,
-                extra_meta=extra_meta,
-            )
-            all_corrected[ds_key] = metric_result
-
-            cmp_path = results_dir / ds_key / "comparison_vs_phase2.json"
-            if cmp_path.exists():
-                with open(cmp_path, encoding="utf-8") as f:
-                    all_comparisons[ds_key] = json.load(f)
-
-        except FileNotFoundError as exc:
-            logger.error("Dataset %s: %s", ds_key, exc)
-        except DataError as exc:
-            logger.warning("Skipping %s: %s", ds_key, exc)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Unexpected error on %s: %s", ds_key, exc, exc_info=True)
-
-    return all_corrected, all_comparisons
-
-
-# ---------------------------------------------------------------------------
-# PHASE 4B -- Few-Shot Prompting (QALB)
-# ---------------------------------------------------------------------------
-
-
-def build_examples_context(
-    config: dict,
-    num_examples: int,
-    selection: str,
-    years: list[str],
-) -> str:
-    """Build the few-shot examples context string (Phase 4B).
-
-    Args:
-        config: Parsed config dict.
-        num_examples: Number of examples to select.
-        selection: Selection strategy ("diverse", "random", "most_common").
-        years: QALB corpus years to load.
-
-    Returns:
-        Pre-formatted Arabic few-shot examples string for prompt injection.
-    """
-    phase4b_cfg = config.get("phase4", {}).get("few_shot", {})
-    seed = phase4b_cfg.get("seed", 42)
-    max_length = phase4b_cfg.get("max_length", 100)
-    min_length = phase4b_cfg.get("min_length", 10)
-    max_words_changed = phase4b_cfg.get("max_words_changed", 4)
-    format_style = phase4b_cfg.get("format_style", "inline_arabic")
-
-    loader = QALBLoader(config)
-    try:
-        pairs = loader.load(splits=["train"], years=years)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("QALB load failed: %s -- falling back to zero-shot.", exc)
-        return ""
-
-    if not pairs:
-        logger.warning(
-            "No QALB pairs loaded for years=%s. Falling back to zero-shot.", years
-        )
-        return ""
-
-    filtered = loader.filter_ocr_relevant(
-        pairs,
-        max_length=max_length,
-        min_length=min_length,
-        max_words_changed=max_words_changed,
-    )
-    logger.info(
-        "QALB: %d total pairs, %d after OCR filtering.", len(pairs), len(filtered)
-    )
-
-    if not filtered:
-        logger.warning(
-            "No OCR-relevant QALB pairs found. Falling back to zero-shot."
-        )
-        return ""
-
-    selected = loader.select(
-        filtered, n=num_examples, strategy=selection, seed=seed
-    )
-    context = loader.format_for_prompt(selected, style=format_style)
-    logger.info(
-        "Few-shot context: %d examples selected (%s), %d chars.",
-        len(selected), selection, len(context),
-    )
-    return context
-
-
-def run_export_4b(
-    config: dict,
-    active_datasets: list[str],
-    results_dir: Path,
-    num_examples: int,
-    selection: str,
-    years: list[str],
-    limit: Optional[int],
-    force: bool,
-    sample_ids: Optional[set[str]] = None,
-) -> None:
-    """Export OCR texts with few-shot examples context (Phase 4B).
-
-    Each line contains: sample_id, dataset, ocr_text, gt_text,
-    prompt_type ("few_shot"), examples_context.
-    """
-    output_path = results_dir / "inference_input.jsonl"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    loader_data = DataLoader(config)
-
-    # Build examples context once -- same for all datasets
-    examples_context = build_examples_context(config, num_examples, selection, years)
-    prompt_type = "few_shot" if examples_context else "zero_shot"
-
-    already_exported = _load_exported_datasets(output_path) if not force else set()
-    total_written = 0
-
-    with open(output_path, "a", encoding="utf-8") as f:
-        for ds_key in active_datasets:
-            if ds_key in already_exported:
-                logger.info(
-                    "[%s] Already exported -- skipping (use --force to re-export).", ds_key
-                )
-                continue
-
-            try:
-                samples = list(loader_data.iter_samples(ds_key, limit=limit, sample_ids=sample_ids))
-            except DataError as exc:
-                logger.warning("Skipping %s: %s", ds_key, exc)
-                continue
-
-            for sample in samples:
-                record = {
-                    "sample_id":       sample.sample_id,
-                    "dataset":         ds_key,
-                    "ocr_text":        sample.ocr_text,
-                    "gt_text":         sample.gt_text,
-                    "prompt_type":     prompt_type,
-                    "examples_context": examples_context,
-                    "num_examples":    num_examples,
-                    "selection":       selection,
-                }
-                f.write(json.dumps(record, ensure_ascii=False) + "\n")
-                total_written += 1
-
-            logger.info(
-                "Exported %d samples for %s (prompt_type=%s, context_len=%d chars).",
-                len(samples), ds_key, prompt_type, len(examples_context),
-            )
-
-    logger.info("=" * 60)
-    logger.info("Phase 4B export complete: %d new samples -> %s", total_written, output_path)
-    logger.info("")
-    logger.info("NEXT STEPS:")
-    logger.info("  1. Push latest code:  git push")
-    logger.info("  2. On Kaggle/Colab:")
-    logger.info("       python scripts/infer.py \\")
-    logger.info("           --input  results/phase4b/inference_input.jsonl \\")
-    logger.info("           --output results/phase4b/corrections.jsonl")
-    logger.info("  3. Run analysis locally:")
-    logger.info("       python pipelines/run_phase4.py --sub-phase 4b --mode analyze")
-    logger.info("=" * 60)
-
-
-def run_analyze_4b(
-    config: dict,
-    active_datasets: list[str],
-    results_dir: Path,
-    phase2_dir: Path,
-    limit: Optional[int],
-    force: bool,
-    analyze_errors: bool,
-    num_examples: int,
-    selection: str,
-) -> tuple[dict[str, MetricResult], dict[str, dict]]:
-    """Analyze Phase 4B corrections: compute metrics and comparisons."""
-    _maybe_split_combined_corrections(results_dir, force=force)
-
-    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
-    all_corrected: dict[str, MetricResult] = {}
-    all_comparisons: dict[str, dict] = {}
-
-    for ds_key in active_datasets:
-        try:
-            metrics_path = results_dir / ds_key / "metrics.json"
-            if metrics_path.exists() and not force:
-                logger.info(
-                    "[%s] Already analyzed -- skipping (use --force to re-analyze).", ds_key
-                )
-                with open(metrics_path, encoding="utf-8") as f:
-                    mdata = json.load(f)
-                exclude_r = config.get("evaluation", {}).get("exclude_runaway", False)
-                cd = _pick_corrected_key(mdata, exclude_r)
-                all_corrected[ds_key] = MetricResult(
-                    dataset=mdata.get("meta", {}).get("dataset", ds_key),
-                    num_samples=cd.get("num_samples", 0),
-                    num_chars_ref=cd.get("num_chars_ref", 0),
-                    num_words_ref=cd.get("num_words_ref", 0),
-                    cer=cd.get("cer", 0.0),
-                    wer=cd.get("wer", 0.0),
-                    cer_std=cd.get("cer_std", 0.0),
-                    wer_std=cd.get("wer_std", 0.0),
-                    cer_median=cd.get("cer_median", 0.0),
-                    wer_median=cd.get("wer_median", 0.0),
-                    cer_p95=cd.get("cer_p95", 0.0),
-                    wer_p95=cd.get("wer_p95", 0.0),
-                )
-                cmp_path = results_dir / ds_key / "comparison_vs_phase2.json"
-                if cmp_path.exists():
-                    with open(cmp_path, encoding="utf-8") as f:
-                        all_comparisons[ds_key] = json.load(f)
-                continue
-
-            corrections_path = results_dir / ds_key / "corrections.jsonl"
-            corrected_samples = load_corrections(corrections_path)
-            if limit:
-                corrected_samples = corrected_samples[:limit]
-
-            extra_meta = {
-                "num_examples": num_examples,
-                "selection_strategy": selection,
-            }
-            metric_result = process_dataset_analyze(
-                dataset_key=ds_key,
-                corrected_samples=corrected_samples,
-                config=config,
-                results_dir=results_dir,
-                phase2_dir=phase2_dir,
-                phase_label="phase4b",
-                prompt_type="few_shot",
-                prompt_version=builder.few_shot_prompt_version,
-                limit=limit,
-                analyze_errors=analyze_errors,
-                extra_meta=extra_meta,
-            )
-            all_corrected[ds_key] = metric_result
-
-            cmp_path = results_dir / ds_key / "comparison_vs_phase2.json"
-            if cmp_path.exists():
-                with open(cmp_path, encoding="utf-8") as f:
-                    all_comparisons[ds_key] = json.load(f)
-
-        except FileNotFoundError as exc:
-            logger.error("Dataset %s: %s", ds_key, exc)
-        except DataError as exc:
-            logger.warning("Skipping %s: %s", ds_key, exc)
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Unexpected error on %s: %s", ds_key, exc, exc_info=True)
-
-    return all_corrected, all_comparisons
-
-
-# ---------------------------------------------------------------------------
-# PHASE 4C -- CAMeL Tools Validation
-# ---------------------------------------------------------------------------
-
-
-def _load_phase2_corrections_for_dataset(
-    phase2_dir: Path,
-    dataset_key: str,
-) -> list[dict]:
-    """Load Phase 2 raw correction records for one dataset.
-
-    Tries per-dataset path first, then falls back to combined corrections.jsonl.
-
-    Returns:
-        List of raw dicts from corrections.jsonl for this dataset.
-    """
-    per_ds_path = phase2_dir / dataset_key / "corrections.jsonl"
-    combined_path = phase2_dir / "corrections.jsonl"
-
-    records: list[dict] = []
-
-    if per_ds_path.exists():
-        src = per_ds_path
-    elif combined_path.exists():
-        src = combined_path
-    else:
-        raise FileNotFoundError(
-            f"Phase 2 corrections not found for {dataset_key}.\n"
-            f"Looked at: {per_ds_path} and {combined_path}\n"
-            "Run Phase 2 first."
-        )
-
-    with open(src, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-                if r.get("dataset") == dataset_key or src == per_ds_path:
-                    records.append(r)
-            except json.JSONDecodeError:
-                pass
-
-    logger.info(
-        "Loaded %d Phase 2 records for %s from %s", len(records), dataset_key, src
-    )
-    return records
-
-
-def process_dataset_validate(
-    dataset_key: str,
-    phase2_records: list[dict],
-    validator: WordValidator,
-    config: dict,
-    results_dir: Path,
-    phase2_dir: Path,
-    strategy: str,
-    limit: Optional[int],
-    known_overcorrections: set[tuple[str, str]] | None = None,
-) -> MetricResult:
-    """Apply CAMeL revert strategy to Phase 2 corrections for one dataset.
-
-    Reads Phase 2 {llm_text, ocr_text}, applies revert strategy, writes
-    corrected output, computes metrics, and saves all result files.
-
-    Args:
-        dataset_key: e.g. "KHATT-train".
-        phase2_records: Raw dicts from Phase 2 corrections.jsonl.
-        validator: Initialised WordValidator instance.
-        config: Parsed config dict.
-        results_dir: Phase 4C results root.
-        phase2_dir: Phase 2 results root (for baseline comparison).
-        strategy: Revert strategy (currently only "revert").
-        limit: Sample limit applied (for metadata).
-
-    Returns:
-        MetricResult for the post-validation corrected text.
-    """
-    out_dir = results_dir / dataset_key
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    if limit:
-        phase2_records = phase2_records[:limit]
-
-    n = len(phase2_records)
-    logger.info("=" * 60)
-    logger.info("Phase 4C validate: %s  (%d samples, strategy=%s)", dataset_key, n, strategy)
-
-    corrected_samples: list[CorrectedSample] = []
-    revert_results: list[TextCorrectionResult] = []
-
-    out_corrections_path = out_dir / "corrections.jsonl"
-    with open(out_corrections_path, "w", encoding="utf-8") as out_f:
-        for r in tqdm(phase2_records, desc=f"  Validating {dataset_key}", unit="sample"):
-            llm_text = r.get("corrected_text", r["ocr_text"])
-            ocr_text = r.get("ocr_text", "")
-            gt_text  = r.get("gt_text", "")
-
-            revert_result = validator.validate_correction(
-                llm_text, ocr_text, strategy=strategy,
-                known_overcorrections=known_overcorrections,
-            )
-            revert_results.append(revert_result)
-
-            out_record = {
-                "sample_id":      r["sample_id"],
-                "dataset":        dataset_key,
-                "ocr_text":       ocr_text,
-                "corrected_text": revert_result.final_text,
-                "gt_text":        gt_text,
-                "phase2_text":    llm_text,
-                "reverted_count": revert_result.reverted_count,
-                "kept_count":     revert_result.kept_count,
-                "unchanged_count": revert_result.unchanged_count,
-                "revert_rate":    round(revert_result.revert_rate, 4),
-                "strategy":       strategy,
-            }
-            out_f.write(json.dumps(out_record, ensure_ascii=False) + "\n")
-
-            ocr_sample = OCRSample(
-                sample_id=r["sample_id"],
-                dataset=dataset_key,
-                font=None,
-                split=None,
-                ocr_text=ocr_text,
-                gt_text=gt_text,
-                ocr_path=Path(""),
-                gt_path=None,
-            )
-            corrected_samples.append(CorrectedSample(
-                sample=ocr_sample,
-                corrected_text=revert_result.final_text,
-                prompt_tokens=0,
-                output_tokens=0,
-                latency_s=0.0,
-                success=True,
-                error=None,
-            ))
-
-    logger.info("Phase 4C corrections written to %s", out_corrections_path)
-
-    # ------------------------------------------------------------------
-    # Aggregate revert statistics
-    # ------------------------------------------------------------------
-    total_words    = sum(rr.total_words for rr in revert_results)
-    total_reverted = sum(rr.reverted_count for rr in revert_results)
-    total_kept     = sum(rr.kept_count for rr in revert_results)
-    total_unchanged = sum(rr.unchanged_count for rr in revert_results)
-    avg_revert_rate = total_reverted / max(total_words, 1)
-
-    samples_with_reverts = sum(1 for rr in revert_results if rr.reverted_count > 0)
-
-    validation_stats = {
-        "meta": make_meta(
-            "phase4c", dataset_key, n, config, limit,
-            extra={
-                "strategy":         strategy,
-                "camel_enabled":    validator._analyzer.enabled,  # noqa: SLF001
-            },
-        ),
-        "summary": {
-            "total_samples":         n,
-            "samples_with_reverts":  samples_with_reverts,
-            "total_arabic_words":    total_words,
-            "words_reverted":        total_reverted,
-            "words_kept":            total_kept,
-            "words_unchanged":       total_unchanged,
-            "avg_revert_rate":       round(avg_revert_rate, 4),
-            "revert_rate_pct":       round(avg_revert_rate * 100, 2),
-        },
-        "note": (
-            "Words reverted = LLM word was morphologically invalid AND "
-            "OCR word was morphologically valid -> revert to OCR. "
-            "Words kept = LLM correction kept as-is. "
-            "Words unchanged = identical in LLM and OCR output."
-        ),
-    }
-    save_json(validation_stats, out_dir / "validation_stats.json")
-
-    logger.info(
-        "[%s] Revert stats: %d total words | %d reverted (%.1f%%) | %d kept | %d unchanged",
-        dataset_key, total_words, total_reverted,
-        avg_revert_rate * 100, total_kept, total_unchanged,
-    )
-
-    # ------------------------------------------------------------------
-    # CER/WER on post-validation corrected texts (with runaway splitting)
-    # ------------------------------------------------------------------
-    eval_cfg = config.get("evaluation", {})
-    exclude_runaway = eval_cfg.get("exclude_runaway", False)
-    threshold = eval_cfg.get("runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD)
-
-    normal_samples, runaway_samples, data_quality = split_runaway_samples(
-        corrected_samples, threshold=threshold,
-    )
-    if runaway_samples:
-        logger.info("[%s] %s", dataset_key, data_quality["description"])
-
-    logger.info("[%s] Calculating Phase 4C OCR baseline + corrected CER/WER ...", dataset_key)
 
     # OCR baseline
     ocr_all, ocr_all_nd = calculate_metrics_dual(
@@ -1464,15 +946,19 @@ def process_dataset_validate(
         primary, primary_nd = all_result, all_result_nd
         primary_source = "all"
 
+    builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
     metrics_json = {
         "meta": make_meta(
-            "phase4c", dataset_key, n, config, limit,
+            dataset_key, n, config, limit,
             extra={
-                "strategy":         strategy,
-                "prompt_type":      "camel_validation",
-                "total_reverted":   total_reverted,
-                "avg_revert_rate":  round(avg_revert_rate, 4),
-                "primary_variant":  primary_source,
+                "prompt_type":    "self_reflective",
+                "prompt_version": builder.self_reflective_prompt_version,
+                "total_prompt_tokens":      total_prompt_tokens,
+                "total_output_tokens":      total_output_tokens,
+                "total_latency_s":          round(total_latency, 2),
+                "avg_latency_per_sample_s": round(total_latency / max(n, 1), 3),
+                "failed_samples":           n_failed,
+                "primary_variant":          primary_source,
             },
         ),
         # OCR baseline
@@ -1488,9 +974,8 @@ def process_dataset_validate(
         "data_quality": data_quality,
     }
     save_json(metrics_json, out_dir / "metrics.json")
-
     logger.info(
-        "[%s] Phase 4C Primary (%s): OCR CER=%.2f%% -> LLM CER=%.2f%%  |  no-diac: %.2f%% -> %.2f%%",
+        "[%s] Phase4 Primary (%s): OCR CER=%.2f%% -> LLM CER=%.2f%%  |  no-diac: %.2f%% -> %.2f%%",
         dataset_key, primary_source,
         (ocr_all if not exclude_runaway else ocr_normal).cer * 100,
         primary.cer * 100,
@@ -1498,23 +983,21 @@ def process_dataset_validate(
         primary_nd.cer * 100,
     )
 
-    # ------------------------------------------------------------------
-    # Comparison vs Phase 2
-    # ------------------------------------------------------------------
+    # Step 2: Comparison vs Phase 2
     p2_full = load_phase2_dataset_metrics(phase2_dir, dataset_key)
     if p2_full is not None:
         p2_corr, p2_nd, p2_src = pick_phase2_variant(p2_full, exclude_runaway)
         p2_cer = float(p2_corr.get("cer", 0.0))
         p2_wer = float(p2_corr.get("wer", 0.0))
-        cer_delta_abs = p2_cer - primary.cer
-        wer_delta_abs = p2_wer - primary.wer
-        cer_rel = (cer_delta_abs / p2_cer * 100) if p2_cer > 0 else 0.0
-        wer_rel = (wer_delta_abs / p2_wer * 100) if p2_wer > 0 else 0.0
+        cer_delta = p2_cer - primary.cer
+        wer_delta = p2_wer - primary.wer
+        cer_rel = (cer_delta / p2_cer * 100) if p2_cer > 0 else 0.0
+        wer_rel = (wer_delta / p2_wer * 100) if p2_wer > 0 else 0.0
 
         comparison = {
             "meta": make_meta(
-                "phase4c", dataset_key, n, config, limit,
-                extra={"comparison": "phase4c_vs_phase2"},
+                dataset_key, n, config, limit,
+                extra={"comparison": "phase4_vs_phase2"},
             ),
             "phase2_baseline": {
                 "cer": round(p2_cer, 6),
@@ -1522,30 +1005,30 @@ def process_dataset_validate(
                 "source": str(phase2_dir / dataset_key / "metrics.json"),
                 "variant": p2_src,
             },
-            "phase4c_corrected": {
+            "phase4_corrected": {
                 "cer": round(primary.cer, 6),
                 "wer": round(primary.wer, 6),
                 "variant": primary_source,
             },
             "delta": {
-                "cer_absolute":     round(cer_delta_abs, 6),
-                "wer_absolute":     round(wer_delta_abs, 6),
+                "cer_absolute":     round(cer_delta, 6),
+                "wer_absolute":     round(wer_delta, 6),
                 "cer_relative_pct": round(cer_rel, 2),
                 "wer_relative_pct": round(wer_rel, 2),
             },
-            **(_nd_comparison_block(p2_nd, primary_nd, "phase4c")),
+            **(_nd_comparison_block(p2_nd, primary_nd, "phase4")),
             "interpretation": (
-                f"CER {'reduced' if cer_delta_abs >= 0 else 'increased'} by "
+                f"CER {'reduced' if cer_delta >= 0 else 'increased'} by "
                 f"{abs(cer_rel):.1f}% vs Phase 2 "
                 f"({p2_cer*100:.2f}% -> {primary.cer*100:.2f}%). "
-                f"WER {'reduced' if wer_delta_abs >= 0 else 'increased'} by "
+                f"WER {'reduced' if wer_delta >= 0 else 'increased'} by "
                 f"{abs(wer_rel):.1f}% "
                 f"({p2_wer*100:.2f}% -> {primary.wer*100:.2f}%)."
             ),
         }
         save_json(comparison, out_dir / "comparison_vs_phase2.json")
         logger.info(
-            "[%s] Phase2->Phase4C CER: %.2f%% -> %.2f%% (%+.1f%%) | "
+            "[%s] Phase2->Phase4 CER: %.2f%% -> %.2f%% (%+.1f%%) | "
             "WER: %.2f%% -> %.2f%% (%+.1f%%)",
             dataset_key,
             p2_cer * 100, primary.cer * 100, cer_rel,
@@ -1566,93 +1049,52 @@ def process_dataset_validate(
             )
     else:
         logger.warning(
-            "[%s] Phase 2 metrics not found -- skipping comparison_vs_phase2.json.", dataset_key
+            "[%s] Phase 2 metrics not found -- skipping comparison.", dataset_key
         )
+
+    # Step 3: Error change analysis (optional)
+    if analyze_errors:
+        logger.info("[%s] Running error change analysis ...", dataset_key)
+        error_changes = run_error_change_analysis(corrected_samples, dataset_key)
+        error_changes["meta"] = make_meta(
+            dataset_key, n, config, limit,
+            extra={"prompt_type": "self_reflective"},
+        )
+        save_json(error_changes, out_dir / "error_changes.json")
 
     return primary
 
 
-def run_validate_4c(
+def run_analyze(
     config: dict,
     active_datasets: list[str],
     results_dir: Path,
     phase2_dir: Path,
-    strategy: str,
     limit: Optional[int],
     force: bool,
-) -> tuple[dict[str, MetricResult], dict[str, dict]]:
-    """Run Phase 4C validation across all active datasets.
+    analyze_errors: bool,
+) -> None:
+    """Compute metrics across all active val-split datasets from corrections.jsonl."""
+    from src.data.data_loader import OCRSample
+    from src.core.llm_corrector import CorrectedSample as CS
 
-    Loads Phase 2 corrections, applies the revert strategy using CAMeL Tools
-    morphological validation, and writes results to results/phase4c/.
-
-    Args:
-        config: Parsed config dict.
-        active_datasets: Dataset keys to process.
-        results_dir: Phase 4C results root.
-        phase2_dir: Phase 2 results root (source of corrections).
-        strategy: Revert strategy ("revert").
-        limit: Max samples per dataset.
-        force: If True, re-validate already-done datasets.
-
-    Returns:
-        Tuple of (all_corrected, all_comparisons) dicts.
-    """
-    results_dir.mkdir(parents=True, exist_ok=True)
-
-    # Initialise CAMeL validator once (match Phase 1 pattern)
-    camel_cfg = config.get("camel", {})
-    morph_cfg = camel_cfg.get("morphology", {})
-    analyzer = MorphAnalyzer(
-        db=morph_cfg.get("db", "calima-msa-r13"),
-        cache_size=morph_cfg.get("cache_size", 10_000),
-        enabled=camel_cfg.get("enabled", True),
-    )
-
-    if not analyzer.enabled:
-        logger.error(
-            "Phase 4C requires camel_tools but it is not available.\n"
-            "Install: pip install camel-tools && camel_data -i morphology-db-msa-r13\n"
-            "Or disable with: camel.enabled: false in config.yaml"
-        )
-        sys.exit(1)
-
-    validator = WordValidator(analyzer)
-
-    # Load known overcorrections (INTRODUCED pairs from training analysis)
-    known_overcorrections: set[tuple[str, str]] | None = None
-    phase5_cfg = config.get("phase5", {})
-    if phase5_cfg.get("use_known_overcorrections", True):
-        overcorrections_path_str = phase5_cfg.get(
-            "overcorrections_path",
-            "results/phase2-training/analysis/word_pairs_llm_failures.txt",
-        )
-        overcorrections_path = _PROJECT_ROOT / overcorrections_path_str
-        if overcorrections_path.exists():
-            from src.data.knowledge_base import load_introduced_word_pairs
-            introduced = load_introduced_word_pairs(overcorrections_path)
-            if introduced:
-                known_overcorrections = set(introduced)
-                logger.info(
-                    "Loaded %d known overcorrection pairs from %s",
-                    len(known_overcorrections), overcorrections_path,
-                )
-        else:
-            logger.warning(
-                "Known overcorrections file not found: %s — "
-                "proceeding with morphological validation only.",
-                overcorrections_path,
-            )
+    _maybe_split_combined_corrections(results_dir, force=force)
 
     all_corrected: dict[str, MetricResult] = {}
     all_comparisons: dict[str, dict] = {}
 
-    for ds_key in active_datasets:
+    # Only analyze val-split datasets (train splits were used for analyze-train)
+    val_datasets = [ds for ds in active_datasets if is_val_split(ds)]
+    if not val_datasets:
+        logger.warning("No val-split datasets in active set: %s", active_datasets)
+        val_datasets = active_datasets  # fallback: try all
+
+    for ds_key in val_datasets:
         try:
             metrics_path = results_dir / ds_key / "metrics.json"
             if metrics_path.exists() and not force:
                 logger.info(
-                    "[%s] Already validated -- skipping (use --force to re-validate).", ds_key
+                    "[%s] Already analyzed -- skipping (use --force).", ds_key
                 )
                 with open(metrics_path, encoding="utf-8") as f:
                     mdata = json.load(f)
@@ -1678,21 +1120,42 @@ def run_validate_4c(
                         all_comparisons[ds_key] = json.load(f)
                 continue
 
-            phase2_records = _load_phase2_corrections_for_dataset(phase2_dir, ds_key)
-            if not phase2_records:
-                logger.warning("No Phase 2 records for %s -- skipping.", ds_key)
-                continue
+            corrections_path = results_dir / ds_key / "corrections.jsonl"
+            records = load_corrections_jsonl(corrections_path)
+            if limit:
+                records = records[:limit]
 
-            metric_result = process_dataset_validate(
+            # Build CorrectedSample objects
+            corrected_samples: list[CS] = []
+            for r in records:
+                ocr_sample = OCRSample(
+                    sample_id=r["sample_id"],
+                    dataset=r.get("dataset", ds_key),
+                    font=None,
+                    split=None,
+                    ocr_text=r.get("ocr_text", ""),
+                    gt_text=r.get("gt_text", ""),
+                    ocr_path=Path(""),
+                    gt_path=None,
+                )
+                corrected_samples.append(CS(
+                    sample=ocr_sample,
+                    corrected_text=r.get("corrected_text", r.get("ocr_text", "")),
+                    prompt_tokens=r.get("prompt_tokens", 0),
+                    output_tokens=r.get("output_tokens", 0),
+                    latency_s=r.get("latency_s", 0.0),
+                    success=r.get("success", True),
+                    error=r.get("error"),
+                ))
+
+            metric_result = process_dataset_analyze(
                 dataset_key=ds_key,
-                phase2_records=phase2_records,
-                validator=validator,
+                corrected_samples=corrected_samples,
                 config=config,
                 results_dir=results_dir,
                 phase2_dir=phase2_dir,
-                strategy=strategy,
                 limit=limit,
-                known_overcorrections=known_overcorrections,
+                analyze_errors=analyze_errors,
             )
             all_corrected[ds_key] = metric_result
 
@@ -1702,16 +1165,101 @@ def run_validate_4c(
                     all_comparisons[ds_key] = json.load(f)
 
         except FileNotFoundError as exc:
-            logger.error("Dataset %s: %s", ds_key, exc)
+            logger.error("[phase4] Dataset %s: %s", ds_key, exc)
+        except DataError as exc:
+            logger.warning("[phase4] Skipping %s: %s", ds_key, exc)
         except Exception as exc:  # noqa: BLE001
-            logger.error("Unexpected error on %s: %s", ds_key, exc, exc_info=True)
+            logger.error(
+                "[phase4] Unexpected error on %s: %s", ds_key, exc, exc_info=True
+            )
 
-    return all_corrected, all_comparisons
+    if not all_corrected:
+        logger.warning("No datasets analyzed.")
+        return
 
+    # Aggregate across all datasets
+    total_chars  = sum(r.num_chars_ref  for r in all_corrected.values())
+    total_words  = sum(r.num_words_ref  for r in all_corrected.values())
+    total_samples = sum(r.num_samples   for r in all_corrected.values())
 
-# ---------------------------------------------------------------------------
-# Aggregation + Report (shared)
-# ---------------------------------------------------------------------------
+    if total_chars > 0:
+        agg_cer = sum(
+            r.cer * r.num_chars_ref for r in all_corrected.values()
+        ) / total_chars
+    else:
+        agg_cer = 0.0
+
+    if total_words > 0:
+        agg_wer = sum(
+            r.wer * r.num_words_ref for r in all_corrected.values()
+        ) / total_words
+    else:
+        agg_wer = 0.0
+
+    # Aggregate no-diacritics metrics
+    nd_data = _load_nd_results(all_corrected, results_dir)
+    nd_chars  = sum(v.get("num_chars_ref", 0) for v in nd_data.values())
+    nd_words  = sum(v.get("num_words_ref", 0) for v in nd_data.values())
+    agg_cer_nd = (
+        sum(v.get("cer", 0) * v.get("num_chars_ref", 0) for v in nd_data.values()) / nd_chars
+        if nd_chars > 0 else 0.0
+    )
+    agg_wer_nd = (
+        sum(v.get("wer", 0) * v.get("num_words_ref", 0) for v in nd_data.values()) / nd_words
+        if nd_words > 0 else 0.0
+    )
+
+    aggregated = {
+        "meta": make_meta(
+            "all_datasets", total_samples, config, limit,
+            extra={"prompt_type": "self_reflective", "datasets": sorted(all_corrected.keys())},
+        ),
+        "aggregated_corrected": {
+            "cer": round(agg_cer, 6),
+            "wer": round(agg_wer, 6),
+            "total_samples": total_samples,
+            "total_chars_ref": total_chars,
+            "total_words_ref": total_words,
+        },
+        "aggregated_corrected_no_diacritics": {
+            "cer": round(agg_cer_nd, 6),
+            "wer": round(agg_wer_nd, 6),
+        },
+        "by_dataset": {
+            ds: {"cer": round(r.cer, 6), "wer": round(r.wer, 6), "num_samples": r.num_samples}
+            for ds, r in all_corrected.items()
+        },
+        "by_dataset_no_diacritics": {
+            ds: {"cer": round(v.get("cer", 0), 6), "wer": round(v.get("wer", 0), 6)}
+            for ds, v in nd_data.items()
+        },
+    }
+    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
+    aggregated["group_aggregates"] = compute_group_aggregates(aggregated["by_dataset"])
+    if nd_data:
+        aggregated["group_aggregates_no_diacritics"] = compute_group_aggregates(
+            {ds: {"cer": v.get("cer", 0), "wer": v.get("wer", 0)} for ds, v in nd_data.items()}
+        )
+    save_json(aggregated, results_dir / "metrics.json")
+
+    # Paper tables markdown
+    _write_paper_tables(all_corrected, all_comparisons, results_dir)
+
+    logger.info("=" * 60)
+    logger.info("Phase 4 analysis complete.")
+    logger.info(
+        "Aggregated CER=%.2f%%  WER=%.2f%%  |  no-diac CER=%.2f%%  WER=%.2f%%  across %d datasets.",
+        agg_cer * 100, agg_wer * 100,
+        agg_cer_nd * 100, agg_wer_nd * 100,
+        len(all_corrected),
+    )
+    logger.info("=" * 60)
+
+    write_corrections_report(
+        corrections_path=results_dir,
+        output_path=results_dir / "sample_report.txt",
+        title="Phase 4 -- Self-Reflective Prompting",
+    )
 
 
 def _load_nd_results(all_corrected: dict, results_dir: Path, exclude_runaway: bool = False) -> dict:
@@ -1741,313 +1289,62 @@ def _load_nd_results(all_corrected: dict, results_dir: Path, exclude_runaway: bo
     return nd
 
 
-def aggregate_results(
-    all_corrected: dict[str, MetricResult],
-    config: dict,
-    results_dir: Path,
-    phase_label: str,
-    prompt_type: str,
-    prompt_version: str,
-    limit: Optional[int],
-    extra_meta: Optional[dict] = None,
-) -> None:
-    """Write combined metrics.json across all datasets."""
-    meta: dict = {
-        "phase": phase_label,
-        "model": config.get("model", {}).get("name", ""),
-        "prompt_type": prompt_type,
-        "prompt_version": prompt_version,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "git_commit": get_git_commit(),
-        "limit_applied": limit,
-    }
-    if extra_meta:
-        meta.update(extra_meta)
-
-    output = {
-        "meta": meta,
-        "results": {k: v.to_dict() for k, v in all_corrected.items()},
-        "results_no_diacritics": _load_nd_results(all_corrected, results_dir),
-    }
-    # Macro-averaged aggregates by dataset group (PATS-A01 / KHATT).
-    output["group_aggregates"] = compute_group_aggregates(output["results"])
-    nd = output.get("results_no_diacritics", {})
-    if nd:
-        output["group_aggregates_no_diacritics"] = compute_group_aggregates(nd)
-    save_json(output, results_dir / "metrics.json")
-
-
-def aggregate_comparisons(
-    all_comparisons: dict[str, dict],
-    config: dict,
-    results_dir: Path,
-    phase_label: str,
-    limit: Optional[int],
-) -> None:
-    """Write combined comparison.json across all datasets."""
-    if not all_comparisons:
-        return
-    output = {
-        "meta": {
-            "phase": phase_label,
-            "comparison": f"{phase_label}_vs_phase2",
-            "model": config.get("model", {}).get("name", ""),
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "git_commit": get_git_commit(),
-        },
-        "datasets": all_comparisons,
-        "note": (
-            f"{phase_label.upper()} is an isolated experiment. "
-            "Delta measures the contribution of linguistic knowledge over zero-shot (Phase 2). "
-            "Negative delta = improvement."
-        ),
-    }
-    save_json(output, results_dir / "comparison.json")
-
-
-def generate_report(
+def _write_paper_tables(
     all_corrected: dict[str, MetricResult],
     all_comparisons: dict[str, dict],
-    phase_label: str,
-    phase_title: str,
     results_dir: Path,
-    config: dict,
 ) -> None:
-    """Write human-readable Markdown report to results_dir/report.md."""
-    model_name = config.get("model", {}).get("name", "unknown")
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines: list[str] = []
+    """Write a markdown file with ready-to-paste paper tables."""
+    nd_data = _load_nd_results(all_corrected, results_dir)
 
-    lines.append(f"# {phase_label.upper()} Report: {phase_title}")
-    lines.append(f"\nGenerated: {now}")
-    lines.append(f"Model: {model_name}")
-    lines.append("")
+    lines: list[str] = [
+        "# Phase 4 Results -- Self-Reflective Prompting",
+        "",
+        "## Per-Dataset Metrics (With Diacritics)",
+        "",
+        "| Dataset | CER (%) | WER (%) | vs Phase 2 CER | vs Phase 2 WER |",
+        "|---------|---------|---------|----------------|----------------|",
+    ]
 
-    nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
-
-    # Comparison table vs Phase 2 — WITH DIACRITICS
-    lines.append("## Results vs Phase 2 (Zero-Shot Baseline)\n")
-    lines.append("> Isolated comparison. This phase vs Phase 2 only.\n")
-    if all_comparisons:
-        lines.append("### With Diacritics\n")
+    for ds_key in sorted(all_corrected.keys()):
+        r = all_corrected[ds_key]
+        cmp = all_comparisons.get(ds_key, {})
+        delta = cmp.get("delta", {})
+        cer_rel = delta.get("cer_relative_pct", "N/A")
+        wer_rel = delta.get("wer_relative_pct", "N/A")
+        cer_rel_str = f"{cer_rel:+.1f}%" if isinstance(cer_rel, (int, float)) else "N/A"
+        wer_rel_str = f"{wer_rel:+.1f}%" if isinstance(wer_rel, (int, float)) else "N/A"
         lines.append(
-            "| Dataset | Phase 2 CER | This CER | Delta CER | "
-            "Phase 2 WER | This WER | Delta WER |"
+            f"| {ds_key} | {r.cer*100:.2f} | {r.wer*100:.2f} "
+            f"| {cer_rel_str} | {wer_rel_str} |"
         )
+
+    lines.extend([
+        "",
+        "## Per-Dataset Metrics (No Diacritics)",
+        "",
+        "| Dataset | ND CER (%) | ND WER (%) | vs Phase 2 ND CER | vs Phase 2 ND WER |",
+        "|---------|------------|------------|-------------------|-------------------|",
+    ])
+
+    for ds_key in sorted(all_corrected.keys()):
+        nd = nd_data.get(ds_key, {})
+        cmp = all_comparisons.get(ds_key, {})
+        delta_nd = cmp.get("delta_no_diacritics", {})
+        nd_cer_str = f"{nd.get('cer', 0)*100:.2f}" if nd else "N/A"
+        nd_wer_str = f"{nd.get('wer', 0)*100:.2f}" if nd else "N/A"
+        nd_cer_rel = delta_nd.get("cer_relative_pct", "N/A")
+        nd_wer_rel = delta_nd.get("wer_relative_pct", "N/A")
+        nd_cer_rel_str = f"{nd_cer_rel:+.1f}%" if isinstance(nd_cer_rel, (int, float)) else "N/A"
+        nd_wer_rel_str = f"{nd_wer_rel:+.1f}%" if isinstance(nd_wer_rel, (int, float)) else "N/A"
         lines.append(
-            "|---------|-------------|----------|-----------|"
-            "-------------|----------|-----------|"
+            f"| {ds_key} | {nd_cer_str} | {nd_wer_str} "
+            f"| {nd_cer_rel_str} | {nd_wer_rel_str} |"
         )
-        for ds, cmp in all_comparisons.items():
-            p2 = cmp.get("phase2_baseline", {})
-            p4 = cmp.get(f"{phase_label}_corrected", {})
-            d  = cmp.get("delta", {})
-            lines.append(
-                f"| {ds} "
-                f"| {p2.get('cer', 0)*100:.2f}% "
-                f"| {p4.get('cer', 0)*100:.2f}% "
-                f"| {d.get('cer_relative_pct', 0):+.1f}% "
-                f"| {p2.get('wer', 0)*100:.2f}% "
-                f"| {p4.get('wer', 0)*100:.2f}% "
-                f"| {d.get('wer_relative_pct', 0):+.1f}% |"
-            )
-        lines.append("")
 
-        # Comparison table — NO DIACRITICS
-        lines.append("### No Diacritics\n")
-        lines.append(
-            "| Dataset | Phase 2 CER | This CER | Delta CER | "
-            "Phase 2 WER | This WER | Delta WER |"
-        )
-        lines.append(
-            "|---------|-------------|----------|-----------|"
-            "-------------|----------|-----------|"
-        )
-        for ds, cmp in all_comparisons.items():
-            p2_nd = cmp.get("phase2_baseline_no_diacritics", {})
-            p4_nd = cmp.get(f"{phase_label}_corrected_no_diacritics", {})
-            d_nd  = cmp.get("delta_no_diacritics", {})
-            lines.append(
-                f"| {ds} "
-                f"| {p2_nd.get('cer', 0)*100:.2f}% "
-                f"| {p4_nd.get('cer', 0)*100:.2f}% "
-                f"| {d_nd.get('cer_relative_pct', 0):+.1f}% "
-                f"| {p2_nd.get('wer', 0)*100:.2f}% "
-                f"| {p4_nd.get('wer', 0)*100:.2f}% "
-                f"| {d_nd.get('wer_relative_pct', 0):+.1f}% |"
-            )
-    else:
-        lines.append("*Phase 2 baseline not available -- run Phase 2 first.*")
-    lines.append("")
-
-    # Absolute metrics — WITH DIACRITICS
-    lines.append("## Post-Correction Metrics\n")
-    lines.append("### With Diacritics\n")
-    lines.append(
-        "| Dataset | CER | WER | CER Median | WER Median | CER p95 | Samples |"
-    )
-    lines.append("|---------|-----|-----|------------|------------|---------|---------|")
-    for ds, r in all_corrected.items():
-        lines.append(
-            f"| {ds} "
-            f"| {r.cer*100:.2f}% "
-            f"| {r.wer*100:.2f}% "
-            f"| {r.cer_median*100:.2f}% "
-            f"| {r.wer_median*100:.2f}% "
-            f"| {r.cer_p95*100:.2f}% "
-            f"| {r.num_samples:,} |"
-        )
-    lines.append("")
-
-    # Absolute metrics — NO DIACRITICS
-    if nd_results:
-        lines.append("### No Diacritics\n")
-        lines.append("| Dataset | CER | WER |")
-        lines.append("|---------|-----|-----|")
-        for ds in all_corrected:
-            nd = nd_results.get(ds, {})
-            nd_cer = f"{nd.get('cer', 0)*100:.2f}%" if nd else "N/A"
-            nd_wer = f"{nd.get('wer', 0)*100:.2f}%" if nd else "N/A"
-            lines.append(f"| {ds} | {nd_cer} | {nd_wer} |")
-        lines.append("")
-
-    # Error change summary (4A / 4B only — 4C does not have error_changes.json)
-    any_ec = False
-    for ds in all_corrected:
-        ec_path = results_dir / ds / "error_changes.json"
-        if ec_path.exists():
-            try:
-                with open(ec_path, encoding="utf-8") as f:
-                    ec = json.load(f)
-                s = ec.get("summary", {})
-                if not any_ec:
-                    lines.append("## Error Change Analysis\n")
-                    any_ec = True
-                lines.append(f"### {ds}\n")
-                lines.append(
-                    f"- Total OCR errors: {s.get('total_ocr_char_errors', 0):,}\n"
-                    f"- After correction: {s.get('total_corrected_char_errors', 0):,}\n"
-                    f"- Fixed: {s.get('errors_fixed', 0):,} "
-                    f"({s.get('fix_rate', 0):.1f}%)\n"
-                    f"- Introduced: {s.get('errors_introduced', 0):,} "
-                    f"({s.get('introduction_rate', 0):.1f}%)"
-                )
-                lines.append("")
-            except (json.JSONDecodeError, OSError):
-                pass
-
-    # Validation stats summary (4C only)
-    any_vs = False
-    for ds in all_corrected:
-        vs_path = results_dir / ds / "validation_stats.json"
-        if vs_path.exists():
-            try:
-                with open(vs_path, encoding="utf-8") as f:
-                    vs = json.load(f)
-                s = vs.get("summary", {})
-                if not any_vs:
-                    lines.append("## CAMeL Validation Statistics\n")
-                    any_vs = True
-                lines.append(f"### {ds}\n")
-                lines.append(
-                    f"- Total Arabic words compared: {s.get('total_arabic_words', 0):,}\n"
-                    f"- Words reverted to OCR: {s.get('words_reverted', 0):,} "
-                    f"({s.get('revert_rate_pct', 0):.2f}%)\n"
-                    f"- Words kept (LLM): {s.get('words_kept', 0):,}\n"
-                    f"- Words unchanged: {s.get('words_unchanged', 0):,}\n"
-                    f"- Samples with any revert: {s.get('samples_with_reverts', 0):,}"
-                )
-                lines.append("")
-            except (json.JSONDecodeError, OSError):
-                pass
-
-    # Key findings
-    lines.append("## Key Findings\n")
-    if all_corrected:
-        best  = min(all_corrected.items(), key=lambda x: x[1].cer)
-        worst = max(all_corrected.items(), key=lambda x: x[1].cer)
-        lines.append(f"- Best CER: **{best[0]}** at {best[1].cer*100:.2f}%")
-        lines.append(f"- Worst CER: **{worst[0]}** at {worst[1].cer*100:.2f}%")
-    if all_comparisons:
-        improving = sum(
-            1 for cmp in all_comparisons.values()
-            if cmp.get("delta", {}).get("cer_absolute", 0) > 0
-        )
-        lines.append(
-            f"- {improving}/{len(all_comparisons)} datasets improved CER vs Phase 2."
-        )
-    lines.append("")
-    lines.append(
-        f"> {phase_label.upper()} is an isolated experiment comparing {phase_title} "
-        f"vs zero-shot.\n"
-        f"> Phase 5 will combine all linguistic sources for the full system."
-    )
-
-    report_path = results_dir / "report.md"
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
-    logger.info("Report written to %s", report_path)
-
-
-def print_summary(
-    all_corrected: dict[str, MetricResult],
-    all_comparisons: dict[str, dict],
-    phase_label: str,
-    results_dir: Optional[Path] = None,
-) -> None:
-    """Print a final summary table to stdout (with-diacritics and no-diacritics side-by-side)."""
-    nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
-
-    sep = "=" * 90
-    row_sep = "  " + "-" * 82
-
-    # Table 1: WITH DIACRITICS
-    print("\n" + sep)
-    print(f"{phase_label.upper()} SUMMARY  [WITH DIACRITICS]")
-    print(sep)
-    print(f"{'Dataset':<28} {'P2 CER':>8} {'Px CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'Px WER':>8} {'D(WER)':>8} {'N':>6}")
-    print(row_sep)
-    for ds, r in all_corrected.items():
-        cmp = all_comparisons.get(ds, {})
-        p2_cer = cmp.get("phase2_baseline", {}).get("cer", 0.0)
-        p2_wer = cmp.get("phase2_baseline", {}).get("wer", 0.0)
-        cer_rel = cmp.get("delta", {}).get("cer_relative_pct", 0.0)
-        wer_rel = cmp.get("delta", {}).get("wer_relative_pct", 0.0)
-        p2_cer_str = f"{p2_cer*100:.2f}%" if cmp else "N/A"
-        p2_wer_str = f"{p2_wer*100:.2f}%" if cmp else "N/A"
-        d_cer_str  = f"{cer_rel:+.1f}%"   if cmp else "N/A"
-        d_wer_str  = f"{wer_rel:+.1f}%"   if cmp else "N/A"
-        print(
-            f"{ds:<28} {p2_cer_str:>8} {r.cer*100:>7.2f}% {d_cer_str:>8} "
-            f"{p2_wer_str:>8} {r.wer*100:>7.2f}% {d_wer_str:>8} {r.num_samples:>6}"
-        )
-    print(sep)
-
-    # Table 2: NO DIACRITICS
-    print(f"\n{phase_label.upper()} SUMMARY  [NO DIACRITICS]")
-    print(sep)
-    print(f"{'Dataset':<28} {'P2 CER':>8} {'Px CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'Px WER':>8} {'D(WER)':>8} {'N':>6}")
-    print(row_sep)
-    for ds, r in all_corrected.items():
-        cmp = all_comparisons.get(ds, {})
-        nd = nd_results.get(ds, {})
-        p2_nd_cer = cmp.get("phase2_baseline_no_diacritics", {}).get("cer", 0.0)
-        p2_nd_wer = cmp.get("phase2_baseline_no_diacritics", {}).get("wer", 0.0)
-        nd_cer_rel = cmp.get("delta_no_diacritics", {}).get("cer_relative_pct", 0.0)
-        nd_wer_rel = cmp.get("delta_no_diacritics", {}).get("wer_relative_pct", 0.0)
-        p2_nd_cer_str = f"{p2_nd_cer*100:.2f}%" if cmp else "N/A"
-        p2_nd_wer_str = f"{p2_nd_wer*100:.2f}%" if cmp else "N/A"
-        nd_d_cer_str  = f"{nd_cer_rel:+.1f}%"   if cmp else "N/A"
-        nd_d_wer_str  = f"{nd_wer_rel:+.1f}%"   if cmp else "N/A"
-        nd_cer_val = nd.get("cer", 0.0) * 100 if nd else 0.0
-        nd_wer_val = nd.get("wer", 0.0) * 100 if nd else 0.0
-        nd_cer_cur = f"{nd_cer_val:.2f}%" if nd else "N/A"
-        nd_wer_cur = f"{nd_wer_val:.2f}%" if nd else "N/A"
-        print(
-            f"{ds:<28} {p2_nd_cer_str:>8} {nd_cer_cur:>8} {nd_d_cer_str:>8} "
-            f"{p2_nd_wer_str:>8} {nd_wer_cur:>8} {nd_d_wer_str:>8} {r.num_samples:>6}"
-        )
-    print(sep)
+    out_path = results_dir / "paper_tables.md"
+    out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    logger.info("Paper tables saved to %s", out_path)
 
 
 # ---------------------------------------------------------------------------
@@ -2058,51 +1355,22 @@ def print_summary(
 def main() -> None:
     args = parse_args()
 
-    # Phase 4A (Rules) and 4B (Few-Shot QALB) were removed in the phase refactoring.
-    # Only 4C (CAMeL Validation) is supported.
-    if args.sub_phase in ("4a", "4b"):
-        print(
-            f"ERROR: Phase {args.sub_phase.upper()} was removed in the phase refactoring. "
-            "Only --sub-phase 4c (CAMeL Validation) is supported.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # setup_logging is called after results_dir exists
+    # (done inside each mode function or here)
+    args.results_dir = _PROJECT_ROOT / args.results_dir
+    args.results_dir.mkdir(parents=True, exist_ok=True)
+    setup_logging(args.results_dir)
 
-    # Validate mode/sub-phase compatibility
-    if args.sub_phase == "4c" and args.mode in ("export", "analyze"):
-        print(
-            f"ERROR: --sub-phase 4c does not support --mode {args.mode}. "
-            "Use --mode validate for Phase 4C.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    config = load_config(_PROJECT_ROOT / args.config)
 
-    # Determine results directory
-    phase_dir_map = {
-        "4a": Path("results/phase4a"),
-        "4b": Path("results/phase4b"),
-        "4c": Path("results/phase4c"),
-    }
-    results_dir = phase_dir_map[args.sub_phase]
+    phase4_cfg = config.get("phase4", {})
+    source_phase = (
+        args.source_phase
+        or phase4_cfg.get("source_phase", "phase2")
+    )
 
-    phase_label_map = {"4a": "phase4a", "4b": "phase4b", "4c": "phase4c"}
-    phase_label = phase_label_map[args.sub_phase]
-
-    phase_title_map = {
-        "4a": "Rule-Augmented Prompting",
-        "4b": "Few-Shot Prompting (QALB)",
-        "4c": "CAMeL Tools Validation",
-    }
-    phase_title = phase_title_map[args.sub_phase]
-
-    setup_logging(results_dir, phase_label)
-    logger.info("%s  (mode=%s)", phase_title, args.mode)
-    logger.info("Results dir: %s", results_dir)
-    logger.info("Phase 2 dir: %s", args.phase2_dir)
-
-    config = load_config(args.config)
-    limit = args.limit or config.get("processing", {}).get("limit_per_dataset")
-    active_datasets = resolve_datasets(config, args.datasets)
+    all_dataset_names = resolve_datasets(config, None)  # all datasets from config
+    active_datasets   = resolve_datasets(config, args.datasets)
 
     sample_ids: Optional[set[str]] = None
     if args.sample_list:
@@ -2111,161 +1379,52 @@ def main() -> None:
             active_datasets = sl_datasets
         logger.info("Sample list loaded: %d sample IDs from %s", len(sample_ids), args.sample_list)
 
-    logger.info("Datasets to process: %s", active_datasets)
+    logger.info("=" * 60)
+    logger.info("Phase 4: Self-Reflective Prompting")
+    logger.info("Mode: %s", args.mode)
+    if args.datasets:
+        logger.info("Dataset filter: %s", args.datasets)
+    if args.limit:
+        logger.info("Limit: %d samples per dataset", args.limit)
+    logger.info("Results dir: %s", args.results_dir)
+    logger.info("=" * 60)
 
-    # ------------------------------------------------------------------
-    # PHASE 4A
-    # ------------------------------------------------------------------
-    if args.sub_phase == "4a":
-        phase4a_cfg = config.get("phase4", {}).get("rules", {})
-        categories = args.rule_categories or phase4a_cfg.get("categories")
-        n_rules    = args.n_rules or phase4a_cfg.get("n_rules")
+    phase2_dir = _PROJECT_ROOT / "results" / "phase2"
 
-        if args.mode == "export":
-            run_export_4a(
-                config=config,
-                active_datasets=active_datasets,
-                results_dir=results_dir,
-                categories=categories,
-                n_rules=n_rules,
-                limit=limit,
-                force=args.force,
-                sample_ids=sample_ids,
-            )
-            return
-
-        # analyze
-        analyze_errors = not args.no_error_analysis
-        all_corrected, all_comparisons = run_analyze_4a(
+    if args.mode == "analyze-train":
+        run_analyze_train(
             config=config,
-            active_datasets=active_datasets,
-            results_dir=results_dir,
-            phase2_dir=args.phase2_dir,
-            limit=limit,
-            force=args.force,
-            analyze_errors=analyze_errors,
-            categories=categories,
-            n_rules=n_rules,
-        )
-
-        if not all_corrected:
-            logger.error("No datasets successfully processed.")
-            sys.exit(1)
-
-        builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
-        aggregate_results(
-            all_corrected, config, results_dir,
-            phase_label, "rule_augmented", builder.rules_prompt_version,
-            limit, extra_meta={"rule_categories": categories, "n_rules": n_rules},
-        )
-        aggregate_comparisons(all_comparisons, config, results_dir, phase_label, limit)
-        generate_report(
-            all_corrected, all_comparisons, phase_label, phase_title, results_dir, config
-        )
-        print_summary(all_corrected, all_comparisons, phase_label, results_dir)
-        write_corrections_report(
-            corrections_path=results_dir,
-            output_path=results_dir / "sample_report.txt",
-            title="Phase 4A -- Rule-Augmented Prompting",
-        )
-        logger.info("Phase 4A complete. Results in: %s", results_dir)
-
-    # ------------------------------------------------------------------
-    # PHASE 4B
-    # ------------------------------------------------------------------
-    elif args.sub_phase == "4b":
-        phase4b_cfg = config.get("phase4", {}).get("few_shot", {})
-        num_examples = args.num_examples or phase4b_cfg.get("num_examples", 5)
-        selection    = args.selection or phase4b_cfg.get("selection", "diverse")
-        years        = args.qalb_years or phase4b_cfg.get("years", ["2014"])
-
-        if args.mode == "export":
-            run_export_4b(
-                config=config,
-                active_datasets=active_datasets,
-                results_dir=results_dir,
-                num_examples=num_examples,
-                selection=selection,
-                years=years,
-                limit=limit,
-                force=args.force,
-                sample_ids=sample_ids,
-            )
-            return
-
-        # analyze
-        analyze_errors = not args.no_error_analysis
-        all_corrected, all_comparisons = run_analyze_4b(
-            config=config,
-            active_datasets=active_datasets,
-            results_dir=results_dir,
-            phase2_dir=args.phase2_dir,
-            limit=limit,
-            force=args.force,
-            analyze_errors=analyze_errors,
-            num_examples=num_examples,
-            selection=selection,
-        )
-
-        if not all_corrected:
-            logger.error("No datasets successfully processed.")
-            sys.exit(1)
-
-        builder = PromptBuilder(crafted_prompt_path=config.get("prompt_craft", {}).get("crafted_prompt_path"))
-        aggregate_results(
-            all_corrected, config, results_dir,
-            phase_label, "few_shot", builder.few_shot_prompt_version,
-            limit, extra_meta={"num_examples": num_examples, "selection": selection},
-        )
-        aggregate_comparisons(all_comparisons, config, results_dir, phase_label, limit)
-        generate_report(
-            all_corrected, all_comparisons, phase_label, phase_title, results_dir, config
-        )
-        print_summary(all_corrected, all_comparisons, phase_label, results_dir)
-        write_corrections_report(
-            corrections_path=results_dir,
-            output_path=results_dir / "sample_report.txt",
-            title="Phase 4B -- Few-Shot Prompting (QALB)",
-        )
-        logger.info("Phase 4B complete. Results in: %s", results_dir)
-
-    # ------------------------------------------------------------------
-    # PHASE 4C
-    # ------------------------------------------------------------------
-    elif args.sub_phase == "4c":
-        phase4c_cfg = config.get("phase4", {}).get("camel_validation", {})
-        strategy = args.strategy or phase4c_cfg.get("strategy", "revert")
-
-        all_corrected, all_comparisons = run_validate_4c(
-            config=config,
-            active_datasets=active_datasets,
-            results_dir=results_dir,
-            phase2_dir=args.phase2_dir,
-            strategy=strategy,
-            limit=limit,
+            all_dataset_names=all_dataset_names,
+            results_dir=args.results_dir,
+            source_phase=source_phase,
             force=args.force,
         )
 
-        if not all_corrected:
-            logger.error("No datasets successfully processed.")
-            sys.exit(1)
+    elif args.mode == "export":
+        run_export(
+            config=config,
+            active_datasets=active_datasets,
+            results_dir=args.results_dir,
+            limit=args.limit,
+            force=args.force,
+            explicit_datasets=args.datasets is not None,
+            sample_ids=sample_ids,
+        )
 
-        aggregate_results(
-            all_corrected, config, results_dir,
-            phase_label, "camel_validation", "p4cv1",
-            limit, extra_meta={"strategy": strategy},
+    elif args.mode == "analyze":
+        run_analyze(
+            config=config,
+            active_datasets=active_datasets,
+            results_dir=args.results_dir,
+            phase2_dir=phase2_dir,
+            limit=args.limit,
+            force=args.force,
+            analyze_errors=not args.no_error_analysis,
         )
-        aggregate_comparisons(all_comparisons, config, results_dir, phase_label, limit)
-        generate_report(
-            all_corrected, all_comparisons, phase_label, phase_title, results_dir, config
-        )
-        print_summary(all_corrected, all_comparisons, phase_label, results_dir)
-        write_corrections_report(
-            corrections_path=results_dir,
-            output_path=results_dir / "sample_report.txt",
-            title="Phase 4C -- CAMeL Validation",
-        )
-        logger.info("Phase 4C complete. Results in: %s", results_dir)
+
+    else:
+        logger.error("Unknown mode: %s", args.mode)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

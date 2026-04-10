@@ -3,8 +3,8 @@
 
 Usage:
     python scripts/preview_prompts.py                  # all phases
-    python scripts/preview_prompts.py --phase 2 3 4a   # specific phases
-    python scripts/preview_prompts.py --phase 5 --full # show full prompt text
+    python scripts/preview_prompts.py --phase 2 3 4    # specific phases
+    python scripts/preview_prompts.py --phase 4 --full # show full prompt text
     python scripts/preview_prompts.py --phase 3 --dataset PATS-A01-Akhbar-train
 """
 from __future__ import annotations
@@ -89,11 +89,11 @@ def _load_real_confusion(dataset: str | None) -> str | None:
 
 
 def _load_real_insights(dataset_type: str | None = None) -> str | None:
-    """Try to load real Phase 4D insights."""
+    """Try to load real Phase 4 insights."""
     from src.data.knowledge_base import LLMInsightsLoader
 
     ds_type = dataset_type or "PATS-A01"
-    insights_dir = PROJECT_ROOT / "results" / "phase4d" / "insights"
+    insights_dir = PROJECT_ROOT / "results" / "phase4" / "insights"
     path = insights_dir / f"{ds_type}_insights.json"
     if not path.exists():
         return None
@@ -108,10 +108,10 @@ def _load_real_insights(dataset_type: str | None = None) -> str | None:
 
 
 def _load_real_word_pairs() -> str | None:
-    """Try to load real Phase 4D word-error pairs."""
+    """Try to load real Phase 4 word-error pairs."""
     from src.data.knowledge_base import WordErrorPairsLoader
 
-    path = PROJECT_ROOT / "results" / "phase4d" / "word_error_pairs.txt"
+    path = PROJECT_ROOT / "results" / "phase4" / "word_error_pairs.txt"
     if not path.exists():
         return None
     try:
@@ -190,7 +190,7 @@ def preview_phase3(
     )
 
 
-def preview_phase4d(pb: PromptBuilder, full: bool, **_: object) -> None:
+def preview_phase4(pb: PromptBuilder, full: bool, **_: object) -> None:
     real_insights = _load_real_insights()
     real_pairs = _load_real_word_pairs()
     ins = real_insights if real_insights else PLACEHOLDER_INSIGHTS
@@ -198,12 +198,12 @@ def preview_phase4d(pb: PromptBuilder, full: bool, **_: object) -> None:
     msgs = pb.build_self_reflective(SAMPLE_OCR_TEXT, ins, wp)
     has_real = real_insights is not None or real_pairs is not None
     _print_messages(
-        msgs, "Phase 4D: Self-Reflective + Word Pairs",
+        msgs, "Phase 4: Self-Reflective",
         pb.self_reflective_prompt_version, full, real_data=has_real,
     )
 
 
-def preview_phase5(
+def preview_phase6(
     pb: PromptBuilder, full: bool, dataset: str | None = None, **_: object,
 ) -> None:
     real_conf = _load_real_confusion(dataset)
@@ -220,7 +220,7 @@ def preview_phase5(
         real_conf, real_insights, real_pairs,
     ])
     _print_messages(
-        msgs, "Phase 6: Combined (all contexts)",
+        msgs, "Phase 6: Combined (confusion + self-reflective)",
         pb.combined_prompt_version, full, real_data=has_real,
     )
 
@@ -240,11 +240,11 @@ def preview_phase7(pb: PromptBuilder, full: bool, **_: object) -> None:
 # ---------------------------------------------------------------------------
 
 PHASES: dict[str, callable] = {
-    "2":  preview_phase2,
-    "3":  preview_phase3,
-    "4":  preview_phase4d,
-    "6":  preview_phase5,
-    "7":  preview_phase7,
+    "2": preview_phase2,
+    "3": preview_phase3,
+    "4": preview_phase4,
+    "6": preview_phase6,
+    "7": preview_phase7,
 }
 
 ALL_PHASES = list(PHASES.keys())
@@ -270,7 +270,7 @@ def main() -> None:
             Examples:
               python scripts/preview_prompts.py                    # all phases, truncated
               python scripts/preview_prompts.py --phase 2 3        # phases 2 and 3
-              python scripts/preview_prompts.py --phase 5 --full   # phase 5, full text
+              python scripts/preview_prompts.py --phase 4 --full   # phase 4, full text
               python scripts/preview_prompts.py --dataset KHATT-train  # use KHATT confusion matrix
         """),
     )

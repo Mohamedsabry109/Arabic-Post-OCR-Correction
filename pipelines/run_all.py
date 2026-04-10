@@ -68,21 +68,21 @@ _PHASE_STEPS: dict[str, list[dict]] = {
         {"script": "pipelines/run_phase3.py", "mode": "analyze", "stage": "analyze"},
     ],
     "4": [
-        {"script": "pipelines/run_phase4d.py", "mode": "export",  "stage": "export"},
-        {"script": "pipelines/run_phase4d.py", "mode": "analyze", "stage": "analyze"},
+        # Phase 4: Self-Reflective (export -> Kaggle -> analyze)
+        {"script": "pipelines/run_phase4.py", "mode": "export",  "stage": "export"},
+        {"script": "pipelines/run_phase4.py", "mode": "analyze", "stage": "analyze"},
     ],
     "5": [
         # Phase 5: CAMeL Validation (local post-processing, no Kaggle step)
-        {"script": "pipelines/run_phase4.py", "mode": "validate", "stage": "analyze",
-         "extra": ["--sub-phase", "4c"]},
+        {"script": "pipelines/run_phase5.py", "mode": "validate", "stage": "analyze"},
     ],
     "6": [
         # Phase 6: Combinations (3 inference combos + 1 CAMeL)
-        {"script": "pipelines/run_phase5.py", "mode": "export",   "stage": "export",
+        {"script": "pipelines/run_phase6.py", "mode": "export",   "stage": "export",
          "extra": ["--combo", "all"]},
-        {"script": "pipelines/run_phase5.py", "mode": "analyze",  "stage": "analyze",
+        {"script": "pipelines/run_phase6.py", "mode": "analyze",  "stage": "analyze",
          "extra": ["--combo", "all"]},
-        {"script": "pipelines/run_phase5.py", "mode": "summarize","stage": "analyze"},
+        {"script": "pipelines/run_phase6.py", "mode": "summarize","stage": "analyze"},
     ],
     "7": [
         {"script": "pipelines/run_phase7.py", "mode": "export",  "stage": "export"},
@@ -94,9 +94,9 @@ _ALL_PHASES = ["1", "2", "3", "4", "5", "6", "7"]
 
 # Inference input/output paths per phase (for --mode full)
 _INFERENCE_IO: dict[str, tuple[str, str]] = {
-    "2":  ("results/phase2/inference_input.jsonl",  "results/phase2/corrections.jsonl"),
-    "3":  ("results/phase3/inference_input.jsonl",  "results/phase3/corrections.jsonl"),
-    "4":  ("results/phase4/inference_input.jsonl",  "results/phase4/corrections.jsonl"),
+    "2": ("results/phase2/inference_input.jsonl", "results/phase2/corrections.jsonl"),
+    "3": ("results/phase3/inference_input.jsonl", "results/phase3/corrections.jsonl"),
+    "4": ("results/phase4/inference_input.jsonl", "results/phase4/corrections.jsonl"),
 }
 
 
@@ -248,14 +248,14 @@ def _run_inference(phase_key: str, args: argparse.Namespace) -> bool:
     return True
 
 
-def _run_phase5_inference_full(args: argparse.Namespace) -> bool:
-    """Run infer.py for each Phase 5 inference combo (--mode full only)."""
+def _run_phase6_inference_full(args: argparse.Namespace) -> bool:
+    """Run infer.py for each Phase 6 inference combo (--mode full only)."""
     inference_combos = [
         "conf_only", "self_only", "conf_self",
     ]
     for combo in inference_combos:
-        input_path  = f"results/phase5/{combo}/inference_input.jsonl"
-        output_path = f"results/phase5/{combo}/corrections.jsonl"
+        input_path  = f"results/phase6/{combo}/inference_input.jsonl"
+        output_path = f"results/phase6/{combo}/corrections.jsonl"
         cmd = [
             _PYTHON, str(_PROJECT_ROOT / "scripts/infer.py"),
             "--input",  input_path,
@@ -268,7 +268,7 @@ def _run_phase5_inference_full(args: argparse.Namespace) -> bool:
         if args.force:
             cmd += ["--force"]
 
-        label = f"Phase 5 | Inference | {combo}"
+        label = f"Phase 6 | Inference | {combo}"
         logger.info("=" * 60)
         logger.info("Running: %s", label)
         logger.info("=" * 60)
@@ -329,9 +329,9 @@ def main() -> None:
 
             # Inject inference step between export and analyze in --mode full
             if args.mode == "full" and stage == "export":
-                if phase_key == "5":
-                    if not _run_phase5_inference_full(args):
-                        failed.append(f"Phase 5 | Inference")
+                if phase_key == "6":
+                    if not _run_phase6_inference_full(args):
+                        failed.append(f"Phase 6 | Inference")
                         break
                 else:
                     if not _run_inference(phase_key, args):
