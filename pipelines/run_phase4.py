@@ -70,7 +70,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.data.data_loader import DataLoader, DataError
 from src.data.knowledge_base import (
     LLMInsightsLoader, WordErrorPairsLoader,
-    load_unfixed_word_pairs, load_introduced_word_pairs,
+    FewShotExampleSelector,
+    load_unfixed_word_pairs, load_introduced_word_pairs_ranked,
+    select_word_pairs_by_coverage,
     format_word_examples_for_prompt, format_overcorrection_warnings,
 )
 from src.analysis.metrics import MetricResult, calculate_metrics, calculate_metrics_dual
@@ -673,6 +675,7 @@ def run_analyze_train(
 def run_export(
     config: dict,
     active_datasets: list[str],
+    all_dataset_names: list[str],
     results_dir: Path,
     limit: Optional[int],
     force: bool,
@@ -682,7 +685,8 @@ def run_export(
     """Build inference_input.jsonl for Phase 4 (val splits only by default).
 
     Loads PATS-A01 and KHATT insights, formats them as Arabic text, and builds
-    a self-reflective prompt per OCR sample.
+    a self-reflective prompt per OCR sample.  Optionally appends dynamic
+    few-shot examples extracted from training corrections.
 
     When explicit_datasets=True (--datasets passed on CLI), the val-only filter
     is skipped so any dataset (including train) can be exported for smoke tests.
@@ -746,55 +750,98 @@ def run_export(
     )
 
     # --- Load word-error pairs (UNFIXED section) ---
+    # Uses coverage-based selection: picks pairs that cover the most distinct
+    # character confusions, then fills remaining slots with high-frequency pairs.
     word_pairs_context = ""
     if failures_path.exists():
-        unfixed = load_unfixed_word_pairs(failures_path)
-        if unfixed:
+        unfixed_raw = load_unfixed_word_pairs(failures_path)
+        if unfixed_raw:
             n_pairs = int(phase4_cfg.get("word_pairs_n", 15))
-            word_pairs_context = format_word_examples_for_prompt(unfixed, n=n_pairs)
+            selected_pairs = select_word_pairs_by_coverage(unfixed_raw, n=n_pairs)
+            word_pairs_context = format_word_examples_for_prompt(selected_pairs, n=n_pairs)
             logger.info(
-                "Loaded %d unfixed word pairs -> %d chars context.",
-                len(unfixed), len(word_pairs_context),
+                "Loaded %d unfixed word pairs, selected %d by coverage -> %d chars.",
+                len(unfixed_raw), len(selected_pairs), len(word_pairs_context),
             )
     else:
-        # Fallback: try legacy word_error_pairs.txt in results dir
-        legacy_path = results_dir / "word_error_pairs.txt"
-        if legacy_path.exists():
-            pairs_loader = WordErrorPairsLoader()
-            try:
-                all_pairs = pairs_loader.load(legacy_path)
-                selected = pairs_loader.select(
-                    all_pairs,
-                    n=int(phase4_cfg.get("word_pairs_n", 15)),
-                    strategy=str(phase4_cfg.get("word_pairs_strategy", "random")),
-                    seed=int(phase4_cfg.get("word_pairs_seed", 42)),
-                )
-                word_pairs_context = pairs_loader.format_for_prompt(selected)
-                logger.info(
-                    "Loaded %d word-error pairs from legacy %s (%d chars).",
-                    len(selected), legacy_path, len(word_pairs_context),
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Could not load word-error pairs: %s", exc)
-        else:
-            logger.warning(
-                "No word pairs file found at %s or %s",
-                failures_path, legacy_path,
-            )
+        logger.warning("No word pairs file found at %s", failures_path)
 
     # --- Load overcorrection warnings (INTRODUCED section) ---
+    # Sorted by frequency so the most systematic LLM mistakes appear first.
     overcorrection_context = ""
     if failures_path.exists():
-        introduced = load_introduced_word_pairs(failures_path)
-        if introduced:
+        introduced_ranked = load_introduced_word_pairs_ranked(failures_path)
+        if introduced_ranked:
             n_over = int(phase4_cfg.get("overcorrection_n", 10))
-            overcorrection_context = format_overcorrection_warnings(introduced, n=n_over)
+            overcorrection_context = format_overcorrection_warnings(introduced_ranked, n=n_over)
             logger.info(
-                "Loaded %d introduced error pairs -> %d chars overcorrection context.",
-                len(introduced), len(overcorrection_context),
+                "Loaded %d unique introduced pairs (ranked) -> %d chars overcorrection context.",
+                len(introduced_ranked), len(overcorrection_context),
             )
     else:
         logger.info("No overcorrection data (failures file missing).")
+
+    # --- Load dynamic few-shot examples from training corrections ---
+    few_shot_cfg = phase4_cfg.get("few_shot", {})
+    few_shot_enabled = bool(few_shot_cfg.get("enabled", True))
+
+    # Per-dataset-type few-shot text (keyed by "PATS-A01" / "KHATT" / "")
+    few_shot_by_type: dict[str, str] = {}
+
+    if few_shot_enabled:
+        source_phase_fs = str(few_shot_cfg.get("source_phase", "phase2"))
+        source_dir_fs = _PROJECT_ROOT / "results" / source_phase_fs
+
+        # Collect training-split corrections paths (per-dataset or combined)
+        train_datasets = [ds for ds in all_dataset_names if is_train_split(ds)]
+        pats_paths: list[Path] = []
+        khatt_paths: list[Path] = []
+        combined_path = source_dir_fs / "corrections.jsonl"
+
+        for ds_key in train_datasets:
+            per_ds = source_dir_fs / ds_key / "corrections.jsonl"
+            if per_ds.exists():
+                (pats_paths if get_dataset_type(ds_key) == "PATS-A01" else khatt_paths).append(per_ds)
+
+        # Fall back to combined file if no per-dataset files found
+        if not pats_paths and not khatt_paths and combined_path.exists():
+            pats_paths = [combined_path]
+            khatt_paths = [combined_path]
+            logger.info("Few-shot: using combined corrections file.")
+
+        selector = FewShotExampleSelector()
+        fs_kwargs = {
+            "n_unchanged": int(few_shot_cfg.get("n_unchanged", 2)),
+            "n_easy":      int(few_shot_cfg.get("n_easy",      2)),
+            "n_medium":    int(few_shot_cfg.get("n_medium",    3)),
+            "n_hard":      int(few_shot_cfg.get("n_hard",      2)),
+            "seed":        int(few_shot_cfg.get("seed",        42)),
+            "max_chars":   int(few_shot_cfg.get("max_chars",   FewShotExampleSelector.DEFAULT_MAX_CHARS)),
+        }
+
+        for dtype, paths in [("PATS-A01", pats_paths), ("KHATT", khatt_paths)]:
+            if not paths:
+                continue
+            try:
+                pool = selector.load_from_multiple(paths)
+                selected = selector.select(
+                    pool, dataset_type_filter=dtype, **fs_kwargs
+                )
+                few_shot_by_type[dtype] = selector.format_for_prompt(selected)
+                logger.info(
+                    "Few-shot [%s]: %d examples selected (%d chars).",
+                    dtype, len(selected), len(few_shot_by_type[dtype]),
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Few-shot loading failed for %s: %s", dtype, exc)
+
+        if not few_shot_by_type:
+            logger.warning(
+                "No few-shot examples loaded (no training corrections found under %s).",
+                source_dir_fs,
+            )
+    else:
+        logger.info("Few-shot examples disabled (phase4.few_shot.enabled=false).")
 
     # By default only process val-split datasets; if --datasets was explicitly
     # passed on the CLI, respect that and export whatever was requested.
@@ -825,6 +872,7 @@ def run_export(
 
             dataset_type = get_dataset_type(ds_key)
             insights_context = pats_context if dataset_type == "PATS-A01" else khatt_context
+            few_shot_text = few_shot_by_type.get(dataset_type, "")
 
             if not insights_context.strip() and not word_pairs_context.strip():
                 logger.warning(
@@ -840,24 +888,26 @@ def run_export(
 
             for sample in tqdm(samples, desc=f"  Export {ds_key}", unit="sample"):
                 record: dict = {
-                    "sample_id":            sample.sample_id,
-                    "dataset":              ds_key,
-                    "ocr_text":             sample.ocr_text,
-                    "gt_text":              sample.gt_text,
-                    "prompt_type":          "self_reflective",
-                    "prompt_version":       builder.self_reflective_prompt_version,
-                    "insights_context":     insights_context or None,
-                    "word_pairs_context":   word_pairs_context or None,
+                    "sample_id":              sample.sample_id,
+                    "dataset":                ds_key,
+                    "ocr_text":               sample.ocr_text,
+                    "gt_text":                sample.gt_text,
+                    "prompt_type":            "self_reflective",
+                    "prompt_version":         builder.self_reflective_prompt_version,
+                    "insights_context":       insights_context or None,
+                    "word_pairs_context":     word_pairs_context or None,
                     "overcorrection_context": overcorrection_context or None,
-                    "dataset_type":         dataset_type,
+                    "few_shot_examples":      few_shot_text or None,
+                    "dataset_type":           dataset_type,
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 total_written += 1
 
             logger.info(
-                "Exported %d samples for %s (dataset_type=%s, word_pairs=%s).",
+                "Exported %d samples for %s (dataset_type=%s, word_pairs=%s, few_shot=%s).",
                 len(samples), ds_key, dataset_type,
                 "yes" if word_pairs_context else "no",
+                "yes" if few_shot_text else "no",
             )
 
     logger.info("=" * 60)
@@ -1404,6 +1454,7 @@ def main() -> None:
         run_export(
             config=config,
             active_datasets=active_datasets,
+            all_dataset_names=all_dataset_names,
             results_dir=args.results_dir,
             limit=args.limit,
             force=args.force,

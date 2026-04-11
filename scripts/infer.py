@@ -420,11 +420,13 @@ def main() -> None:
     def _build_messages_for_record(rec: dict) -> list[dict]:
         """Build messages for a single record (mirrors the dispatch below)."""
         pt = rec.get("prompt_type", "zero_shot")
+        few_shot = rec.get("few_shot_examples") or ""
         if pt == "ocr_aware":
             return builder.build_ocr_aware(
                 rec["ocr_text"],
                 rec.get("confusion_context", ""),
                 rec.get("word_examples", ""),
+                few_shot_examples=few_shot,
             )
         if pt == "combined":
             return builder.build_combined(
@@ -433,6 +435,7 @@ def main() -> None:
                 insights_context=rec.get("insights_context") or "",
                 word_pairs_context=rec.get("word_pairs_context") or "",
                 overcorrection_context=rec.get("overcorrection_context") or "",
+                few_shot_examples=few_shot,
             )
         if pt == "self_reflective":
             return builder.build_self_reflective(
@@ -440,13 +443,18 @@ def main() -> None:
                 rec.get("insights_context", ""),
                 rec.get("word_pairs_context", ""),
                 rec.get("overcorrection_context", ""),
+                few_shot_examples=few_shot,
             )
         if pt == "meta_prompt":
             return builder.build_meta_prompt(rec["ocr_text"])
         if pt == "crafted":
             return builder.build_crafted(rec["ocr_text"], rec.get("system_prompt", ""))
         # zero_shot and fallback
-        return builder.build_zero_shot(rec["ocr_text"], version=rec.get("prompt_version", "crafted"))
+        return builder.build_zero_shot(
+            rec["ocr_text"],
+            version=rec.get("prompt_version", "crafted"),
+            few_shot_examples=few_shot,
+        )
 
     _preview = pending[0]
     _preview_messages = _build_messages_for_record(_preview)
@@ -475,10 +483,15 @@ def main() -> None:
             # Phase 2 records have no prompt_type field — default to "zero_shot".
             prompt_type = record.get("prompt_type", "zero_shot")
 
+            few_shot = record.get("few_shot_examples") or ""
+
             if prompt_type == "ocr_aware":
                 confusion_context = record.get("confusion_context", "")
                 word_examples = record.get("word_examples", "")
-                messages = builder.build_ocr_aware(record["ocr_text"], confusion_context, word_examples)
+                messages = builder.build_ocr_aware(
+                    record["ocr_text"], confusion_context, word_examples,
+                    few_shot_examples=few_shot,
+                )
                 prompt_ver = builder.ocr_aware_prompt_version
                 if not confusion_context.strip():
                     # build_ocr_aware fell back to zero_shot internally
@@ -490,6 +503,7 @@ def main() -> None:
                     insights_context=record.get("insights_context") or "",
                     word_pairs_context=record.get("word_pairs_context") or "",
                     overcorrection_context=record.get("overcorrection_context") or "",
+                    few_shot_examples=few_shot,
                 )
                 prompt_ver = builder.combined_prompt_version
                 _any_ctx = any([
@@ -506,7 +520,7 @@ def main() -> None:
                 overcorrection_context = record.get("overcorrection_context", "")
                 messages = builder.build_self_reflective(
                     record["ocr_text"], insights_context, word_pairs_context,
-                    overcorrection_context,
+                    overcorrection_context, few_shot_examples=few_shot,
                 )
                 prompt_ver = builder.self_reflective_prompt_version
                 if not insights_context.strip() and not word_pairs_context.strip() and not overcorrection_context.strip():
@@ -522,7 +536,9 @@ def main() -> None:
                     prompt_type = "zero_shot_fallback"
             elif prompt_type == "zero_shot":
                 pv = record.get("prompt_version", "v1")
-                messages = builder.build_zero_shot(record["ocr_text"], version=pv)
+                messages = builder.build_zero_shot(
+                    record["ocr_text"], version=pv, few_shot_examples=few_shot,
+                )
                 prompt_ver = pv
             else:
                 logger.warning(

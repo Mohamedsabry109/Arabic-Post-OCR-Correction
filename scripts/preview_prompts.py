@@ -61,6 +61,23 @@ PLACEHOLDER_WORD_PAIRS = (
     "الصحه -> الصحة"
 )
 
+PLACEHOLDER_OVERCORRECTIONS = (
+    "الحكومة -> الحكومه\n"
+    "المحافظات -> المحافظه\n"
+    "الصحة -> الصحه"
+)
+
+PLACEHOLDER_FEW_SHOT = (
+    "INPUT:  وقال رئيس الوزراء ان الحكومه ستعمل على تطوبر التعليم\n"
+    "OUTPUT: وقال رئيس الوزراء ان الحكومة ستعمل على تطوير التعليم\n"
+    "\n"
+    "INPUT:  نقال حدثنا كباس بن مريرة عن الصالع\n"
+    "OUTPUT: فقال حدثنا عباس بن هريرة عن الصالح\n"
+    "\n"
+    "INPUT:  فسله وقام يتوضاً في مسبدا\n"
+    "OUTPUT: فسلم وقام يتوضأ في مسجدا"
+)
+
 # ---------------------------------------------------------------------------
 # Loaders for real data (used when available)
 # ---------------------------------------------------------------------------
@@ -107,23 +124,44 @@ def _load_real_insights(dataset_type: str | None = None) -> str | None:
     return None
 
 
-def _load_real_word_pairs() -> str | None:
-    """Try to load real Phase 4 word-error pairs."""
-    from src.data.knowledge_base import WordErrorPairsLoader
+def _load_real_word_pairs() -> tuple[str | None, str | None]:
+    """Try to load real UNFIXED and INTRODUCED word-error pairs from training analysis.
 
-    path = PROJECT_ROOT / "results" / "phase4" / "word_error_pairs.txt"
+    Returns:
+        (unfixed_text, introduced_text) — either may be None if unavailable.
+    """
+    from src.data.knowledge_base import (
+        load_unfixed_word_pairs, load_introduced_word_pairs,
+        format_word_examples_for_prompt, format_overcorrection_warnings,
+    )
+
+    path = PROJECT_ROOT / "results" / "phase2-training" / "analysis" / "word_pairs_llm_failures.txt"
     if not path.exists():
+        return None, None
+    try:
+        unfixed = load_unfixed_word_pairs(path)
+        introduced = load_introduced_word_pairs(path)
+        unfixed_text = format_word_examples_for_prompt(unfixed, n=15) if unfixed else None
+        introduced_text = format_overcorrection_warnings(introduced, n=10) if introduced else None
+        return unfixed_text, introduced_text
+    except Exception:
+        return None, None
+
+
+def _load_real_few_shot() -> str | None:
+    """Try to load real few-shot examples from Phase 2 training corrections."""
+    from src.data.knowledge_base import FewShotExampleSelector
+
+    selector = FewShotExampleSelector()
+    corrections_path = PROJECT_ROOT / "results" / "phase2" / "corrections.jsonl"
+    if not corrections_path.exists():
         return None
     try:
-        loader = WordErrorPairsLoader()
-        pairs = loader.load(path)
-        if pairs:
-            selected = loader.select(pairs, n=15, strategy="random", seed=42)
-            if selected:
-                return loader.format_for_prompt(selected)
+        pool = selector.load_from_corrections(corrections_path)
+        selected = selector.select(pool, n_unchanged=2, n_easy=2, n_medium=3, n_hard=2, seed=42)
+        return selector.format_for_prompt(selected) if selected else None
     except Exception:
-        pass
-    return None
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -192,13 +230,18 @@ def preview_phase3(
 
 def preview_phase4(pb: PromptBuilder, full: bool, **_: object) -> None:
     real_insights = _load_real_insights()
-    real_pairs = _load_real_word_pairs()
+    real_pairs, real_overcorrections = _load_real_word_pairs()
+    real_few_shot = _load_real_few_shot()
+
     ins = real_insights if real_insights else PLACEHOLDER_INSIGHTS
     wp = real_pairs if real_pairs else PLACEHOLDER_WORD_PAIRS
-    msgs = pb.build_self_reflective(SAMPLE_OCR_TEXT, ins, wp)
-    has_real = real_insights is not None or real_pairs is not None
+    oc = real_overcorrections if real_overcorrections else PLACEHOLDER_OVERCORRECTIONS
+    fs = real_few_shot if real_few_shot else PLACEHOLDER_FEW_SHOT
+
+    msgs = pb.build_self_reflective(SAMPLE_OCR_TEXT, ins, wp, oc, few_shot_examples=fs)
+    has_real = any(x is not None for x in [real_insights, real_pairs, real_few_shot])
     _print_messages(
-        msgs, "Phase 4: Self-Reflective",
+        msgs, "Phase 4: Self-Reflective (insights + word pairs + overcorrection warnings + few-shot)",
         pb.self_reflective_prompt_version, full, real_data=has_real,
     )
 
@@ -208,17 +251,16 @@ def preview_phase6(
 ) -> None:
     real_conf = _load_real_confusion(dataset)
     real_insights = _load_real_insights()
-    real_pairs = _load_real_word_pairs()
+    real_pairs, real_overcorrections = _load_real_word_pairs()
 
     msgs = pb.build_combined(
         SAMPLE_OCR_TEXT,
         confusion_context=real_conf or PLACEHOLDER_CONFUSION,
         insights_context=real_insights or PLACEHOLDER_INSIGHTS,
         word_pairs_context=real_pairs or PLACEHOLDER_WORD_PAIRS,
+        overcorrection_context=real_overcorrections or PLACEHOLDER_OVERCORRECTIONS,
     )
-    has_real = any(x is not None for x in [
-        real_conf, real_insights, real_pairs,
-    ])
+    has_real = any(x is not None for x in [real_conf, real_insights, real_pairs])
     _print_messages(
         msgs, "Phase 6: Combined (confusion + self-reflective)",
         pb.combined_prompt_version, full, real_data=has_real,

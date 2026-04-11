@@ -64,12 +64,12 @@ class PromptBuilder:
     # Prompt version strings — bump whenever wording changes between runs.
     # -----------------------------------------------------------------------
 
-    PROMPT_VERSION: str = "p2v2"                  # Phase 2 — crafted base
-    OCR_AWARE_PROMPT_VERSION: str = "p3v2"         # Phase 3
-    SELF_REFLECTIVE_PROMPT_VERSION: str = "p4v1"    # Phase 4 (insights + word pairs)
-    COMBINED_PROMPT_VERSION: str = "p6v1"          # Phase 6
-    CRAFTED_PROMPT_VERSION: str = "crafted_v1"     # standalone crafted
-    META_PROMPT_VERSION: str = "meta_v1"           # meta-prompting
+    PROMPT_VERSION: str = "p2v2"                   # Phase 2 — crafted base (unchanged)
+    OCR_AWARE_PROMPT_VERSION: str = "p3v2"          # Phase 3 — improved section labels
+    SELF_REFLECTIVE_PROMPT_VERSION: str = "p4v2"    # Phase 4 — improved labels + few-shot
+    COMBINED_PROMPT_VERSION: str = "p6v2"           # Phase 6 — improved labels + few-shot
+    CRAFTED_PROMPT_VERSION: str = "crafted_v1"      # standalone crafted
+    META_PROMPT_VERSION: str = "meta_v1"            # meta-prompting
 
     # -----------------------------------------------------------------------
     # Legacy system prompts — retained for backward compatibility when
@@ -104,6 +104,10 @@ class PromptBuilder:
     # the <examples> block so the model sees them before the few-shot pairs.
     _INJECT_ANCHOR: str = "<examples>"
 
+    # Dynamic few-shot examples are appended inside the <examples> block,
+    # after any static examples already in the prompt file.
+    _EXAMPLES_END_ANCHOR: str = "</examples>"
+
     # -----------------------------------------------------------------------
     # Per-phase XML section templates.
     # Section wrappers / labels are in English; Arabic content stays Arabic.
@@ -111,7 +115,8 @@ class PromptBuilder:
 
     _OCR_AWARE_SECTION: str = (
         "<confusion_patterns>\n"
-        "Character confusions specific to this OCR system (corrupted → correct):\n"
+        "This OCR system makes these systematic character errors. "
+        "When you see the LEFT form in the input, correct it to the RIGHT form:\n\n"
         "{confusion_context}\n"
         "</confusion_patterns>"
     )
@@ -119,7 +124,8 @@ class PromptBuilder:
     # Combined-phase section body for confusion (same as standalone).
     _COMBINED_CONFUSION: str = (
         "<confusion_patterns>\n"
-        "Character confusions specific to this OCR system:\n"
+        "This OCR system makes these systematic character errors. "
+        "When you see the LEFT form in the input, correct it to the RIGHT form:\n\n"
         "{confusion_context}\n"
         "</confusion_patterns>"
     )
@@ -174,9 +180,15 @@ class PromptBuilder:
     def _inject_knowledge(self, base: str, section: str) -> str:
         """Insert *section* immediately before the ``<examples>`` block.
 
-        Falls back to appending at the end if the anchor is absent (e.g. when
-        the crafted base prompt is not available and zero-shot v2 is used as
-        fallback).
+        Falls back to injecting before ``<output_format>`` when the base
+        prompt has no ``<examples>`` anchor (e.g. the clean base prompt).
+        This guarantees all knowledge sections appear before the output
+        instruction regardless of whether the base file has an examples block.
+
+        Multiple calls chain correctly: each successive injection finds the
+        ``<output_format>`` tag further right (after previously injected sections),
+        so the natural ordering is preserved — first call closest to rules,
+        last call closest to output_format.
         """
         if self._INJECT_ANCHOR in base:
             return base.replace(
@@ -184,7 +196,47 @@ class PromptBuilder:
                 section + "\n\n" + self._INJECT_ANCHOR,
                 1,
             )
+        if "<output_format>" in base:
+            return base.replace("<output_format>", section + "\n\n<output_format>", 1)
         return base.rstrip() + "\n\n" + section
+
+    def _inject_dynamic_examples(self, base: str, examples_text: str) -> str:
+        """Append *examples_text* inside the ``<examples>`` block.
+
+        Dynamic few-shot examples are placed after any static examples already
+        in the prompt file.  If no ``</examples>`` anchor is found, a new
+        ``<examples>`` block is inserted just before ``<output_format>``
+        (or appended at the end as a last resort).
+
+        Args:
+            base: The system prompt string (after knowledge injection).
+            examples_text: Pre-formatted INPUT/OUTPUT pairs from
+                ``FewShotExampleSelector.format_for_prompt()``.
+
+        Returns:
+            Updated system prompt string with dynamic examples embedded.
+        """
+        if not examples_text.strip():
+            return base
+
+        if self._EXAMPLES_END_ANCHOR in base:
+            return base.replace(
+                self._EXAMPLES_END_ANCHOR,
+                "\n" + examples_text + "\n" + self._EXAMPLES_END_ANCHOR,
+                1,
+            )
+
+        # No </examples> — try to insert a new block before <output_format>
+        output_anchor = "<output_format>"
+        if output_anchor in base:
+            return base.replace(
+                output_anchor,
+                "<examples>\n" + examples_text + "\n</examples>\n\n" + output_anchor,
+                1,
+            )
+
+        # Last resort: append at the end
+        return base.rstrip() + "\n\n<examples>\n" + examples_text + "\n</examples>"
 
     def _messages(self, system: str, ocr_text: str) -> list[dict]:
         """Return standard two-element OpenAI chat messages."""
@@ -197,7 +249,12 @@ class PromptBuilder:
     # Phase 2 — Zero-Shot
     # -----------------------------------------------------------------------
 
-    def build_zero_shot(self, ocr_text: str, version: str = "crafted") -> list[dict]:
+    def build_zero_shot(
+        self,
+        ocr_text: str,
+        version: str = "crafted",
+        few_shot_examples: str = "",
+    ) -> list[dict]:
         """Build zero-shot correction prompt (Phase 2).
 
         Uses the crafted system prompt as-is by default.  Pass ``version="v1"``
@@ -206,6 +263,9 @@ class PromptBuilder:
         Args:
             ocr_text: OCR prediction text to correct.
             version: ``"crafted"`` (default), ``"v1"``, or ``"v2"``.
+            few_shot_examples: Optional pre-formatted INPUT/OUTPUT examples from
+                ``FewShotExampleSelector.format_for_prompt()``.  Appended inside
+                the ``<examples>`` block of the crafted prompt.
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -214,6 +274,8 @@ class PromptBuilder:
             system = self._ZERO_SHOT_VERSIONS[version]
         else:
             system = self._load_crafted_base()
+        if few_shot_examples.strip():
+            system = self._inject_dynamic_examples(system, few_shot_examples)
         return self._messages(system, ocr_text)
 
     @property
@@ -230,6 +292,7 @@ class PromptBuilder:
         ocr_text: str,
         confusion_context: str,
         word_examples: str = "",
+        few_shot_examples: str = "",
     ) -> list[dict]:
         """Build OCR-aware correction prompt (Phase 3).
 
@@ -246,21 +309,28 @@ class PromptBuilder:
                 produced by ``ConfusionMatrixLoader.format_for_prompt()``.
             word_examples: Optional pre-formatted word-level failure examples
                 from training cross-reference.
+            few_shot_examples: Optional pre-formatted INPUT/OUTPUT examples from
+                ``FewShotExampleSelector.format_for_prompt()``.  Appended inside
+                the ``<examples>`` block.
 
         Returns:
             Two-element messages list in OpenAI chat format.
         """
         if not confusion_context.strip():
-            return self.build_zero_shot(ocr_text)
+            return self.build_zero_shot(ocr_text, few_shot_examples=few_shot_examples)
         base = self._load_crafted_base()
         section = self._OCR_AWARE_SECTION.format(confusion_context=confusion_context)
         if word_examples.strip():
             # Insert word examples inside the confusion_patterns section
             section = section.replace(
                 "</confusion_patterns>",
-                "\n\n" + word_examples + "\n</confusion_patterns>",
+                "\n\nWORD-LEVEL FAILURES — common whole-word misreads from training data "
+                "(OCR form → correct form):\n" + word_examples + "\n</confusion_patterns>",
             )
-        return self._messages(self._inject_knowledge(base, section), ocr_text)
+        system = self._inject_knowledge(base, section)
+        if few_shot_examples.strip():
+            system = self._inject_dynamic_examples(system, few_shot_examples)
+        return self._messages(system, ocr_text)
 
     @property
     def ocr_aware_prompt_version(self) -> str:
@@ -277,11 +347,23 @@ class PromptBuilder:
         insights_context: str,
         word_pairs_context: str = "",
         overcorrection_context: str = "",
+        few_shot_examples: str = "",
     ) -> list[dict]:
         """Build Phase 4 correction prompt: self-reflective insights + word-error pairs.
 
         Injects all signals as a single ``<self_analysis>`` section before
+        ``<examples>``.  Dynamic few-shot examples are appended inside
         ``<examples>``.  Falls back to zero-shot if all contexts are empty.
+
+        Injection order in the final system prompt::
+
+            <error_patterns>    (from crafted base)
+            <self_analysis>     (insights + word pairs + overcorrection warnings)
+            <examples>
+              [static examples from crafted base]
+              [dynamic few-shot examples — appended here]
+            </examples>
+            <output_format>
 
         Args:
             ocr_text: OCR prediction text to correct.
@@ -291,6 +373,9 @@ class PromptBuilder:
                 training analysis (UNFIXED errors).  Optional.
             overcorrection_context: Pre-formatted warnings about common
                 over-corrections the LLM makes (INTRODUCED errors).  Optional.
+            few_shot_examples: Optional pre-formatted INPUT/OUTPUT examples from
+                ``FewShotExampleSelector.format_for_prompt()``.  Appended inside
+                the ``<examples>`` block after the static examples.
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -299,30 +384,34 @@ class PromptBuilder:
         has_pairs = bool(word_pairs_context.strip())
         has_overcorrections = bool(overcorrection_context.strip())
         if not has_insights and not has_pairs and not has_overcorrections:
-            return self.build_zero_shot(ocr_text)
+            return self.build_zero_shot(ocr_text, few_shot_examples=few_shot_examples)
         base = self._load_crafted_base()
         inner_parts: list[str] = []
         if has_insights:
             inner_parts.append(
-                "Analysis of previous correction patterns on similar texts:\n"
-                + insights_context
+                "SYSTEMATIC WEAKNESSES — error types this model frequently misses "
+                "(apply extra caution to these):\n" + insights_context
             )
         if has_pairs:
             inner_parts.append(
-                "Common word-level OCR errors found in training data:\n"
-                + word_pairs_context
+                "KNOWN WORD-LEVEL ERRORS from training data "
+                "(OCR form → correct form):\n" + word_pairs_context
             )
         if has_overcorrections:
             inner_parts.append(
-                "WARNING - Common over-corrections to AVOID (do NOT make these changes):\n"
-                + overcorrection_context
+                "OVER-CORRECTION TRAPS — DO NOT make these changes "
+                "(this model incorrectly applies them):\n" + overcorrection_context
             )
         section = (
             "<self_analysis>\n"
+            "Based on analysis of this model's corrections on similar training texts:\n\n"
             + "\n\n".join(inner_parts)
             + "\n</self_analysis>"
         )
-        return self._messages(self._inject_knowledge(base, section), ocr_text)
+        system = self._inject_knowledge(base, section)
+        if few_shot_examples.strip():
+            system = self._inject_dynamic_examples(system, few_shot_examples)
+        return self._messages(system, ocr_text)
 
     @property
     def self_reflective_prompt_version(self) -> str:
@@ -340,6 +429,7 @@ class PromptBuilder:
         insights_context: str = "",
         word_pairs_context: str = "",
         overcorrection_context: str = "",
+        few_shot_examples: str = "",
     ) -> list[dict]:
         """Build a combined correction prompt (Phase 6).
 
@@ -348,9 +438,16 @@ class PromptBuilder:
 
         Falls back to zero-shot if all contexts are empty.
 
-        Injection order (all appear before ``<examples>``):
-            1. ``<confusion_patterns>``  — Phase 3 confusion matrix
-            2. ``<self_analysis>``       — Phase 4 insights + word pairs + overcorrection warnings
+        Injection order in the final system prompt::
+
+            <error_patterns>       (from crafted base)
+            <confusion_patterns>   (Phase 3 confusion matrix — if provided)
+            <self_analysis>        (Phase 4 insights + word pairs + warnings — if provided)
+            <examples>
+              [static examples from crafted base]
+              [dynamic few-shot examples — appended here if provided]
+            </examples>
+            <output_format>
 
         Args:
             ocr_text: OCR prediction text to correct.
@@ -358,6 +455,8 @@ class PromptBuilder:
             insights_context: Pre-formatted self-reflective insights (Phase 4).
             word_pairs_context: Pre-formatted word-error pairs (Phase 4).
             overcorrection_context: Pre-formatted over-correction warnings (Phase 4).
+            few_shot_examples: Optional pre-formatted INPUT/OUTPUT examples from
+                ``FewShotExampleSelector.format_for_prompt()``.
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -369,7 +468,7 @@ class PromptBuilder:
             overcorrection_context.strip(),
         ])
         if all_empty:
-            return self.build_zero_shot(ocr_text)
+            return self.build_zero_shot(ocr_text, few_shot_examples=few_shot_examples)
 
         base = self._load_crafted_base()
 
@@ -385,25 +484,29 @@ class PromptBuilder:
             inner: list[str] = []
             if has_insights:
                 inner.append(
-                    "Analysis of previous correction patterns on similar texts:\n"
-                    + insights_context
+                    "SYSTEMATIC WEAKNESSES — error types this model frequently misses "
+                    "(apply extra caution to these):\n" + insights_context
                 )
             if has_pairs:
                 inner.append(
-                    "Common word-level OCR errors found in training data:\n"
-                    + word_pairs_context
+                    "KNOWN WORD-LEVEL ERRORS from training data "
+                    "(OCR form → correct form):\n" + word_pairs_context
                 )
             if has_overcorrections:
                 inner.append(
-                    "WARNING - Common over-corrections to AVOID (do NOT make these changes):\n"
-                    + overcorrection_context
+                    "OVER-CORRECTION TRAPS — DO NOT make these changes "
+                    "(this model incorrectly applies them):\n" + overcorrection_context
                 )
             section = (
                 "<self_analysis>\n"
+                "Based on analysis of this model's corrections on similar training texts:\n\n"
                 + "\n\n".join(inner)
                 + "\n</self_analysis>"
             )
             base = self._inject_knowledge(base, section)
+
+        if few_shot_examples.strip():
+            base = self._inject_dynamic_examples(base, few_shot_examples)
 
         return self._messages(base, ocr_text)
 
