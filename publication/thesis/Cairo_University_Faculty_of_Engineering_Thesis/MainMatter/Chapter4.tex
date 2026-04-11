@@ -3,12 +3,13 @@
 
 This chapter describes the experimental methodology of each phase.
 For every phase, the structure follows a consistent template: hypothesis,
-method (step-by-step), variables, output files, and the research question answered.
-Section~\ref{sec:design} explains the overarching design principles that govern
-how the phases relate to each other.
-Sections~\ref{sec:phase1} through~\ref{sec:phase7} describe each phase in full.
-Table~\ref{tab:phase_summary} at the end of this chapter provides a consolidated
-reference.
+method (step-by-step), variables, output files, and the research question
+answered.
+Section~\ref{sec:design} explains the overarching design principles that
+govern how the phases relate to each other.
+Sections~\ref{sec:phase1} through~\ref{sec:phase6} describe each phase in
+full. Table~\ref{tab:phase_summary} at the end of this chapter provides a
+consolidated reference.
 
 % ============================================================
 \section{Experimental Design Principles}
@@ -18,32 +19,33 @@ reference.
 \subsection{The Isolation Principle}
 \label{subsec:isolation}
 
-The defining design choice of this study is that Phases~3 through~4D are
-\emph{isolated} experiments.
-Each phase changes exactly one variable relative to Phase~2: the type of
-knowledge injected into the system prompt.
-Every other factor --- the model, the dataset, the sample set, the generation
-parameters, the evaluation protocol, the analysis code --- is held fixed.
-This design allows any observed CER change to be attributed unambiguously to the
-knowledge injection and not to a confound.
+The defining design choice of this study is that Phases~3, 4, and~5 are
+\emph{isolated} experiments. Each phase changes exactly one variable relative
+to Phase~2: the type of knowledge injected into the system prompt or applied
+as a post-processing step. Every other factor --- the model, the dataset,
+the sample set, the generation parameters, the evaluation protocol, the
+analysis code --- is held fixed. This design allows any observed CER change
+to be attributed unambiguously to the knowledge injection and not to a
+confound.
 
 Comparing isolated phases against Phase~2 (zero-shot) rather than against
-Phase~1 (OCR baseline) is a deliberate choice.
-The question of interest is not whether the LLM improves on raw OCR (Phase~2
-answers that), but whether injecting a specific type of knowledge into an
-already-running LLM corrector improves its performance.
-Comparing to Phase~1 would confound OCR quality with LLM correction quality.
+Phase~1 (OCR baseline) is a deliberate choice. The question of interest is
+not whether the LLM improves on raw OCR (Phase~2 answers that), but whether
+injecting a specific type of knowledge into an already-running LLM corrector
+improves its performance. Comparing to Phase~1 would confound OCR quality
+with LLM correction quality.
 
 \subsection{Phase~2 as the Hub Baseline}
 \label{subsec:hub}
 
 Phase~2 (zero-shot LLM correction) serves as the comparison baseline for all
-subsequent phases.
-A phase that does not improve on Phase~2 is a negative result with respect to
-that knowledge type: the injected knowledge does not help, and may actively
-hurt, relative to the model's own language understanding.
-Negative results are scientifically valuable because they rule out a hypothesis
-and constrain theories of what makes LLM correction succeed.
+subsequent phases. A phase that does not improve on Phase~2 is a negative
+result with respect to that knowledge type: the injected knowledge does not
+help, and may actively hurt, relative to the model's own language
+understanding. Negative results are scientifically valuable because they
+rule out a hypothesis and constrain theories of what makes LLM correction
+succeed. All five strategies are therefore compared to the same zero-shot
+baseline, enabling a consistent ranking.
 
 \subsection{Reproducibility Measures}
 \label{subsec:reproducibility}
@@ -53,33 +55,39 @@ All experiments use:
   \item The same nine evaluation datasets: eight PATS-A01 fonts (415 validation
         samples each, aligned split) plus KHATT validation.
   \item The same model: \texttt{Qwen/Qwen3-4B-Instruct-2507}.
-  \item The same generation parameters: temperature 0.1, \texttt{max\_new\_tokens} 1024,
-        \texttt{enable\_thinking=False}.
+  \item The same generation parameters: temperature 0.1,
+        \texttt{max\_new\_tokens} 1024, \texttt{enable\_thinking=False}.
   \item The same evaluation protocol: diacritic-stripped CER/WER, per-sample
-        then aggregated. PATS-A01 macro-averages (non-weighted) are reported
-        alongside per-font results.
+        then aggregated. PATS-A01 macro-averages (non-weighted, each font
+        contributes equally) are reported alongside per-font results.
   \item Fixed random seeds where any sampling is involved (seed 42 throughout).
 \end{itemize}
 Each phase stores its inference input as a JSONL file with embedded prompts,
-ensuring that the exact prompts sent to the model are permanently recorded and
-can be inspected or re-run.
+ensuring that the exact prompts sent to the model are permanently recorded
+and can be inspected or re-run without requiring access to the original data
+files.
 
 \subsection{Why Not Test All Combinations First}
 \label{subsec:why_not_all}
 
-With four distinct prompt-level knowledge sources (confusion matrix, rules,
-few-shot, self-reflective insights), the full combination space contains
-$2^4 = 16$ subsets. Running all 16 across nine datasets would require
-approximately 59,000 model inference calls, well beyond the available
-compute budget.
-More importantly, running uninformed combinations before understanding each
-component's individual behaviour would make the results difficult to interpret:
-a combination that degrades performance could not be decomposed into its
-contributing factors without the isolated phase results.
+With three distinct prompt-level knowledge sources (confusion matrix,
+self-reflective insights, and their combination), plus CAMeL post-processing
+as an optional layer, the combination space is $2^3 = 8$ prompt subsets plus
+a post-processing overlay. Running all 8 combinations across nine datasets
+as the primary experimental strategy would require approximately 33,000 model
+inference calls --- well beyond the available compute budget for a
+preliminary sweep --- and, more importantly, would make results difficult to
+interpret: a combination that degrades performance could not be decomposed
+into its contributing factors without the isolated phase results.
 
-The hierarchical strategy (isolated first, then best combinations in Phase~5)
-extracts the maximum insight per inference call: isolated phases diagnose each
-component, and Phase~5 tests whether synergies exist between the best performers.
+The hierarchical strategy (isolated first, then selected combinations in
+Phase~6) extracts the maximum insight per inference call. Isolated phases
+diagnose each component independently. Phase~6 then tests four pre-selected
+combinations chosen based on the isolated results: the best-performing
+isolated strategy, the second-best, their combination, and the combination
+augmented with CAMeL post-processing. This focused design answers the
+combination question with a fraction of the inference cost of a full grid
+search.
 
 % ============================================================
 \section{Phase 1 --- Baseline and Error Taxonomy}
@@ -88,44 +96,79 @@ component, and Phase~5 tests whether synergies exist between the best performers
 
 \subsection{Hypothesis}
 Qaari produces systematic, categorisable errors on Arabic typewritten text.
-The error profile is dominated by a small number of recurring character confusion
-types that can be quantified and used to guide subsequent phases.
+The error profile is dominated by a small number of recurring character
+confusion types that can be quantified and used to guide subsequent phases.
+The nature and frequency of errors differs substantially across fonts, making
+multi-font evaluation necessary to capture the full range of correction
+challenges.
 
 \subsection{Method}
 \label{subsec:phase1_method}
 
 \begin{enumerate}
   \item Load all OCR predictions and ground-truth pairs for each of the nine
-        evaluation datasets from the DataLoader.
+        evaluation datasets from the DataLoader. Both training and validation
+        splits are processed; only validation-split metrics are reported in
+        Chapter~\ref{ch_results}, but training-split confusion matrices and
+        error statistics inform Phases~3 and~4.
+
   \item Compute per-sample CER and WER using the normalised metric
-        (diacritics stripped).
-        Aggregate: mean, standard deviation, median, p95.
+        (diacritics stripped via Unicode category filtering).
+        Aggregate statistics per dataset: mean, standard deviation, median,
+        95th percentile (P95). The P95 metric identifies the severity of
+        the worst-performing tail of samples.
+
   \item Build a character-level confusion matrix.
         For each aligned (ground-truth character, OCR character) pair in the
         minimum-edit alignment, increment the count for that pair.
         Normalise by ground-truth character frequency to obtain conditional
-        confusion probabilities.
-  \item Classify each substitution, insertion, and deletion into one of the
-        seven taxonomic categories from Table~\ref{tab:taxonomy}
-        (Chapter~3) using the heuristic rules defined there.
+        confusion probabilities. The confusion matrix is stored as a
+        square matrix indexed by Unicode character code point and is used
+        directly by Phase~3's \texttt{ConfusionMatrixLoader}.
+
+  \item Classify each substitution, insertion, and deletion into one of eight
+        taxonomic categories using the heuristic rules defined in
+        Chapter~\ref{ch_system}:
+        \begin{enumerate}
+          \item Dot confusion (ba/ta/tha/ya family; fa/qaf; nun/waw variants)
+          \item Hamza and alef variants (hamza placement, alef/alef-madda/alef-wasla)
+          \item Taa marbuta / ha confusion
+          \item Alef maqsura / ya confusion
+          \item Similar-shape pairs (ra/zay, dal/dhal, sad/dad, etc.)
+          \item Word merge (two words recognised as one)
+          \item Word split (one word recognised as two)
+          \item Other substitution, insertion, or deletion
+        \end{enumerate}
+
   \item Apply CAMeL Tools morphological analysis to each unique OCR token.
-        Classify tokens as \emph{non-words} (zero valid analyses) or
-        \emph{valid-but-wrong} (at least one valid analysis, but contextually
-        incorrect).
+        Classify tokens as \emph{non-words} (zero valid analyses returned by
+        the MSA morphological analyser) or \emph{valid-but-wrong} (at least
+        one valid analysis, but contextually incorrect relative to ground
+        truth). This distinction is critical for Phase~5: the CAMeL
+        post-processing revert strategy can only intervene on non-word errors.
+
+  \item Cross-reference the confusion matrix with Phase~2 training-split
+        failures: retain only confusion pairs that appear in samples where
+        the zero-shot LLM failed to correct the error. This filtered confusion
+        list is used by Phase~3 and represents actionable patterns --- ones
+        the model is known not to handle by default.
+
   \item Write per-dataset reports including confusion matrix JSON, error
-        taxonomy JSON, and a human-readable Markdown summary.
+        taxonomy JSON, morphological analysis JSON, and a human-readable
+        Markdown summary.
 \end{enumerate}
 
 \subsection{Output Files}
 \label{subsec:phase1_outputs}
 \begin{itemize}
   \item \texttt{results/phase1/\{dataset\}/metrics.json} --- CER/WER statistics
+        (mean, std, median, p95) with and without diacritics
   \item \texttt{results/phase1/\{dataset\}/confusion\_matrix.json} --- character-level
-        confusion counts with top-20 list
+        confusion counts with top-20 list and conditional confusion probabilities
   \item \texttt{results/phase1/\{dataset\}/error\_taxonomy.json} --- error counts
-        and percentages by category with examples
+        and percentages by eight-category taxonomy with representative examples
   \item \texttt{results/phase1/\{dataset\}/morphological\_analysis.json} --- word
-        validity statistics
+        validity statistics (non-word / valid-but-wrong split)
   \item \texttt{results/phase1/\{dataset\}/error\_examples.json} --- up to 5 sample
         OCR/GT pairs per error category
   \item \texttt{results/phase1/\{dataset\}/report.md} --- human-readable summary
@@ -142,7 +185,10 @@ types that can be quantified and used to guide subsequent phases.
 \subsection{Hypothesis}
 A zero-shot instruction-tuned LLM can improve Arabic OCR output without
 task-specific guidance, by exploiting its pre-trained Arabic language knowledge
-to recognise and correct implausible character sequences.
+to recognise and correct implausible character sequences. However, the
+effectiveness of this correction is expected to be font-dependent: fonts with
+higher baseline CER present more recognisable errors, while fonts with lower
+CER present fewer errors per sample and risk over-correction.
 
 \subsection{Method}
 \label{subsec:phase2_method}
@@ -151,9 +197,10 @@ to recognise and correct implausible character sequences.
   \item For each sample in each of the nine evaluation datasets, construct the
         conservative zero-shot prompt using
         \texttt{PromptBuilder.build\_zero\_shot(ocr\_text, version="v2")}.
-        The system message tells the model that the text may already be correct,
-        that it should return it unchanged if no clear error is found, and that
-        it must not change what is already correct.
+        The system message informs the model that the text is OCR output that
+        may already be correct, instructs it to return the text unchanged if
+        no clear error is found, and prohibits it from changing what is
+        already correct.
 
   \item Write all prompts to
         \texttt{results/phase2/inference\_input.jsonl}, one JSON object per
@@ -164,35 +211,42 @@ to recognise and correct implausible character sequences.
   \item Run inference on Kaggle (GPU) using \texttt{scripts/infer.py}.
         For each sample, the model generates the corrected text.
         Results are written to \texttt{results/phase2/corrections.jsonl}.
+        The inference script implements a resume mechanism: any
+        \texttt{sample\_id} already present in the output file is skipped,
+        enabling restartable inference without duplicating work.
 
   \item Compute post-correction CER and WER for each sample.
         Compare to Phase~1 OCR baseline.
-        Compute error changes: for each sample, count errors fixed (present
-        in OCR but absent from correction) and errors introduced (absent from
-        OCR but present in correction).
+        Compute error changes per sample: fixed errors (present in OCR,
+        absent from correction), introduced errors (absent from OCR,
+        present in correction), and their ratio (introduction rate).
 
-  \item Write comparison report to
+  \item Run the same Phase~2 pipeline on the \emph{training} split of each
+        PATS-A01 font. These training-split corrections are not reported as
+        results but serve as the input to Phase~4's self-reflective analysis.
+
+  \item Write comparison reports to
         \texttt{results/phase2/\{dataset\}/comparison\_vs\_phase1.json}.
 \end{enumerate}
 
 \subsection{Prompt Design Rationale}
 \label{subsec:phase2_rationale}
 
-Two prompt versions were developed:
+Two prompt versions were developed and piloted:
 \begin{itemize}
-  \item \textbf{v1 (aggressive)}: ``You are an Arabic text corrector. Your task
-        is to correct OCR errors in Arabic text. Return only the corrected text
-        without explanation.'' (translated from Arabic)
-  \item \textbf{v2 (conservative)}: ``You are an Arabic text proofreader.
-        The following text is OCR output and may be fully correct or contain few
-        errors. If the text is correct, return it exactly as-is. If you find only
-        a clear error, correct it. Do not change what is correct. Return only the
-        text without explanation.'' (translated from Arabic)
+  \item \textbf{v1 (aggressive)}: instructs the model to correct OCR errors
+        without qualification. Piloting on Akhbar (low baseline CER) showed
+        that v1 increased CER relative to baseline: the model rewrote
+        correctly recognised text. This aggressive framing was discarded.
+  \item \textbf{v2 (conservative)}: explicitly tells the model that the text
+        \emph{may already be correct}, that it should return it unchanged if
+        no clear error is visible, and that it must not change what is
+        correct. This formulation keeps the model in a low-intervention mode
+        on clean text while still enabling correction where errors are obvious.
 \end{itemize}
-Version v1 was piloted but discarded after it produced worse aggregate CER than
-the OCR baseline on clean samples: the aggressive framing caused the model to
-rewrite text it should have preserved.
-Version v2 is used in all experiments reported in this thesis.
+Version v2 is used in all phases reported in this thesis. The trade-off is
+that v2 may miss subtle errors that v1 would catch, but the reduction in
+over-correction is empirically justified.
 
 \subsection{Output Files}
 \begin{itemize}
@@ -204,7 +258,8 @@ Version v2 is used in all experiments reported in this thesis.
 \noindent
 \textbf{Research question answered:} RQ2.
 \textbf{Role in the study:} Phase~2 output serves as the comparison baseline
-for all subsequent phases.
+for all subsequent phases and as the input data source for Phase~4's
+training-split analysis.
 
 % ============================================================
 \section{Phase 3 --- OCR-Aware Prompting}
@@ -212,279 +267,166 @@ for all subsequent phases.
 % ============================================================
 
 \subsection{Hypothesis}
-Telling the LLM which specific character confusions Qaari makes will direct its
-attention to the positions most likely to contain errors and improve correction
-quality for those error types.
+Telling the LLM which specific character confusions Qaari makes on a given
+font --- filtered to confusions that appear in samples the model itself
+failed to correct at the zero-shot level --- will direct its attention to
+the positions most likely to contain unresolved errors and improve correction
+quality for those specific confusion types.
 
 \subsection{Method}
 \label{subsec:phase3_method}
 
 \begin{enumerate}
-  \item Load the Phase~1 confusion matrix from
+  \item Load the Phase~1 training-split confusion matrix from
         \texttt{results/phase1/\{dataset\}-train/confusion\_matrix.json}
         using \texttt{ConfusionMatrixLoader}. Each font uses its own
-        font-specific confusion matrix derived from its training split.
-  \item Extract the top-10 confusion pairs by substitution count.
+        font-specific confusion matrix derived from its training split,
+        ensuring the confusion context is tailored to the actual error
+        distribution of that typeface.
+
+  \item Cross-reference the confusion matrix entries with the LLM failure
+        cases from Phase~2 training-split analysis. A confusion pair
+        (gt\_char, ocr\_char) is retained in the injection list only if it
+        appears in samples where the zero-shot model failed to produce a
+        correction closer to ground truth than the OCR input. This
+        \emph{failure-filtered} list focuses the model's attention on
+        confusions it does not resolve by default.
+
+  \item Extract the top-10 confusion pairs by substitution count from the
+        filtered list.
+
   \item Format the confusion pairs as an Arabic-language bullet list using
         \texttt{ConfusionMatrixLoader.format\_for\_prompt()}.
-        Each bullet item reads (translated): ``This system confuses [correct
-        character] with [OCR character].''
+        Each bullet item reads (translated): ``This system confuses
+        [correct character] with [OCR character] in output.''
+
   \item Build the OCR-aware prompt using
         \texttt{PromptBuilder.build\_ocr\_aware(ocr\_text, confusion\_context)}.
-        The system message extends the zero-shot message with the confusion list
-        and instructs the model to pay particular attention to these pairs.
-  \item Export, infer, and analyze following the same three-stage pipeline as
-        Phase~2.
+        The system message extends the zero-shot v2 message with the
+        confusion list in a \texttt{<confusion\_patterns>} XML block,
+        instructing the model to pay particular attention to these pairs
+        while observing the same conservative correction rules as Phase~2.
+
+  \item Export, infer (Kaggle GPU), and analyse following the same three-stage
+        pipeline as Phase~2. The prompt version tag is \texttt{p3v1}.
 \end{enumerate}
 
 \subsection{Variables}
 \begin{itemize}
-  \item \textbf{Changed from Phase~2:} Confusion list injected into system prompt.
-  \item \textbf{Fixed:} Model, dataset, generation parameters, evaluation protocol.
-  \item \textbf{Number of confusion pairs:} 10 (configured as \texttt{phase3.top\_n}).
+  \item \textbf{Changed from Phase~2:} Failure-filtered confusion list
+        injected into system prompt.
+  \item \textbf{Fixed:} Model, dataset, generation parameters, evaluation
+        protocol, conservative correction instruction.
+  \item \textbf{Number of confusion pairs injected:} 10 (configured as
+        \texttt{phase3.top\_n} in \texttt{configs/config.yaml}).
 \end{itemize}
+
+\subsection{Design Rationale}
+\label{subsec:phase3_rationale}
+
+The failure-filtering step is the key enhancement in Phase~3. An unfiltered
+confusion matrix lists all character confusions observed in the training data,
+including confusions that the zero-shot model already handles correctly. Such
+confusions carry no additional information for the model. By retaining only
+confusions from samples where the model failed, the injection is narrowed to
+genuine blind spots. This makes the injected list shorter and more targeted
+than a naive top-10 from the raw confusion matrix.
+
+The font-specificity of the confusion matrix is equally important. A single
+confusion list shared across all fonts would reflect the aggregate Qaari error
+profile, which may not match the dominant errors on any individual font. Using
+per-font confusion matrices ensures that each font receives a confusion context
+that matches its specific OCR error distribution.
 
 \subsection{Output Files}
 \begin{itemize}
   \item \texttt{results/phase3/\{dataset\}/metrics.json}
   \item \texttt{results/phase3/\{dataset\}/comparison\_vs\_phase2.json}
   \item \texttt{results/phase3/\{dataset\}/confusion\_impact.json} ---
-        per-confusion-pair analysis of whether the injection helped or hurt
-        for samples containing that confusion
+        per-confusion-pair analysis of correction improvement on samples
+        containing that confusion type
 \end{itemize}
 
 \noindent
 \textbf{Research question answered:} RQ3.
 
 % ============================================================
-\section{Phase 4A --- Rule-Augmented Prompting}
-\label{sec:phase4a}
+\section{Phase 4 --- Self-Reflective Prompting}
+\label{sec:phase4}
 % ============================================================
 
 \subsection{Hypothesis}
-Explicit Arabic orthographic rules provide grounded, interpretable guidance that
-improves correction for rule-governed phenomena such as hamza placement, taa
-marbuta, and alef maqsura.
-
-\subsection{Method}
-\label{subsec:phase4a_method}
-
-\begin{enumerate}
-  \item Load rules from \texttt{data/rules/} using \texttt{RulesLoader}.
-        Rules are selected from the orthography, morphology, and syntax JSONL
-        files without a category restriction (\texttt{categories: null} in config).
-  \item Format rules as a numbered Arabic instruction list using
-        \texttt{RulesLoader.format\_for\_prompt()}.
-        The format is: ``1. [rule text in Arabic]'' repeated for each rule.
-  \item Build the rule-augmented prompt using
-        \texttt{PromptBuilder.build\_rule\_augmented(ocr\_text, rules\_context)}.
-        The system message instructs the model to observe these rules during
-        correction.
-  \item Export, infer, and analyze as in Phase~2.
-\end{enumerate}
-
-\subsection{Variables}
-\begin{itemize}
-  \item \textbf{Changed from Phase~2:} Arabic orthographic rules injected into
-        system prompt.
-  \item \textbf{Fixed:} Model, dataset, generation parameters, evaluation protocol.
-  \item \textbf{Rule categories:} All available (orthography, morphology, syntax).
-\end{itemize}
-
-\subsection{Output Files}
-\begin{itemize}
-  \item \texttt{results/phase4a/\{dataset\}/metrics.json}
-  \item \texttt{results/phase4a/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase4a/\{dataset\}/error\_changes.json}
-\end{itemize}
-
-\noindent
-\textbf{Research question answered:} RQ4.
-
-% ============================================================
-\section{Phase 4B --- Few-Shot Examples}
-\label{sec:phase4b}
-% ============================================================
-
-\subsection{Hypothesis}
-Providing the model with demonstration pairs of erroneous input and correct output
-from the QALB corpus will give it a concrete template for what Arabic error
-correction looks like, reducing aggressive rewrites and improving targeted fixes.
-
-\subsection{Method}
-\label{subsec:phase4b_method}
-
-\begin{enumerate}
-  \item Load QALB-2014 training split using \texttt{QALBLoader} from
-        \texttt{data/QALB-0.9.1-Dec03-2021-SharedTasks/}.
-  \item Apply filters: length 10--300 characters, maximum 15 words changed,
-        OCR-relevance (dot substitutions, alef/hamza variants, similar-shape
-        confusions).
-        After filtering: 528 OCR-relevant pairs available.
-  \item Select 5 pairs using the diversity strategy (\texttt{selection: "diverse"},
-        seed 42), ensuring multiple error categories are represented among the
-        5 examples.
-  \item Format examples as an Arabic inline list:
-        ``Input: [erroneous text] / Correction: [corrected text]'' for each pair.
-  \item Build the few-shot prompt using
-        \texttt{PromptBuilder.build\_few\_shot(ocr\_text, examples\_context)}.
-  \item Export, infer, and analyze as in Phase~2.
-\end{enumerate}
-
-\subsection{Transfer Gap Discussion}
-\label{subsec:phase4b_transfer}
-
-The QALB corpus contains errors introduced by human writers: phonological
-substitutions (writing a word as it sounds in a particular dialect), agreement
-errors (wrong gender or case marking), and punctuation errors.
-OCR errors are fundamentally different in kind: they are visual confusion errors
-caused by similar glyph shapes.
-The few-shot examples may teach the model to be attentive to Arabic spelling in
-general, but the specific error patterns they demonstrate do not closely match
-the error patterns produced by Qaari.
-This \emph{transfer gap} is the primary structural limitation of Phase~4B and
-is examined quantitatively in Chapter~5.
-
-\subsection{Output Files}
-\begin{itemize}
-  \item \texttt{results/phase4b/\{dataset\}/metrics.json}
-  \item \texttt{results/phase4b/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase4b/\{dataset\}/error\_changes.json}
-\end{itemize}
-
-\noindent
-\textbf{Research question answered:} RQ5.
-
-% ============================================================
-\section{Phase 4C --- CAMeL Morphological Post-Processing}
-\label{sec:phase4c}
-% ============================================================
-
-\subsection{Hypothesis}
-Morphological post-processing can detect LLM hallucinations --- cases where the
-LLM introduces morphologically invalid Arabic words --- and revert those words
-to the (valid) OCR original, reducing the error introduction rate without
-affecting correctly corrected words.
-
-\subsection{Method}
-\label{subsec:phase4c_method}
-
-Phase~4C does not generate new prompts or run a new inference call.
-It applies the revert strategy as a post-processing step to the Phase~2
-corrections.
-
-\begin{enumerate}
-  \item Load Phase~2 corrections from
-        \texttt{results/phase2/\{dataset\}/corrections.jsonl}.
-  \item Initialise \texttt{MorphAnalyzer} with the MSA database
-        \texttt{calima-msa-r13}.
-        \textbf{Note:} CAMeL Tools requires a separate installation step:
-        \texttt{pip install camel-tools} followed by
-        \texttt{camel\_data -i morphology-db-msa-r13}.
-  \item For each sample, apply \texttt{WordValidator.validate\_correction(ocr\_text, llm\_text)}:
-        \begin{enumerate}
-          \item Tokenise both the OCR text and the LLM correction into Arabic
-                word tokens.
-          \item For each word pair (ocr\_word, llm\_word) that differs:
-                \begin{itemize}
-                  \item Run \texttt{MorphAnalyzer.analyse(llm\_word)};
-                        if result has zero analyses: LLM word is invalid.
-                  \item Run \texttt{MorphAnalyzer.analyse(ocr\_word)};
-                        if result has at least one analysis: OCR word is valid.
-                  \item If both conditions hold: revert to \texttt{ocr\_word}.
-                  \item Otherwise: keep the LLM correction.
-                \end{itemize}
-          \item Record: words reverted, words kept, revert rate.
-        \end{enumerate}
-  \item Compute post-validation CER/WER on the final text.
-        Compare to both Phase~2 (LLM only) and Phase~1 (OCR baseline).
-  \item Write validation statistics to
-        \texttt{results/phase4c/\{dataset\}/validation\_stats.json}.
-\end{enumerate}
-
-\subsection{Revert Strategy Rationale}
-\label{subsec:phase4c_rationale}
-
-The revert strategy is deliberately conservative.
-It can only revert a word to the OCR original; it cannot introduce new words.
-The maximum harm it can do is revert a correctly-improved LLM word back to a
-wrong OCR word --- but only if the LLM word happened to be morphologically
-invalid despite being the correct intended word (which is rare for genuine
-corrections).
-The maximum benefit is preventing a hallucinated, morphologically invalid LLM
-word from degrading the text when the OCR had a valid form at that position.
-
-This one-sided risk profile means Phase~4C can be deployed as a defensive layer
-on top of any LLM corrector with no risk of making performance worse than the
-raw OCR baseline.
-
-\subsection{Output Files}
-\begin{itemize}
-  \item \texttt{results/phase4c/\{dataset\}/metrics.json}
-  \item \texttt{results/phase4c/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase4c/\{dataset\}/validation\_stats.json} ---
-        per-dataset revert counts, rates, and list of reverted words
-\end{itemize}
-
-\noindent
-\textbf{Research question answered:} RQ6.
-
-% ============================================================
-\section{Phase 4D --- Self-Reflective Prompting}
-\label{sec:phase4d}
-% ============================================================
-
-\subsection{Hypothesis}
-Feeding the model statistical summaries of its own systematic errors --- derived
-from its corrections on the training split where ground truth is available ---
-will cause it to apply targeted corrections more carefully and reduce its
-error introduction rate on the validation split.
+Feeding the model statistical summaries of its own systematic errors ---
+derived from its zero-shot corrections on the training split where ground
+truth is available --- will cause it to apply targeted corrections more
+carefully and reduce its error introduction rate on the held-out validation
+split. Additionally, providing concrete word-level OCR error pairs from the
+training data gives the model specific exemplars of the correction patterns
+it should apply, beyond what aggregate statistics alone can convey.
 
 \subsection{Three-Stage Method}
-\label{subsec:phase4d_method}
+\label{subsec:phase4_method}
 
-Phase~4D is itself a three-stage process that must be executed in order.
+Phase~4 is itself a three-stage process that must be executed in order.
+The first stage uses training-split data; the second and third stages use
+validation-split data.
 
-\subsubsection{Stage~1: Training-Split Analysis (analyze-train mode)}
+\subsubsection{Stage~1: Training-Split Analysis}
 
 \begin{enumerate}
-  \item Load Phase~2 corrections on the training split for each dataset
-        (e.g., \texttt{PATS-A01-Akhbar-train}) from
-        \texttt{results/phase2/\{dataset\}-train/corrections.jsonl}.
+  \item Load Phase~2 corrections on the \emph{training} split for each
+        PATS-A01 font (e.g.,
+        \texttt{results/phase2-training/\{font\}-train/corrections.jsonl}).
+        These corrections exist because Phase~2 is run on both splits;
+        the training-split corrections are not used as results but solely
+        as analysis data.
+
   \item For each sample, compare the Phase~2 LLM corrections to ground truth
         using \texttt{LLMErrorAnalyzer.analyse\_sample()}.
-        For every character alignment between LLM output and ground truth:
+        For every aligned character pair between LLM output and ground truth:
         \begin{itemize}
-          \item If the OCR had an error here and the LLM fixed it: increment
-                \texttt{fixed} for that error type.
-          \item If the OCR was correct here and the LLM changed it incorrectly:
-                increment \texttt{introduced} for that error type.
+          \item If the OCR had an error at this position and the LLM fixed it:
+                increment \texttt{fixed} for that error type.
+          \item If the OCR was correct at this position and the LLM changed it
+                incorrectly: increment \texttt{introduced} for that error type.
         \end{itemize}
-  \item Aggregate across all training samples to obtain per-error-type statistics:
+
+  \item Aggregate across all training samples to obtain per-error-type
+        statistics:
         \begin{itemize}
-          \item \texttt{fix\_rate} = \texttt{fixed} / \texttt{baseline} errors of
-                that type (fraction of existing errors the LLM corrected).
-          \item \texttt{introduction\_rate} = \texttt{introduced} / ground-truth
-                tokens of that type (fraction of correct tokens incorrectly changed).
+          \item \texttt{fix\_rate} = \texttt{fixed} / baseline errors of that
+                type (fraction of existing errors the LLM corrected).
+          \item \texttt{introduction\_rate} = \texttt{introduced} /
+                ground-truth tokens of that type (fraction of correct tokens
+                incorrectly changed).
         \end{itemize}
-  \item Write aggregated statistics to
-        \texttt{results/phase4d/insights/PATS-A01\_insights.json}.
+
+  \item Extract word-level failure pairs: (ocr\_word, gt\_word) pairs from
+        samples that the LLM either failed to fix or made worse. These
+        are stored in \texttt{word\_pairs\_llm\_failures.txt} with separate
+        sections for UNFIXED errors (LLM left OCR errors unchanged) and
+        INTRODUCED errors (LLM introduced new errors not in OCR).
+
+  \item Classify training samples by correction outcome into:
+        correctly improved, made worse, and unchanged. Store classification
+        in \texttt{sample\_classification.json}.
+
+  \item Aggregate insights separately for PATS-A01 and KHATT datasets,
+        reflecting their substantially different error profiles.
 \end{enumerate}
 
 \subsubsection{Insights Derived from Training Data}
 
-Table~\ref{tab:phase4d_insights} reports representative statistics extracted
+Table~\ref{tab:phase4_insights} reports representative statistics extracted
 from the PATS-A01 training split (aggregated across fonts).
 
 \begin{table}[ht]
-\caption{Phase~4D training-split analysis results (PATS-A01 aggregate).
-         The LLM is Qwen3-4B-Instruct-2507 under the zero-shot v2 prompt
-         (Phase~2 setting). Fix rate = fraction of baseline errors of that type
-         that the LLM corrected. Introduction rate = fraction of correct ground-truth
-         tokens of that type that the LLM incorrectly changed.
-         $n < 10$ entries are marked with $\dagger$ (too few samples for reliable
-         estimates).}
-\label{tab:phase4d_insights}
+\caption{Phase~4 training-split analysis results (PATS-A01 aggregate).
+         Fix rate = fraction of baseline errors of that type
+         corrected by the LLM. Introduction rate = fraction of correct
+         ground-truth tokens of that type incorrectly changed.
+         $\dagger$ = fewer than 10 baseline samples (estimate unreliable).}
+\label{tab:phase4_insights}
 \centering
 \renewcommand{\arraystretch}{1.3}
 \begin{tabular}{lrrrrr}
@@ -493,259 +435,341 @@ from the PATS-A01 training split (aggregated across fonts).
   & \textbf{Fix rate} & \textbf{Intro.\ rate} \\
 \midrule
 Insertion       & 1,964 & 1,912 & 356  & 97.35\% & 18.13\% \\
-Other subst.    & 49    & 8     & 80   & 16.33\% & 163.27\% \\
-Deletion        & 32    & 1     & 68   & 3.12\%  & 212.50\% \\
-Dot confusion   & 14    & 1     & 2    & 7.14\%  & 14.29\% \\
+Other subst.    &    49 &     8 &  80  & 16.33\% & 163.27\% \\
+Deletion        &    32 &     1 &  68  &  3.12\% & 212.50\% \\
+Dot confusion   &    14 &     1 &   2  &  7.14\% &  14.29\% \\
 Alef maqsura    & 3$^\dagger$ & 1 & 3 & 33.33\% & 100.00\% \\
 Similar shape   & 1$^\dagger$ & 1 & 8 & 100.00\% & 800.00\% \\
-Hamza           & 0     & ---   & 0    & ---     & ---     \\
-Taa marbuta     & 0     & ---   & 0    & ---     & ---     \\
+Hamza           &     0 &   --- & ---  &    ---  &    --- \\
+Taa marbuta     &     0 &   --- & ---  &    ---  &    --- \\
 \midrule
 \textbf{Overall} & \textbf{2,063} & \textbf{1,924} & \textbf{517}
   & \textbf{93.26\%} & \textbf{25.06\%} \\
 \bottomrule
-\multicolumn{6}{l}{\footnotesize $\dagger$ Fewer than 10 baseline samples; estimate unreliable.}
 \end{tabular}
 \end{table}
 
-\noindent
-The table reveals two important patterns.
-First, the insertion fix rate of 97.35\% shows that the LLM is highly effective
-at collapsing the Qaari repetition artifact: almost all spurious character
-insertions (which constitute 95.2\% of all baseline errors) are removed.
-Second, the overall introduction rate of 25.06\% --- one in four previously
+The table reveals two important patterns. First, the insertion fix rate of
+97.35\% shows that the LLM is highly effective at collapsing the Qaari
+repetition artefact: almost all spurious character insertions (which
+constitute the majority of all baseline errors) are removed. Second, the
+overall introduction rate of 25.06\% --- approximately one in four previously
 correct tokens is incorrectly changed by the LLM --- represents a systematic
-over-correction bias that affects all error categories.
-The deletion and other-substitution introduction rates exceed 100\% because the
-LLM introduces more deletions and substitutions of those types than existed in
-the original OCR output.
+over-correction bias that affects all error categories. The deletion and
+other-substitution introduction rates exceed 100\% because the LLM introduces
+more of those error types than existed in the original OCR output.
 
-\subsubsection{Stage~2: Export (export mode)}
+These patterns motivate the self-reflective prompt: by explicitly informing
+the model of its high introduction rate and its weakness on deletion and
+substitution errors, the prompt aims to shift the model towards a more
+conservative correction mode.
+
+\subsubsection{Stage~2: Export}
 
 \begin{enumerate}
-  \item Load the aggregated insights from
-        \texttt{results/phase4d/insights/PATS-A01\_insights.json}
-        using \texttt{LLMInsightsLoader}.
-  \item Apply the insight filtering logic:
+  \item Load the aggregated training-split artifacts:
+        \texttt{word\_pairs\_llm\_failures.txt} and
+        \texttt{sample\_classification.json} from
+        \texttt{results/phase2-training/analysis/}.
+
+  \item Apply the insight filtering logic to derive the self-analysis context:
         \begin{itemize}
-          \item Error types with \texttt{fix\_rate} $> 0.6$: reported as
-                strengths in the diagnostic.
-          \item Error types with \texttt{fix\_rate} $< 0.4$ and
-                \texttt{baseline} $\geq 10$: reported as weaknesses.
-          \item Error types with \texttt{introduction\_rate} $> 0.05$ and
-                \texttt{baseline} $\geq 10$: reported as over-correction risks.
+          \item Error types with fix rate $> 0.60$: reported as strengths
+                (``The system is good at fixing this type of error'').
+          \item Error types with fix rate $< 0.40$ and baseline $\geq 10$:
+                reported as weaknesses (``The system often fails to fix
+                this type of error'').
+          \item Error types with introduction rate $> 0.05$ and baseline
+                $\geq 10$: reported as over-correction risks (``The system
+                tends to incorrectly change correct tokens of this type'').
         \end{itemize}
-  \item Convert the filtered statistics to Arabic-language diagnostic sentences.
-        The resulting insights text injected into the Phase~4D validation prompt
-        is provided in full in Appendix~B.
-        Its content identifies insertions as a strength, deletions and other
-        substitutions as weaknesses, and the high overall introduction rate as
-        an over-correction warning.
-  \item Build the self-reflective prompt for each validation-split sample using
+
+  \item Convert the filtered statistics to Arabic-language diagnostic sentences
+        that describe the model's behaviour patterns and provide concrete
+        guidance for what to watch out for. The full diagnostic text is
+        provided in Appendix~B.
+
+  \item Select up to 15 word-level error pairs per sample from
+        \texttt{word\_pairs\_llm\_failures.txt} to include as concrete
+        exemplars in the prompt, showing specific (ocr\_word, gt\_word)
+        pairs the model has struggled with.
+
+  \item Build the self-reflective prompt for each validation-split sample
+        using
         \texttt{PromptBuilder.build\_self\_reflective(ocr\_text, insights\_context)}.
-  \item Write to \texttt{results/phase4d/inference\_input.jsonl}.
+        The insights are injected in a \texttt{<self\_analysis>} XML block
+        following the conservative correction instruction from Phase~2.
+
+  \item Write to \texttt{results/phase4/inference\_input.jsonl}.
+        The prompt version tag is \texttt{p4v1}.
 \end{enumerate}
 
-\subsubsection{Stage~3: Analyze (analyze mode)}
+\subsubsection{Stage~3: Analyse}
 
 \begin{enumerate}
   \item Run inference on Kaggle GPU using \texttt{scripts/infer.py}.
-  \item Load \texttt{results/phase4d/corrections.jsonl}.
-  \item Compute CER/WER; compare to Phase~2.
-  \item Write reports to \texttt{results/phase4d/\{dataset\}/}.
+  \item Load \texttt{results/phase4/corrections.jsonl}.
+  \item Compute CER/WER per dataset; compare to Phase~2 zero-shot baseline.
+  \item Write reports to \texttt{results/phase4/\{dataset\}/}.
 \end{enumerate}
+
+\subsection{Variables}
+\begin{itemize}
+  \item \textbf{Changed from Phase~2:} Arabic-language diagnostic text
+        injected in \texttt{<self\_analysis>} block; concrete word-level
+        error pairs from training data appended.
+  \item \textbf{Fixed:} Model, dataset, generation parameters, evaluation
+        protocol, conservative correction instruction.
+  \item \textbf{Data used:} Phase~2 training-split corrections (not
+        validation-split; no data leakage).
+\end{itemize}
+
+\subsection{No-Leakage Guarantee}
+
+A potential concern with self-reflective prompting is data leakage: if the
+training and validation splits are not properly separated, the model might
+receive information about the ground truth of its validation-split samples
+via the error statistics. This concern is addressed by the aligned split
+design: the 85\% training split and 15\% validation split share no samples.
+The training-split analysis is performed exclusively on training-split
+corrections, and the resulting insights are qualitative statistical summaries
+(e.g., ``the model has a 25\% introduction rate'') rather than sample-level
+ground-truth information. The word-level error pairs are drawn from training
+samples only. There is no mechanism by which Phase~4 could convey
+ground-truth information about validation samples to the model.
 
 \subsection{Output Files}
 \begin{itemize}
-  \item \texttt{results/phase4d/insights/PATS-A01\_insights.json} ---
-        training-split statistics
-  \item \texttt{results/phase4d/\{dataset\}/metrics.json}
-  \item \texttt{results/phase4d/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase4d/\{dataset\}/error\_changes.json}
+  \item \texttt{results/phase2-training/analysis/word\_pairs\_llm\_failures.txt}
+        --- UNFIXED and INTRODUCED sections
+  \item \texttt{results/phase2-training/analysis/sample\_classification.json}
+  \item \texttt{results/phase4/insights/PATS-A01\_insights.json} ---
+        aggregated training-split statistics
+  \item \texttt{results/phase4/\{dataset\}/metrics.json}
+  \item \texttt{results/phase4/\{dataset\}/comparison\_vs\_phase2.json}
+  \item \texttt{results/phase4/\{dataset\}/error\_changes.json}
 \end{itemize}
 
 \noindent
-\textbf{Research question answered:} RQ7.
+\textbf{Research question answered:} RQ4.
 
 % ============================================================
-\section{Phase 5 --- Combinations and Ablation}
+\section{Phase 5 --- CAMeL Morphological Post-Processing}
 \label{sec:phase5}
 % ============================================================
 
-\subsection{Purpose}
-\label{subsec:phase5_purpose}
+\subsection{Hypothesis}
+Morphological post-processing can detect two classes of LLM output failures
+and reverse them. First, cases where the LLM introduces morphologically
+invalid Arabic words from valid OCR sources can be reverted to the OCR
+original. Second, documented overcorrection patterns identified in the
+training split can be reverted regardless of morphological status, targeting
+the model's systematic tendency to change specific correct word forms.
+Together, these two revert conditions reduce the error introduction rate
+without substantially affecting correctly corrected words.
 
-Phases~3--4D establish which knowledge types help and which hurt in isolation.
-Phase~5 asks two follow-up questions:
+\subsection{Method}
+\label{subsec:phase5_method}
+
+Phase~5 does not generate new prompts or run a new inference call from
+scratch. It applies the revert strategy as a post-processing step to the
+Phase~2 corrections.
+
+\begin{enumerate}
+  \item Load Phase~2 corrections from
+        \texttt{results/phase2/\{dataset\}/corrections.jsonl}.
+
+  \item Load the known-overcorrection list derived from training-split
+        analysis. This list contains (ocr\_word, llm\_word) pairs where
+        the LLM changed a correct OCR word to an incorrect form,
+        identified by comparing Phase~2 training-split corrections to
+        ground truth.
+
+  \item Initialise \texttt{MorphAnalyzer} with the MSA database
+        \texttt{calima-msa-r13}. CAMeL Tools requires separate installation:
+        \texttt{pip install camel-tools} followed by
+        \texttt{camel\_data -i morphology-db-msa-r13}.
+
+  \item For each sample, apply
+        \texttt{WordValidator.validate\_correction(ocr\_text, llm\_text,
+        known\_overcorrections)}:
+        \begin{enumerate}
+          \item Tokenise both the OCR text and the LLM correction into
+                Arabic word tokens, preserving position indices.
+          \item For each word pair at position $i$ where
+                (ocr\_word$_i$, llm\_word$_i$) differs:
+                \begin{itemize}
+                  \item \textbf{Morphological check:} Run
+                        \texttt{MorphAnalyzer.analyse(llm\_word$_i$)};
+                        if zero analyses: LLM word is invalid. Run
+                        \texttt{MorphAnalyzer.analyse(ocr\_word$_i$)};
+                        if $\geq 1$ analysis: OCR word is valid.
+                        If both hold: revert to \texttt{ocr\_word$_i$}.
+                  \item \textbf{Known-overcorrection check:} If
+                        (ocr\_word$_i$, llm\_word$_i$) appears in the
+                        overcorrection list: revert to \texttt{ocr\_word$_i$}
+                        regardless of morphological status.
+                  \item \textbf{Otherwise:} Keep the LLM correction.
+                \end{itemize}
+          \item Record per-sample statistics: words reverted by morphological
+                check, words reverted by overcorrection check, words kept.
+        \end{enumerate}
+
+  \item Compute post-validation CER/WER on the final text.
+        Compare to both Phase~2 (LLM only) and Phase~1 (OCR baseline).
+
+  \item Write validation statistics to
+        \texttt{results/phase5/\{dataset\}/validation\_stats.json}.
+\end{enumerate}
+
+\subsection{Implementation Note: Position-Indexed Revert}
+
+An important implementation detail is that the revert decision is indexed by
+\emph{word position}, not word identity. An early implementation keyed reverts
+by word string, which caused incorrect reversions when the same word form
+appeared multiple times in a sentence and only some occurrences should be
+reverted. The position-indexed implementation ensures that each word is
+evaluated independently at its specific position, preventing this
+cross-position contamination.
+
+\subsection{Revert Strategy Rationale}
+\label{subsec:phase5_rationale}
+
+The morphological revert strategy is deliberately conservative. It can only
+revert a word to the OCR original; it cannot introduce new words or produce
+word forms not present in either the OCR output or the LLM correction.
+The maximum harm it can do is revert a correctly-improved LLM word back to
+a wrong OCR word --- but only if the LLM word happened to be morphologically
+invalid despite being the correct intended word, which is rare for genuine
+corrections of real Arabic. The maximum benefit is preventing a hallucinated,
+morphologically invalid LLM word from degrading the text.
+
+The known-overcorrection check adds a second layer of protection targeting
+the model's documented systematic biases. Because overcorrection patterns
+are mined from training data where ground truth is available, they represent
+genuine cases where the model has been shown to make specific incorrect
+changes. Reverting these patterns on the validation set is a low-risk
+intervention, though it covers only a subset of over-corrections (those that
+are \emph{also} frequent enough to appear in the training analysis).
+
+\subsection{Expected Limitations}
+
+The primary limitation of Phase~5 is that the dominant OCR error type ---
+valid-but-wrong substitutions (71\% of all errors per the Phase~1 analysis)
+--- is invisible to a context-free morphological check. Both the original
+OCR word and its correct counterpart are morphologically valid, so the
+check cannot distinguish them. This means Phase~5's revert mechanism
+operates on the minority (29\%) of errors that produce non-words, and the
+overcorrection list covers a further small fraction. The expectation is
+therefore that Phase~5 will have a modest impact, and may even slightly
+degrade performance if reverts accidentally undo beneficial corrections.
+
+\subsection{Output Files}
+\begin{itemize}
+  \item \texttt{results/phase5/\{dataset\}/metrics.json}
+  \item \texttt{results/phase5/\{dataset\}/comparison\_vs\_phase2.json}
+  \item \texttt{results/phase5/\{dataset\}/validation\_stats.json} ---
+        per-dataset revert counts, rates, and list of reverted word pairs
+\end{itemize}
+
+\noindent
+\textbf{Research question answered:} RQ5.
+
+% ============================================================
+\section{Phase 6 --- Combinations and Ablation}
+\label{sec:phase6}
+% ============================================================
+
+\subsection{Purpose}
+\label{subsec:phase6_purpose}
+
+Phases~3--5 establish which knowledge types help and which hurt in isolation.
+Phase~6 asks two follow-up questions:
 (a)~can two or more knowledge types combine synergistically to produce a result
 better than either individually?
 (b)~in the best combined system, what is each component's quantitative
-contribution?
+contribution when removed?
 
 \subsection{Combinations Tested}
-\label{subsec:phase5_combos}
+\label{subsec:phase6_combos}
 
-Each combination is defined as a 4-tuple specifying which of the four
-prompt-level knowledge sources are active: confusion matrix (C), rules (R),
-few-shot examples (E), and self-reflective insights (S). CAMeL
-post-processing (Phase~4C) is applied as an optional post-processing step
-on top of any prompt combination.
+Four combinations are defined and tested:
 
-Table~\ref{tab:phase5_combos} lists the ten inference-level combinations
-tested. The guiding principle is that combinations involving components that
-performed comparably to Phase~2 in isolation are more likely to combine
-beneficially than combinations involving highly disruptive components.
+\begin{enumerate}
+  \item \textbf{\texttt{conf\_only}}: Phase~3 confusion-matrix injection
+        alone, applied to the validation split. This is equivalent to
+        Phase~3 and serves as a reference point within the Phase~6 framework.
 
-\begin{table}[ht]
-\caption{Phase~5 combination inventory. Each combination is identified by a
-         unique ID. Components: C = confusion matrix, R = rules, E = examples
-         (few-shot), S = self-reflective insights.}
-\label{tab:phase5_combos}
-\centering
-\renewcommand{\arraystretch}{1.3}
-\begin{tabular}{lll}
-\toprule
-\textbf{Combo ID} & \textbf{Components} & \textbf{Rationale} \\
-\midrule
-\texttt{conf\_rules}      & C + R       & Both target character-level errors \\
-\texttt{conf\_few}        & C + E       & Data-driven + example-driven \\
-\texttt{rules\_few}       & R + E       & Best two augmented phases \\
-\texttt{few\_self}        & E + S       & Both are evidence-based \\
-\texttt{conf\_rules\_few} & C + R + E   & Top-3 triple \\
-\texttt{conf\_few\_self}  & C + E + S   & Alternative triple \\
-\texttt{rules\_few\_self} & R + E + S   & Alternative triple \\
-\texttt{conf\_rules\_few\_self} & C + R + E + S & Full prompt system \\
-\texttt{conf\_self}       & C + S       & Confusion + self-reflective \\
-\texttt{rules\_self}      & R + S       & Rules + self-reflective \\
-\bottomrule
-\end{tabular}
-\end{table}
+  \item \textbf{\texttt{self\_only}}: Phase~4 self-reflective prompting
+        alone, applied to the validation split. This is equivalent to
+        Phase~4 and serves as the second reference point.
+
+  \item \textbf{\texttt{conf\_self}}: Phase~3 and Phase~4 combined.
+        The system prompt includes both the failure-filtered confusion list
+        (in \texttt{<confusion\_patterns>}) and the self-reflective diagnostic
+        text with word-level exemplars (in \texttt{<self\_analysis>}).
+        This tests whether the two knowledge types are complementary or
+        redundant.
+
+  \item \textbf{\texttt{best\_camel}}: The \texttt{conf\_self} prompt
+        combination with Phase~5 CAMeL post-processing applied on top of the
+        LLM output. This tests whether the morphological revert layer adds
+        value on top of the best prompt-only combination.
+\end{enumerate}
+
+The combinations are chosen based on the isolated phase results: Phase~3 and
+Phase~4 are the two strongest isolated strategies, and \texttt{conf\_self}
+tests their combination directly. Phase~5 is then layered on top as an
+orthogonal post-processing step, since it operates on the output rather than
+the prompt.
 
 \subsection{Ablation Design}
-\label{subsec:phase5_ablation}
+\label{subsec:phase6_ablation}
 
-The ablation study starts from the full four-component combination
-(\texttt{conf\_rules\_few\_self}) and removes one component at a time.
-The CER delta when a component is removed measures that component's individual
-contribution to the combined system:
+The ablation study measures the marginal contribution of each component by
+removing it from the \texttt{conf\_self} combination and measuring the CER
+impact. Two ablations are performed:
 
-\begin{equation}\label{eq:ablation}
-  \Delta_{\text{CER}}^{(k)} = \text{CER}_{\text{full} \setminus k} - \text{CER}_{\text{full}}
+\begin{equation}\label{eq:ablation_conf}
+  \Delta_{\text{CER}}^{(\text{conf})} = \text{CER}_{\text{self\_only}}
+    - \text{CER}_{\text{conf\_self}}
 \end{equation}
 
-\noindent
+\begin{equation}\label{eq:ablation_self}
+  \Delta_{\text{CER}}^{(\text{self})} = \text{CER}_{\text{conf\_only}}
+    - \text{CER}_{\text{conf\_self}}
+\end{equation}
+
 A positive $\Delta_{\text{CER}}^{(k)}$ means removing component $k$ increases
-CER --- the component was helping.
-A negative $\Delta_{\text{CER}}^{(k)}$ means removing it decreases CER ---
-the component was hurting.
-This design answers RQ9: which combination is optimal and what does each element
-contribute?
+CER --- the component was contributing positively. A negative value means
+removing the component decreased CER --- the component was hurting when
+combined.
 
 \subsection{Statistical Testing}
-\label{subsec:phase5_stats}
+\label{subsec:phase6_stats}
 
-For Phase~5 results, paired t-tests are used to assess whether observed CER
+For Phase~6 results, paired t-tests are used to assess whether observed CER
 differences between the best combination and Phase~2 are statistically
-significant.
-The Bonferroni correction is applied to control the family-wise error rate across
-combination comparisons at the $\alpha = 0.05$ level.
-Bootstrap confidence intervals (1,000 iterations) are also computed for the
-best-performing combination.
-These tests are implemented in
+significant at the sample level. The Bonferroni correction is applied to
+control the family-wise error rate across the four combination comparisons
+at $\alpha = 0.05$. Bootstrap confidence intervals (1,000 iterations, seed 42)
+are computed for the best-performing combination. Cohen's $d$ effect size is
+reported alongside $p$-values to characterise the practical magnitude of
+improvements. These tests are implemented in
 \texttt{src/analysis/stats\_tester.py::StatsTester}.
 
 \subsection{Output Files}
 \begin{itemize}
-  \item \texttt{results/phase5/\{combo\_id\}/\{dataset\}/metrics.json}
-  \item \texttt{results/phase5/\{combo\_id\}/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase5/summary.json} --- all combinations ranked by CER
-  \item \texttt{results/phase5/ablation.json} --- ablation delta table
-  \item \texttt{results/phase5/paper\_tables.md} --- formatted tables for publication
+  \item \texttt{results/phase6/\{combo\_id\}/\{dataset\}/metrics.json}
+  \item \texttt{results/phase6/\{combo\_id\}/\{dataset\}/comparison\_vs\_phase2.json}
+  \item \texttt{results/phase6/summary.json} --- all combinations ranked by
+        PATS-A01 macro-average CER
+  \item \texttt{results/phase6/ablation.json} --- ablation delta table
+  \item \texttt{results/phase6/paper\_tables.md} --- formatted tables
 \end{itemize}
 
 \noindent
-\textbf{Research question answered:} RQ9.
-
-% ============================================================
-\section{Phase 7 --- DSPy Prompt Optimisation}
-\label{sec:phase7}
-% ============================================================
-
-\subsection{Hypothesis}
-
-Hand-crafted prompt engineering requires manual iteration and expert judgment.
-Automated prompt optimisation via DSPy \cite{khattab2023dspy} --- which
-programmatically searches the space of prompt instructions and few-shot
-examples using a training signal --- can discover prompts that outperform
-manually designed strategies.
-
-\subsection{Method}
-\label{subsec:phase7_method}
-
-Phase~7 uses the DSPy framework to automatically optimise the correction
-prompt. The pipeline consists of two stages.
-
-\subsubsection{Optimisation (Kaggle GPU)}
-
-\begin{enumerate}
-  \item Define a DSPy \texttt{Signature} for the correction task:
-        input is OCR text, output is corrected text.
-  \item Load training-split samples (OCR text, ground truth) as DSPy examples.
-  \item Apply \texttt{BootstrapFewShot} optimisation, which:
-        \begin{itemize}
-          \item Samples candidate few-shot demonstrations from the training set.
-          \item Evaluates each candidate prompt on a validation subset using
-                CER as the metric (lower is better).
-          \item Selects the prompt configuration (instruction + demonstrations)
-                that minimises validation CER.
-        \end{itemize}
-  \item Save the compiled DSPy program to disk.
-  \item Run inference using the compiled program on all nine evaluation
-        datasets, writing corrections to
-        \texttt{results/phase7/corrections.jsonl}.
-\end{enumerate}
-
-The optimisation script is \texttt{scripts/dspy\_optimize.py}, designed to
-run on Kaggle with GPU access to the Qwen3-4B model.
-
-\subsubsection{Analysis (Local)}
-
-\begin{enumerate}
-  \item Load \texttt{results/phase7/corrections.jsonl}.
-  \item Compute CER/WER per dataset; compare to Phase~2 zero-shot baseline.
-  \item Write per-dataset reports and a summary comparing DSPy-optimised
-        prompts against all hand-crafted phases.
-\end{enumerate}
-
-\subsection{DSPy Framework}
-\label{subsec:dspy_framework}
-
-DSPy \cite{khattab2023dspy} treats language model prompts as programs rather
-than static text strings. A DSPy ``module'' defines the task signature
-(input/output types), and an ``optimiser'' searches over prompt configurations
-(instructions, demonstrations, chain-of-thought steps) to maximise a
-user-defined metric. This approach has two advantages over manual prompt
-engineering: (1)~it searches a larger space of prompt variations than a human
-can feasibly test; and (2)~it optimises directly on the target metric (CER),
-rather than relying on human intuition about what instructions will reduce
-errors.
-
-The \texttt{BootstrapFewShot} optimiser used in this study selects few-shot
-demonstrations from the training set that, when included in the prompt,
-minimise CER on a held-out validation subset. Unlike Phase~4B (which uses
-QALB examples from a different error distribution), the DSPy-selected
-demonstrations come from the OCR correction task itself, potentially
-providing more targeted guidance.
-
-\subsection{Output Files}
-\begin{itemize}
-  \item \texttt{results/phase7/\{dataset\}/metrics.json}
-  \item \texttt{results/phase7/\{dataset\}/comparison\_vs\_phase2.json}
-  \item \texttt{results/phase7/summary.json} --- cross-dataset comparison
-\end{itemize}
-
-\noindent
-\textbf{Research question answered:} RQ8.
+\textbf{Research question answered:} RQ6.
 
 % ============================================================
 \section{Phase Summary}
@@ -757,23 +781,20 @@ Table~\ref{tab:phase_summary} provides a consolidated reference for all phases.
 \begin{table}[ht]
 \caption{Summary of all experimental phases. ``Comparison'' is the phase each
          experiment is evaluated against. All phases are evaluated across nine
-         datasets (eight PATS-A01 fonts + KHATT).}
+         datasets (eight PATS-A01 fonts + KHATT validation split).}
 \label{tab:phase_summary}
 \centering
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\linewidth}{lXll}
 \toprule
-\textbf{Phase} & \textbf{Knowledge injected} & \textbf{Comparison} & \textbf{RQ} \\
+\textbf{Phase} & \textbf{Knowledge / Intervention} & \textbf{Comparison} & \textbf{RQ} \\
 \midrule
-Phase~1  & None (OCR analysis)                   & N/A          & RQ1 \\
-Phase~2  & None (zero-shot)                      & Phase~1      & RQ2 \\
-Phase~3  & Confusion matrix (top-10 pairs)       & Phase~2      & RQ3 \\
-Phase~4A & Arabic orthographic rules             & Phase~2      & RQ4 \\
-Phase~4B & 5 QALB few-shot examples              & Phase~2      & RQ5 \\
-Phase~4C & CAMeL morphological post-processing   & Phase~2      & RQ6 \\
-Phase~4D & LLM error statistics + word pairs     & Phase~2      & RQ7 \\
-Phase~5  & Combinations + ablation               & Phase~2 + best combo & RQ9 \\
-Phase~7  & DSPy automated prompt optimisation     & Phase~2      & RQ8 \\
+Phase~1  & None (OCR analysis + taxonomy)         & N/A      & RQ1 \\
+Phase~2  & None (zero-shot conservative prompt)   & Phase~1  & RQ2 \\
+Phase~3  & Failure-filtered confusion matrix       & Phase~2  & RQ3 \\
+Phase~4  & Self-reflective insights + word pairs  & Phase~2  & RQ4 \\
+Phase~5  & CAMeL morphological revert + overcorrection revert & Phase~2 & RQ5 \\
+Phase~6  & Combinations + ablation (4 configs)    & Phase~2 + best combo & RQ6 \\
 \bottomrule
 \end{tabularx}
 \end{table}

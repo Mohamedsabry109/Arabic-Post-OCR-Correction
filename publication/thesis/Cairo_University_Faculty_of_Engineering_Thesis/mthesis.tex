@@ -134,19 +134,21 @@ citestyle=numeric-comp]{biblatex}
 \InternalExaminer{Dr./Prof. Dr. Int. Examiner}
 \ThesisTitle{Knowledge-Augmented Large Language Models for Arabic Post-OCR Error Correction}
 
-\ThesisKeywords{Arabic OCR; Post-OCR Correction; Large Language Models; Prompt Engineering; DSPy; Qwen3; PATS-A01; KHATT; Error Taxonomy}
+\ThesisKeywords{Arabic OCR; Post-OCR Correction; Large Language Models; Prompt Engineering; Qwen3; PATS-A01; KHATT; Error Taxonomy; Self-Reflective Prompting; CAMeL Tools}
 
 \ThesisSummary{This thesis investigates whether a lightweight open-source instruction-tuned large
 language model can correct errors produced by the Qaari Arabic OCR engine through prompt
 engineering alone, and whether injecting linguistic knowledge into the prompt improves
-correction quality. Seven prompt-engineering strategies are evaluated across nine
+correction quality. Five prompt-engineering strategies are evaluated across nine
 datasets---eight typewritten fonts from PATS-A01 and one handwritten corpus (KHATT)---using
-Qwen3-4B-Instruct-2507. Strategies include zero-shot correction, confusion-matrix injection,
-rule-augmented prompting, few-shot examples, morphological post-processing, self-reflective
-prompting, strategy combinations with ablation, and DSPy-based automated prompt optimization.
-Results reveal that correction effectiveness is strongly font-dependent: the optimal strategy
-depends on the baseline error profile, and no single augmentation approach dominates across
-all fonts.}
+Qwen3-4B-Instruct-2507. Strategies include zero-shot correction (Phase~2), confusion-matrix
+injection (Phase~3), self-reflective prompting from training-split error statistics (Phase~4),
+morphological post-processing via CAMeL Tools (Phase~5), and strategy combinations with
+ablation (Phase~6). Results reveal that correction effectiveness is strongly font-dependent:
+the best combination (confusion-matrix injection + self-reflective prompting) achieves 11.2\%
+CER on PATS-A01 (down from 14.2\% OCR baseline) and 42.4\% on KHATT (down from 44.6\%).
+The optimal correction strategy depends on the baseline error profile, and no single
+augmentation approach dominates across all fonts and script types.}
 
 
 
@@ -189,7 +191,7 @@ all fonts.}
 % Back Matter
 \begin{appendices}
 \Appendix{Full Prompt Templates}{BackMatter/AppendixA}
-\Appendix{Phase 4D Self-Reflective Insights}{BackMatter/AppendixB}
+\Appendix{Phase 4 Self-Reflective Insights}{BackMatter/AppendixB}
 \Appendix{Configuration Files}{BackMatter/AppendixC}
 \Appendix{PATS-A01 Error Examples}{BackMatter/AppendixD}
 \end{appendices}

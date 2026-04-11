@@ -580,13 +580,13 @@ Several practical decisions govern few-shot performance:
         corrections look like.
 
   \item \textbf{Source of examples.}
-        Phase~4B uses QALB corpus pairs.
+        The choice of few-shot corpus matters.
         QALB annotations cover human typing errors (omitted diacritics, wrong
         hamza form, case-agreement errors) that have a partial but imperfect
         overlap with OCR errors (visual confusion between similar-shape characters).
-        This \emph{transfer gap} -- the mismatch between human-error and OCR-error
-        distributions -- is a potential explanation for the performance outcome
-        discussed in Chapter~5.
+        This \emph{transfer gap} --- the mismatch between human-error and OCR-error
+        distributions --- is a known limitation of few-shot approaches using
+        human-authored error corpora for OCR correction.
 \end{itemize}
 
 \subsection{Chain-of-Thought and Instruction Augmentation}
@@ -670,7 +670,7 @@ failures and incorporating this feedback into their decision-making.
 Similarly, self-critique prompting asks the model to evaluate its own output
 and revise it, akin to verbal reinforcement learning.
 
-Phase~4D operationalises a lightweight variant of this idea.
+Phase~4 operationalises a lightweight variant of this idea.
 Rather than asking the model to introspect on its current output at inference
 time -- which adds latency and the risk of circular reasoning -- the model is
 given \emph{pre-computed statistics} about its systematic failure patterns,
@@ -716,19 +716,21 @@ to the character positions most likely to contain errors.
 
 Arabic orthographic rules govern the correct spelling of characters that OCR
 commonly misidentifies.
-The rules used in this study address: hamza placement (al-qat' vs.\ al-wasl),
+Relevant rule categories include: hamza placement (al-qat' vs.\ al-wasl),
 taa marbuta vs.\ ha, alef maqsura vs.\ ya, tanwin placement, and definite
 article assimilation.
 These rules are grounded in classical Arabic grammar and are taught in Arabic
 primary education.
-They are stored in the \texttt{data/rules/} directory as JSONL files and loaded
-by \texttt{RulesLoader} at runtime.
 
-Unlike the confusion matrix (which is descriptive -- ``this engine makes this
-mistake''), orthographic rules are prescriptive -- ``the correct form is X''.
-Both types of knowledge tell the model what to look for; the confusion matrix
-focuses its attention by describing the engine's error patterns, while the
-rules frame the correction task in terms of canonical Arabic spelling.
+Unlike the confusion matrix (which is descriptive --- ``this engine makes this
+mistake''), orthographic rules are prescriptive --- ``the correct form is X''.
+Both types of knowledge can in principle direct the model's attention to
+correction-relevant phenomena; however, preliminary experiments in this study
+found that rule-augmented prompting did not improve on zero-shot correction
+(the rules tended to duplicate guidance already embedded in the base prompt),
+and this approach was excluded from the final experimental design.
+The confusion-matrix injection in Phase~3 proved the more effective descriptive
+alternative.
 
 \subsection{The QALB Corpus}
 \label{subsec:ks_qalb}
@@ -739,10 +741,10 @@ It contains thousands of human-authored Arabic sentences from online news
 comments, annotated with corrections for spelling, grammatical, punctuation,
 and other errors by trained annotators.
 
-QALB is used in this study as a source of few-shot demonstration pairs for
-Phase~4B.
-After filtering for OCR-relevance and length (Section~\ref{subsec:kb_qalb},
-Chapter~3), 528 pairs are available.
+QALB has been used in related work as a source of few-shot demonstration pairs
+for Arabic correction tasks.
+After filtering for OCR-relevance and length, several hundred pairs are available
+for potential use.
 The primary limitation of QALB as an OCR correction resource is the
 \emph{transfer gap}: QALB errors are human typing errors, while OCR errors are
 visual confusion errors.
@@ -796,7 +798,7 @@ CAMeL Tools is used in Phase~1 to classify OCR error tokens as either
 The distinction is informative: if most OCR errors are valid-but-wrong, then
 dictionary lookup cannot detect them and context is required for correction.
 
-\textbf{Application in Phase~4C.}
+\textbf{Application in Phase~5.}
 The \emph{revert strategy} described in Chapter~3 uses the morphological analyser
 to post-process LLM corrections.
 Words introduced by the LLM that fail morphological analysis while the original
@@ -926,28 +928,28 @@ This thesis makes the following contributions relative to the existing literatur
   \item \textbf{Systematic multi-dataset evaluation of augmentation strategies.}
         Prior work on LLM-based OCR correction has at most compared zero-shot
         with one or two augmentation conditions on a single dataset.
-        This study isolates five conditions (confusion matrix, orthographic rules,
-        few-shot examples, morphological post-processing, and self-reflective
-        prompting), tests combinations with ablation, and applies DSPy-based
-        automated optimisation --- all evaluated across nine datasets (eight
-        typewritten fonts and handwritten text) using the same model and
-        evaluation protocol.
+        This study isolates three isolated knowledge augmentation conditions
+        (confusion-matrix injection, self-reflective prompting, and morphological
+        post-processing), tests all pairwise combinations with ablation, and
+        evaluates across nine datasets (eight typewritten fonts and handwritten
+        text) using the same model and evaluation protocol.
 
   \item \textbf{Self-reflective prompting for OCR correction.}
-        The Phase~4D strategy -- injecting pre-computed statistics about the
-        model's own training-split error patterns into the inference prompt --
+        The Phase~4 strategy --- injecting pre-computed statistics about the
+        model's own training-split error patterns into the inference prompt ---
         is, to the author's knowledge, the first application of self-reflective
         prompting to OCR correction in any language.
 
   \item \textbf{Quantitative study of over-correction in Arabic OCR.}
-        The finding that the LLM introduces errors on 25.06\% of previously
-        correct tokens, and that this rate increases as more knowledge is injected
+        The finding that LLM interventions harm fonts with CER below approximately
+        8\%, and that the over-correction rate grows as more knowledge is injected
         into the prompt, is a novel empirical characterisation of a failure mode
         that deserves attention from practitioners deploying LLMs for text
         normalisation tasks.
 
-  \item \textbf{Arabic-specific evaluation.}
-        The PATS-A01 Akhbar dataset provides a controlled typewritten Arabic
-        testbed with known font characteristics and a clean ground truth, enabling
-        precise attribution of CER changes to specific prompt interventions.
+  \item \textbf{Arabic-specific multi-font evaluation.}
+        The PATS-A01 corpus provides eight typewritten Arabic fonts with an
+        aligned train/validation split, enabling precise attribution of CER
+        changes to specific prompt interventions while controlling for content
+        effects across fonts.
 \end{enumerate}

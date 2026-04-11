@@ -224,7 +224,7 @@ for all experiments in this thesis.
 All experimental phases are evaluated on the validation split of each font
 (415 samples per font). The training split serves two purposes: Phase~1
 baseline analysis on training data provides the confusion matrices and error
-taxonomies that inform Phases~3--4D; and Phase~4D uses training-split
+taxonomies that inform Phases~3--5; and Phase~4 uses training-split
 corrections to derive the self-reflective insights injected into
 validation-split prompts.
 
@@ -458,7 +458,7 @@ Insertion / Deletion / Other
 \label{sec:kb}
 % ============================================================
 
-Phases~3 through~4D (and Phase~5 combinations) each inject a different type of
+Phases~3 through~5 (and Phase~6 combinations) each inject a different type of
 external knowledge into the LLM prompt.
 All knowledge loaders are implemented in \texttt{src/data/knowledge\_base.py}
 and share a common interface: a \texttt{load()} method that reads source data
@@ -490,114 +490,28 @@ datasets).
 This prevents noise-dominated confusion matrices from individual small datasets
 from distorting the injection content.
 
-\subsection{Rules Loader}
-\label{subsec:kb_rules}
-
-\texttt{RulesLoader} loads Arabic orthographic rules from the directory
-\texttt{data/rules/}, which contains JSONL files (one rule object per line) with
-fields for the rule text, its category, and example words illustrating the rule.
-The loader selects rules across three files: orthography, morphology, and syntax.
-The \texttt{format\_for\_prompt()} method formats the selected rules as a
-numbered instruction list in Arabic.
-
-Table~\ref{tab:rules} lists the primary orthographic rule categories injected in
-Phase~4A.
-These categories were chosen because they correspond to the error types most
-likely to appear in Arabic typewritten OCR output, as confirmed by the Phase~1
-confusion matrix and error taxonomy.
-
-\begin{table}[ht]
-\caption{Arabic orthographic rule categories used in Phase~4A. Each category
-         targets a specific phenomenon that both human writers and OCR engines
-         commonly mishandle.}
-\label{tab:rules}
-\centering
-\renewcommand{\arraystretch}{1.35}
-\begin{tabularx}{\linewidth}{lX}
-\toprule
-\textbf{Rule category} & \textbf{Description and OCR relevance} \\
-\midrule
-Hamza al-qat' (cutting hamza)
-  & Hamza written visibly above or below the alef in all positions.
-    OCR frequently drops the hamza diacritic and outputs a bare alef. \\
-Hamza al-wasl (conjunctive hamza)
-  & An alef at the start of certain verb forms and nouns whose hamza is
-    elided in connected speech and not written.
-    Distinguishing these two types governs the spelling of the definite
-    article (\textit{al-}), some verbal nouns, and Arabic proper nouns. \\
-Taa marbuta vs.\ ha
-  & The feminine ending taa marbuta and the letter ha share the same base
-    shape; OCR dot-placement errors cause frequent confusion between them. \\
-Alef maqsura vs.\ ya
-  & Word-final /a/ written as alef maqsura (a ya-shaped letter without dots)
-    is frequently confused with ya (with two dots below) by OCR. \\
-Tanwin (nunation)
-  & Double-diacritic marking for indefinite nouns; the accusative tanwin
-    al-fath is written as a doubled fatha above an alef, which OCR may
-    misread or drop. \\
-Definite article assimilation
-  & Sun letters assimilate the lam of the definite article (\textit{al-});
-    moon letters do not.
-    This governs whether the written lam appears explicitly in the word. \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-\subsection{QALB Loader and Filtering}
-\label{subsec:kb_qalb}
-
-\texttt{QALBLoader} reads the Qatar Arabic Language Bank (QALB) corpus from
-\texttt{data/QALB-0.9.1-Dec03-2021-SharedTasks/}.
-QALB contains human-authored Arabic sentences paired with manually corrected
-versions, annotating grammatical, spelling, and punctuation errors.
-The 2014 training split is used in this study.
-
-After loading, the following filters are applied in sequence:
-
-\begin{enumerate}
-  \item \textbf{Length filter.}
-        Pairs with source sentences shorter than 10 characters or longer than
-        300 characters are discarded.
-        The upper bound of 300 characters was determined empirically:
-        QALB sentences average between 161 and 594 characters, so a stricter
-        original default of 100 characters eliminated the entire corpus.
-
-  \item \textbf{Word-change filter.}
-        Pairs where the correction modifies more than 15 words are discarded.
-        Heavily-edited sentences are unsuitable as demonstrations because they
-        may signal to the model that aggressive rewriting is expected.
-
-  \item \textbf{OCR-relevance filter.}
-        A pair is retained only if its error type overlaps with known OCR error
-        patterns: dot-group substitutions, alef/hamza variants, taa marbuta / ha
-        swaps, or similar-shape confusions.
-        Pairs that correct purely grammatical or agreement errors without any
-        spelling-level change are discarded, as they could teach the model to
-        make rewrites that OCR would never introduce.
-\end{enumerate}
-
-\noindent
-After all three filters, 528 OCR-relevant pairs are available.
-At inference time, Phase~4B selects 5 pairs using a diversity-maximising strategy
-(\texttt{selection: "diverse"}) that ensures the selected examples span multiple
-error categories rather than repeating the same phenomenon.
-
 \subsection{Word Error Pairs Loader}
 \label{subsec:kb_word_pairs}
 
 \texttt{WordErrorPairsLoader} reads OCR-to-ground-truth word-level correction
-pairs generated during Phase~4D's training-split analysis. These pairs are
+pairs generated during Phase~4's training-split analysis. These pairs are
 extracted by aligning Phase~2 corrections with ground truth at the word level
 and identifying positions where the OCR word differs from the ground truth.
-The resulting file \texttt{results/phase4d/word\_error\_pairs.txt} contains
-concrete examples of Qaari's word-level errors paired with their correct forms.
+Two complementary files are produced:
+\texttt{results/phase2-training/analysis/word\_pairs\_llm\_failures.txt}
+(containing UNFIXED and INTRODUCED error sections) and
+\texttt{results/phase2-training/analysis/sample\_classification.json}
+(containing per-sample error categories).
+Together they provide concrete examples of Qaari's word-level errors paired
+with their correct forms, as well as the model's own failure patterns on the
+training split.
 
-Unlike the QALB few-shot examples (which reflect human typing errors),
-word error pairs are \emph{OCR-native}: they directly represent the visual
-confusion patterns that Qaari produces on the specific fonts in the study.
-These pairs are used in Phase~4D's self-reflective prompting to provide
-the model with concrete correction examples alongside the statistical
-insights, and may also be combined in Phase~5 systems.
+Word error pairs are \emph{OCR-native}: they directly represent the visual
+confusion patterns that Qaari produces on the specific fonts in the study,
+unlike generic human-typing corpora.
+These pairs are used in Phase~4's self-reflective prompting to provide
+the model with concrete correction examples alongside statistical performance
+insights, and are also available in Phase~6 combined systems.
 
 \subsection{CAMeL Tools Integration}
 \label{subsec:kb_camel}
@@ -629,7 +543,7 @@ Arabic database \texttt{calima-msa-r13}.
 
 \subsubsection{WordValidator and the Revert Strategy}
 
-\texttt{src/linguistic/validator.py::WordValidator} implements the Phase~4C
+\texttt{src/linguistic/validator.py::WordValidator} implements the Phase~5
 post-processing logic.
 For each word token in the LLM-corrected output, it applies the following
 decision rule:
@@ -653,9 +567,8 @@ compared, reverted count, and revert rate.
 \subsection{LLM Insights Loader}
 \label{subsec:kb_insights}
 
-\texttt{LLMInsightsLoader} reads JSON files from
-\texttt{results/phase4d/insights/}, which are produced during Phase~4D's
-training-split analysis step.
+\texttt{LLMInsightsLoader} reads JSON insight files produced during Phase~4's
+training-split analysis step, stored in \texttt{results/phase4/insights/}.
 Each file records, for each error category, two statistics derived from comparing
 Phase~2 LLM corrections against ground truth on the training split:
 \begin{itemize}
@@ -673,7 +586,7 @@ risks.
 Statistics are aggregated at the dataset-type level (PATS-A01 vs.\ KHATT) to
 smooth per-sample noise.
 Up to three weaknesses and two over-correction warnings are injected into the
-Phase~4D system prompt (configurable thresholds in \texttt{phase4d.insights}).
+Phase~4 system prompt (configurable thresholds in \texttt{phase4.insights}).
 
 % ============================================================
 \section{The LLM Correction Module}
@@ -855,7 +768,10 @@ Table~\ref{tab:prompts} provides a complete registry of all prompt variants.
 
 \begin{table}[ht]
 \caption{Prompt variant registry. Each phase uses exactly one variant.
-         All prompts are in Arabic. Full prompt text is given in Appendix~A.}
+         All prompts are in Arabic. Full prompt text is given in Appendix~A.
+         Phase~5 (CAMeL post-processing) applies no new prompt: it uses the
+         Phase~2 zero-shot prompt and post-processes the LLM output with the
+         morphological validator.}
 \label{tab:prompts}
 \centering
 \renewcommand{\arraystretch}{1.3}
@@ -863,12 +779,10 @@ Table~\ref{tab:prompts} provides a complete registry of all prompt variants.
 \toprule
 \textbf{Method} & \textbf{Tag} & \textbf{Injected context} & \textbf{Phase} \\
 \midrule
-\texttt{build\_zero\_shot()}       & p2v2  & None (instruction only)              & 2  \\
-\texttt{build\_ocr\_aware()}       & p3v1  & Top-10 Qaari character confusion pairs & 3  \\
-\texttt{build\_rule\_augmented()}  & p4av1 & Arabic orthographic rules            & 4A \\
-\texttt{build\_few\_shot()}        & p4bv1 & 5 QALB error-correction examples     & 4B \\
-\texttt{build\_self\_reflective()} & p4dv3 & LLM error statistics + word error pairs & 4D \\
-\texttt{build\_combined()}         & p5v1  & Any subset of the above contexts     & 5  \\
+\texttt{build\_zero\_shot()}       & p2v2  & None (instruction only)                        & 2, 5 \\
+\texttt{build\_ocr\_aware()}       & p3v1  & Top-10 Qaari character confusion pairs          & 3    \\
+\texttt{build\_self\_reflective()} & p4v3  & LLM error statistics + word error pairs         & 4    \\
+\texttt{build\_combined()}         & p6v1  & Subset of confusion + self-reflective contexts  & 6    \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -896,27 +810,7 @@ character pairs when correcting.
 If no confusion context is available, \texttt{build\_ocr\_aware()} falls back
 transparently to the zero-shot prompt.
 
-\subsubsection{Rule-Augmented Prompt (p4av1)}
-
-The rule-augmented prompt replaces the confusion list with a numbered list of
-Arabic orthographic rules from \texttt{RulesLoader}.
-The system message instructs the model to observe these rules during correction.
-The rules address the same phenomena targeted by the confusion matrix ---
-dot-group characters, hamza, taa marbuta, alef maqsura --- but frame them as
-prescriptive grammar rules rather than as statistical error patterns.
-
-\subsubsection{Few-Shot Prompt (p4bv1)}
-
-The few-shot prompt inserts five input--output demonstration pairs from the QALB
-corpus into the system message.
-Each pair is formatted as:
-``Input: [erroneous sentence] / Correction: [corrected sentence]'' in Arabic.
-The system message instructs the model to correct the new text following the same
-approach as the examples.
-The examples are selected by \texttt{QALBLoader} using the diversity strategy
-to span multiple error types.
-
-\subsubsection{Self-Reflective Prompt (p4dv1)}
+\subsubsection{Self-Reflective Prompt (p4v3)}
 
 The self-reflective prompt injects Arabic diagnostic sentences derived from the
 model's own training-split error statistics.
@@ -926,15 +820,21 @@ miss, and for which categories it tends to over-correct previously correct token
 This is a lightweight, pre-computed form of meta-cognitive guidance that avoids
 the latency cost of asking the model to self-critique at inference time.
 
-\subsubsection{Combined Prompt (p5v1)}
+\subsubsection{Combined Prompt (p6v1)}
 
-\texttt{build\_combined()} accepts any subset of four context types
-(confusion matrix, rules, few-shot examples, self-reflective insights) and
-assembles them into a single system message using a fixed section ordering
-numbered with Arabic ordinals (``First:\ confusions, Second:\ rules,
-Third:\ examples, Fourth:\ performance notes'').
+\texttt{build\_combined()} accepts any subset of two context types
+(confusion matrix and self-reflective insights) and assembles them into a single
+system message using a fixed section ordering numbered with Arabic ordinals
+(``First:\ confusions, Second:\ performance notes'').
 Only non-empty context strings are included; the closing conservative instruction
 is always appended.
 If all context strings are empty, the method falls back to the zero-shot prompt.
-This design makes Phase~5 combination experiments straightforward to specify and
+
+Phase~6 evaluates four pre-selected combination identifiers:
+\texttt{conf\_only} (confusion matrix only),
+\texttt{self\_only} (self-reflective insights only),
+\texttt{conf\_self} (both combined), and
+\texttt{best\_camel} (the best prompt combination with CAMeL morphological
+post-processing applied on top).
+This design makes Phase~6 ablation experiments straightforward to specify and
 fully reproducible from the combination identifier alone.

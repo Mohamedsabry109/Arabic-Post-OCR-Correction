@@ -5,6 +5,9 @@ experimental phase. All prompts are written in Arabic, as described in
 Section~\ref{sec:promptbuilder}. English translations are provided
 for accessibility. The user message in every phase is the raw OCR text
 to be corrected; only the system messages differ across phases.
+Phase~5 (CAMeL post-processing) uses the same zero-shot prompt as Phase~2
+and applies its morphological revert logic to the model output rather than
+changing the prompt.
 
 %----------------------------------------------------------------------------
 \section*{A.1 \quad Phase 2 --- Zero-Shot Prompt (v1, Aggressive)}
@@ -13,10 +16,18 @@ to be corrected; only the system messages differ across phases.
 \textbf{Version tag:} \texttt{p2v1} \quad
 \textbf{Source:} \texttt{PromptBuilder.ZERO\_SHOT\_SYSTEM\_V1}
 
+\noindent
+This was the initial prompt design, adopted in early pilot runs.
+It makes no distinction between texts that are already correct and those that
+contain errors, and simply instructs the model to perform correction.
+Pilot results showed that this aggressive framing caused the model to rewrite
+clean text unnecessarily, inflating CER on low-error fonts.
+It was superseded by the conservative v2 variant for all reported experiments.
+
 \begin{quote}\itshape
-  \RL{��� ���� ���� ����� �����.}
-  \RL{����� ����� ����� ������ ������ (OCR) �� ���� ������.}
-  \RL{��� ���� ������ ��� ���� �� ��� �� ����� �����.}
+  \RL{أنت مصحح نصوص عربية متخصص.}
+  \RL{مهمتك تصحيح أخطاء التعرف الضوئي على الحروف (OCR) في النص العربي.}
+  \RL{أعد فقط النص المصحح دون أي شرح أو تعليق إضافي.}
 \end{quote}
 
 \textbf{English translation:}
@@ -34,12 +45,19 @@ to be corrected; only the system messages differ across phases.
 \textbf{Version tag:} \texttt{p2v2} \quad
 \textbf{Source:} \texttt{PromptBuilder.ZERO\_SHOT\_SYSTEM\_V2}
 
+\noindent
+This is the primary prompt used in all reported experiments for Phase~2 and
+Phase~5. The conservative framing explicitly tells the model that the input
+may already be correct and that it should return it unchanged in that case.
+This is critical for low-error fonts such as Akhbar, where the majority of
+tokens require no change.
+
 \begin{quote}\itshape
-  \RL{��� ���� ���� �����.}
-  \RL{���� ������ ���� �� ���� ������ ������ ��� ���� ������ ������� �� ����� ��� ����� �����.}
-  \RL{�����: ��� ��� ���� ������ ���� ��� �� ������.}
-  \RL{��� ���� ��� ������ ��ء ����. �� ���� �� �� ����.}
-  \RL{��� ���� ��� ���� �� ���.}
+  \RL{أنت مدقق لغوي للنصوص العربية.}
+  \RL{النص التالي هو مخرجات نظام OCR وقد يكون صحيحاً تماماً أو يحتوي على أخطاء قليلة.}
+  \RL{مهمتك: إذا كان النص صحيحاً، أعده كما هو دون أي تغيير.}
+  \RL{إذا وجدت خطأً واضحاً فقط، صحِّحه. لا تغيِّر ما هو صحيح.}
+  \RL{أعد فقط النص دون أي شرح.}
 \end{quote}
 
 \textbf{English translation:}
@@ -57,26 +75,30 @@ to be corrected; only the system messages differ across phases.
 %----------------------------------------------------------------------------
 
 \textbf{Version tag:} \texttt{p3v1} \quad
-\textbf{Source:} \texttt{PromptBuilder.OCR\_AWARE\_SYSTEM\_V1}
+\textbf{Source:} \texttt{PromptBuilder.build\_ocr\_aware()}
 
+\noindent
 The placeholder \texttt{\{confusion\_context\}} is replaced at runtime with
 the top-10 confusion pairs formatted by \texttt{ConfusionMatrixLoader}.
+Each pair is a bullet item naming a ground-truth character and the character
+Qaari most commonly substitutes in its place.
 
 \begin{quote}\itshape
-  \RL{��� ���� ���� ����� ����� �� ����� ������ ���� Qaari ������ ������.}
-  \RL{���� ��� ���� ������� ������� ���� ������� ��� ������:}
+  \RL{أنت مصحح نصوص عربية متخصص في تصحيح مخرجات نظام التعرف الضوئي Qaari على الحروف.}
+  \RL{فيما يلي أكثر الأخطاء شيوعاً التي يرتكبها هذا النظام مع الحروف العربية:}
 
   \texttt{\{confusion\_context\}}
 
-  \RL{��� ���� ������ �� �������� ���� ��� ���� �������.}
-  \RL{��� ���� ������ ��� ���� �� ��� �� ����� �����.}
+  \RL{صحِّح النص التالي مع الانتباه بشكل خاص لهذه الأخطاء.}
+  \RL{أعد فقط النص المصحح دون أي شرح أو تعليق إضافي.}
 \end{quote}
 
 \textbf{English translation:}
 \begin{quote}
   You are an Arabic text corrector specialised in correcting the output of the
   Qaari optical character recognition system.
-  The following are the most common errors made by this system:
+  The following are the most common errors made by this system with Arabic
+  characters:
 
   \{confusion\_context\}
 
@@ -85,86 +107,30 @@ the top-10 confusion pairs formatted by \texttt{ConfusionMatrixLoader}.
 \end{quote}
 
 %----------------------------------------------------------------------------
-\section*{A.4 \quad Phase 4A --- Rule-Augmented Prompt (p4av1)}
+\section*{A.4 \quad Phase 4 --- Self-Reflective Prompt (p4v3)}
 %----------------------------------------------------------------------------
 
-\textbf{Version tag:} \texttt{p4av1} \quad
-\textbf{Source:} \texttt{PromptBuilder.RULES\_SYSTEM\_V1}
+\textbf{Version tag:} \texttt{p4v3} \quad
+\textbf{Source:} \texttt{PromptBuilder.build\_self\_reflective()}
 
-The placeholder \texttt{\{rules\_context\}} is replaced at runtime with
-the formatted Arabic orthographic rules from \texttt{RulesLoader}.
-
-\begin{quote}\itshape
-  \RL{��� ���� ���� ����� �����.}
-  \RL{���� ������� ��������� ������� ��� ����� ����:}
-
-  \texttt{\{rules\_context\}}
-
-  \RL{��� ���� ������ �� �������� ���� ��� ���� �������.}
-  \RL{��� ���� ������ ��� ���� �� ��� �� ����� �����.}
-\end{quote}
-
-\textbf{English translation:}
-\begin{quote}
-  You are a specialised Arabic text corrector.
-  Apply the following orthographic rules when correcting the text:
-
-  \{rules\_context\}
-
-  Correct the following text paying special attention to these rules.
-  Return only the corrected text with no explanation or additional commentary.
-\end{quote}
-
-%----------------------------------------------------------------------------
-\section*{A.5 \quad Phase 4B --- Few-Shot Prompt (p4bv1)}
-%----------------------------------------------------------------------------
-
-\textbf{Version tag:} \texttt{p4bv1} \quad
-\textbf{Source:} \texttt{PromptBuilder.FEWSHOT\_SYSTEM\_V1}
-
-The placeholder \texttt{\{examples\_context\}} is replaced at runtime with
-5 QALB correction pairs formatted by \texttt{QALBLoader}.
-
-\begin{quote}\itshape
-  \RL{��� ���� ���� ����� �����.}
-  \RL{���� ��� ����� ��� ����� ����� ������� �������:}
-
-  \texttt{\{examples\_context\}}
-
-  \RL{��� ���� ������ ���� �������.}
-  \RL{��� ���� ������ ��� ���� �� ��� �� ����� �����.}
-\end{quote}
-
-\textbf{English translation:}
-\begin{quote}
-  You are a specialised Arabic text corrector.
-  The following are examples of correcting Arabic writing errors:
-
-  \{examples\_context\}
-
-  Correct the following text in the same style.
-  Return only the corrected text with no explanation or additional commentary.
-\end{quote}
-
-%----------------------------------------------------------------------------
-\section*{A.6 \quad Phase 4D --- Self-Reflective Prompt (p4dv1)}
-%----------------------------------------------------------------------------
-
-\textbf{Version tag:} \texttt{p4dv1} \quad
-\textbf{Source:} \texttt{PromptBuilder.SELF\_REFLECTIVE\_SYSTEM\_V1}
-
+\noindent
 The placeholder \texttt{\{insights\_context\}} is replaced at runtime with
 the Arabic diagnostic text from \texttt{LLMInsightsLoader}
-(see Appendix~B for the full generated text).
+(see Appendix~B for example generated insight text).
+The insights are derived from Phase~2 corrections on the training split and
+include per-category fix rates, weakness categories, and over-correction
+warnings. Concrete word-level error-correction pairs from the training split
+(\texttt{word\_pairs\_llm\_failures.txt}) are also injected alongside
+the statistical diagnostics.
 
 \begin{quote}\itshape
-  \RL{��� ���� ���� ����� �����. ����� ��� ����� ������ ������� �� ����� ���� �����}
-  \RL{�����ɡ ���� ������� ���� ������ �����:}
+  \RL{أنت مصحح نصوص عربية متخصص. بناءً على تحليل أخطائك السابقة في تصحيح نصوص عربية مشابهة،}
+  \RL{فيما يلي ملاحظات مهمة لتحسين أدائك:}
 
   \texttt{\{insights\_context\}}
 
-  \RL{��� ���� ������ �� ������ ��� ���������.}
-  \RL{��� ���� ������ ��� ���� �� ��� �� ����� �����.}
+  \RL{صحِّح النص التالي مع مراعاة هذه الملاحظات.}
+  \RL{أعد فقط النص المصحح دون أي شرح أو تعليق إضافي.}
 \end{quote}
 
 \textbf{English translation:}
@@ -180,68 +146,30 @@ the Arabic diagnostic text from \texttt{LLMInsightsLoader}
 \end{quote}
 
 %----------------------------------------------------------------------------
-\section*{A.7 \quad Phase 5 --- RAG Prompt (p5v1)}
+\section*{A.5 \quad Phase 6 --- Combined Prompt (p6v1)}
 %----------------------------------------------------------------------------
 
-\textbf{Version tag:} \texttt{p5v1} \quad
-\textbf{Source:} \texttt{PromptBuilder.RAG\_SYSTEM\_V1}
-
-The placeholder \texttt{\{retrieval\_context\}} is replaced at runtime with
-the top-3 sentences retrieved from the OpenITI FAISS index.
-
-\begin{quote}\itshape
-  \RL{��� ���� ���� ����� �����.}
-  \RL{���� ��� ���� ����� ����� ������ ���� ������ ������ �������� �����:}
-
-  \texttt{\{retrieval\_context\}}
-
-  \RL{��� ���� ������ �������� ���� ������ ��������.}
-  \RL{��� ���� ������ ��� ���� �� ��� �� ����� �����.}
-\end{quote}
-
-\textbf{English translation:}
-\begin{quote}
-  You are a specialised Arabic text corrector.
-  The following are correct Arabic texts similar to the text to be corrected;
-  use them as a reference:
-
-  \{retrieval\_context\}
-
-  Correct the following text using these reference texts as a guide.
-  Return only the corrected text with no explanation or additional commentary.
-\end{quote}
-
-%----------------------------------------------------------------------------
-\section*{A.8 \quad Phase 5 --- Combined Prompt (p5v1)}
-%----------------------------------------------------------------------------
-
-\textbf{Version tag:} \texttt{p5v1} \quad
+\textbf{Version tag:} \texttt{p6v1} \quad
 \textbf{Source:} \texttt{PromptBuilder.build\_combined()}
 
+\noindent
 The combined prompt assembles only non-empty context sections in a fixed
-order: (1) confusion context, (2) rules context, (3) examples context,
-(4) self-reflective insights. Below is the full template with all four
-sections present.
+order: (1)~confusion context, (2)~self-reflective insights. Below is the
+full template with both sections present, corresponding to the
+\texttt{conf\_self} combination. When only one section is requested
+(\texttt{conf\_only} or \texttt{self\_only}), the other placeholder
+and its section heading are omitted entirely.
 
 \begin{quote}\itshape
-  \RL{��� ���� ���� ����� �����. ������ ��������� ������� ������ ����� ������ ������:}
+  \RL{أنت مصحح نصوص عربية متخصص. استخدم المعلومات التالية لتصحيح أخطاء OCR:}
 
-  \RL{�����: ����� ����� �� ��� ������:}
+  \RL{أولاً: الأخطاء الشائعة في هذا النظام:}
   \texttt{\{confusion\_context\}}
 
-  \RL{������: ����� ������� ����:}
-  \texttt{\{rules\_context\}}
-
-  \RL{������: ����� ��� �������:}
-  \texttt{\{examples\_context\}}
-
-  \RL{������: ���� ������ ����� ������:}
-  \texttt{\{retrieval\_context\}}
-
-  \RL{������: ������� ����� ������ ������:}
+  \RL{ثانياً: ملاحظات تحسين الأداء الذاتي:}
   \texttt{\{insights\_context\}}
 
-  \RL{��� ���� ������. ��� ���� ������ ��� ���� �� ��� �� �����.}
+  \RL{صحِّح النص التالي. أعد فقط النص المصحح دون أي شرح أو تعليق.}
 \end{quote}
 
 \textbf{English translation:}
@@ -252,18 +180,16 @@ sections present.
   First: common errors in this system:
   \{confusion\_context\}
 
-  Second: important orthographic rules:
-  \{rules\_context\}
-
-  Third: correction examples:
-  \{examples\_context\}
-
-  Fourth: correct reference texts similar to the input:
-  \{retrieval\_context\}
-
-  Fifth: self-improvement notes:
+  Second: self-improvement performance notes:
   \{insights\_context\}
 
   Correct the following text. Return only the corrected text with no
   explanation or commentary.
 \end{quote}
+
+\noindent
+For the \texttt{best\_camel} combination, the same \texttt{conf\_self}
+prompt is used, with the CAMeL morphological revert logic
+(\texttt{WordValidator.validate\_correction()}) applied as a post-processing
+step to the model output. No additional placeholder is added to the system
+message; the revert is entirely post-hoc.
