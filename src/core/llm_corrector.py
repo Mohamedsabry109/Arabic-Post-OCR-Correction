@@ -350,81 +350,111 @@ class TransformersCorrector(BaseLLMCorrector):
             error=last_error,
         )
 
-    def _truncate_ocr_text(self, messages: list[dict]) -> list[dict]:
-        """Truncate only the OCR text (user message) if prompt exceeds budget.
+    def _fit_to_token_budget(self, messages: list[dict]) -> list[dict]:
+        """Drop injected context if prompt exceeds budget; never truncate OCR text.
 
-        Builds the full prompt with an empty user message to measure the
-        instruction overhead (system prompt + chat template tokens).  If the
-        OCR text pushes the total beyond ``MAX_INPUT_TOKENS``, only the user
-        content is truncated so that instructions are always intact.
+        The OCR text lives in the user message and must always be preserved
+        intact — it is the thing we are correcting.  Context blocks (confusion
+        matrix, word-pair examples, self-reflective insights) are injected into
+        the system message and are expendable.
+
+        Truncation strategy (in order of priority):
+
+        1. Full prompt fits within MAX_INPUT_TOKENS → return unchanged.
+
+        2. Over budget → shorten the *system* message from the END.
+           All prompt builders append context after the base system prompt, so
+           tail-cutting the system content removes context first and leaves the
+           base prompt (and the full user / OCR content) intact.
+
+        3. Last resort → keep the TAIL of the full token sequence.  The user
+           message with the OCR text and the generation-prompt suffix are always
+           at the end of the sequence, so tail truncation preserves them while
+           discarding leading system tokens.
 
         Args:
             messages: OpenAI-format chat messages (system + user).
 
         Returns:
-            Messages list — unchanged if within budget, or with a truncated
-            user message if the original exceeded ``MAX_INPUT_TOKENS``.
+            Messages list — unchanged if within budget, otherwise with context
+            stripped from the system message.  The user message (OCR text) is
+            never modified.
         """
-        # Safety margin for chat-template overhead estimation
         MARGIN = 32
-
         budget = self.MAX_INPUT_TOKENS - self._max_tokens - MARGIN
 
-        # Find the user message index
+        def _encode_messages(msgs: list[dict]) -> list[int]:
+            formatted = self._tokenizer.apply_chat_template(
+                msgs,
+                tokenize=False,
+                add_generation_prompt=True,
+                enable_thinking=False,
+            )
+            return self._tokenizer.encode(formatted, add_special_tokens=False)
+
+        # --- Step 1: fits as-is? ---
+        full_ids = _encode_messages(messages)
+        if len(full_ids) <= budget:
+            return messages
+
+        # Locate system and user message indices
+        sys_idx: int | None  = None
         user_idx: int | None = None
         for i, msg in enumerate(messages):
-            if msg["role"] == "user":
+            if msg["role"] == "system" and sys_idx is None:
+                sys_idx = i
+            if msg["role"] == "user" and user_idx is None:
                 user_idx = i
-                break
 
-        if user_idx is None:
-            return messages
+        # --- Step 2: shorten system content from the end ---
+        if sys_idx is not None:
+            # Measure cost of everything except the system content
+            shell_msgs = [
+                {**msg, "content": ""} if i == sys_idx else msg
+                for i, msg in enumerate(messages)
+            ]
+            shell_cost = len(_encode_messages(shell_msgs))
+            sys_budget = budget - shell_cost
 
-        # Build a copy with empty user content to measure instruction overhead
-        shell_messages = [
-            {**msg, "content": ""} if i == user_idx else msg
-            for i, msg in enumerate(messages)
-        ]
-        shell_formatted = self._tokenizer.apply_chat_template(
-            shell_messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=False,
-        )
-        instruction_tokens = len(self._tokenizer.encode(shell_formatted))
+            if sys_budget > 0:
+                sys_ids = self._tokenizer.encode(
+                    messages[sys_idx]["content"], add_special_tokens=False,
+                )
+                if len(sys_ids) > sys_budget:
+                    # Keep the FRONT of the system content (base prompt),
+                    # drop the END (injected context blocks).
+                    trimmed_sys = self._tokenizer.decode(
+                        sys_ids[:sys_budget], skip_special_tokens=True,
+                    )
+                    trimmed_msgs = list(messages)
+                    trimmed_msgs[sys_idx] = {**messages[sys_idx], "content": trimmed_sys}
+                    trimmed_ids = _encode_messages(trimmed_msgs)
+                    logger.warning(
+                        "Prompt context truncated: %d -> %d tokens "
+                        "(system message shortened, OCR text preserved).",
+                        len(full_ids), len(trimmed_ids),
+                    )
+                    if len(trimmed_ids) <= budget:
+                        return trimmed_msgs
+                    # Even with system stripped, still over budget — fall through
+                    messages = trimmed_msgs
+                    full_ids = trimmed_ids
 
-        ocr_budget = budget - instruction_tokens
-        if ocr_budget <= 0:
-            logger.error(
-                "Instruction overhead (%d tokens) alone exceeds budget (%d). "
-                "Cannot fit any OCR text.",
-                instruction_tokens, budget,
-            )
-            return messages
-
-        # Tokenize OCR text and check if truncation is needed
-        ocr_text = messages[user_idx]["content"]
-        ocr_token_ids = self._tokenizer.encode(ocr_text, add_special_tokens=False)
-
-        if len(ocr_token_ids) <= ocr_budget:
-            return messages  # fits fine
-
+        # --- Step 3: last resort — tail-truncate the full token sequence ---
+        # The user message (OCR text + instruction) is at the END of the
+        # sequence, so keeping the tail preserves it while discarding leading
+        # system tokens.
         logger.warning(
-            "OCR text (%d tokens) exceeds budget (%d tokens for user content, "
-            "%d instruction overhead). Truncating OCR text.",
-            len(ocr_token_ids), ocr_budget, instruction_tokens,
+            "Prompt still over budget (%d tokens) after context removal — "
+            "keeping last %d tokens (tail truncation, OCR text preserved).",
+            len(full_ids), budget,
         )
-        truncated_ids = ocr_token_ids[:ocr_budget]
-        truncated_text = self._tokenizer.decode(
-            truncated_ids, skip_special_tokens=True,
-        )
-
-        truncated_messages = list(messages)
-        truncated_messages[user_idx] = {
-            **messages[user_idx],
-            "content": truncated_text,
-        }
-        return truncated_messages
+        tail_ids = full_ids[-budget:]
+        # Decode and re-encode as a single user-only message so the
+        # chat template can be re-applied cleanly.
+        tail_text = self._tokenizer.decode(tail_ids, skip_special_tokens=True)
+        # Return as a single user turn; system context already lost above.
+        return [{"role": "user", "content": tail_text}]
 
     def _generate(self, messages: list[dict]) -> tuple[str, int, int]:
         """Tokenise messages, run model.generate(), decode new tokens only.
@@ -440,9 +470,9 @@ class TransformersCorrector(BaseLLMCorrector):
         """
         import torch
 
-        # Truncate OCR text (user message) if prompt exceeds token budget,
-        # preserving system instructions intact.
-        messages = self._truncate_ocr_text(messages)
+        # Drop injected context from the system message if prompt exceeds budget.
+        # The OCR text (user message) is never truncated.
+        messages = self._fit_to_token_budget(messages)
 
         # Apply Qwen3 chat template — add_generation_prompt=True appends the
         # <|im_start|>assistant token so the model continues from that position.
