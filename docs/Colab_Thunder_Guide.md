@@ -190,6 +190,80 @@ Re-run the same command to resume: already-done `sample_id`s are skipped.
 
 ---
 
+## Syncing Outputs to HuggingFace
+
+Instead of (or in addition to) Drive, you can push results directly to a HF dataset
+repo. This is the preferred method when running on Thunder or Kaggle where Drive is
+not available.
+
+### One-time: store your token as a Colab secret
+
+> Colab → Secrets (key icon) → Add `HF_TOKEN` → paste your token → enable repo access
+
+### Cell — push results to HF
+
+```python
+import os
+from google.colab import userdata
+
+os.environ["HF_TOKEN"] = userdata.get("HF_TOKEN")   # reads from Colab Secrets
+
+# Push everything in results/ (default)
+!python scripts/hf_sync.py push
+
+# Push results + Qaari OCR outputs
+!python scripts/hf_sync.py push \
+    --paths results data/ocr-results/qaari-results
+
+# Preview what would be uploaded without actually uploading
+!python scripts/hf_sync.py push --dry-run
+```
+
+### Cell — pull results from HF (merge remote into local)
+
+```python
+# Pull all results/ from HF into the Colab workspace
+!python scripts/hf_sync.py pull
+
+# Pull a specific phase only
+!python scripts/hf_sync.py pull --paths results/phase2
+```
+
+### Cell — sync (pull remote progress, then push local progress)
+
+Use this when multiple machines are running inference simultaneously:
+
+```python
+# Safe for parallel runs: picks up remote records first, then publishes local ones
+!python scripts/hf_sync.py sync
+```
+
+### On Thunder (no Colab secrets)
+
+Pass the token directly or export it in the shell:
+
+```bash
+# Option A — inline
+HF_TOKEN=hf_xxx python scripts/hf_sync.py push
+
+# Option B — export once, then run freely
+export HF_TOKEN=hf_xxx
+python scripts/hf_sync.py push
+python scripts/hf_sync.py sync
+
+# Push a specific phase
+python scripts/hf_sync.py push --paths results/phase3
+
+# Custom repo
+python scripts/hf_sync.py push --repo YOUR_USERNAME/arabic-ocr-results
+```
+
+> **Note**: The HF repo is created automatically (private) on the first push if it
+> does not already exist. The repo structure mirrors the local path exactly:
+> `results/phase2/corrections.jsonl` → `results/phase2/corrections.jsonl` in the repo.
+
+---
+
 ## Comparing Outputs Locally
 
 Download the output files from Drive, then run:
