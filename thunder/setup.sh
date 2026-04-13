@@ -46,8 +46,29 @@ pip install --quiet \
 pip install --quiet "qwen-vl-utils>=0.0.8"
 
 # --- Flash Attention 2 (significant speedup for long VLM sequences on A100) ---
-pip install --quiet flash-attn --no-build-isolation || \
+# Strategy: try pre-built wheel first (seconds, no compilation).
+# Fall back to source build with limited parallelism (MAX_JOBS=4) to avoid
+# OOM — ninja's default uses all cores and can exhaust system RAM.
+#
+# To find the exact wheel URL for your environment, visit:
+#   https://flashattn.dev/install
+# and select your Python, PyTorch, and CUDA versions.
+_FA_INSTALLED=false
+
+# Attempt 1: pre-built wheel (fast, no compilation)
+pip install --quiet flash-attn 2>/dev/null && _FA_INSTALLED=true
+
+# Attempt 2: source build with limited parallelism (avoid OOM)
+if [ "$_FA_INSTALLED" = false ]; then
+    echo "  [info] Pre-built wheel not found — building from source (MAX_JOBS=4)..."
+    MAX_JOBS=4 pip install --quiet flash-attn --no-build-isolation 2>/dev/null && _FA_INSTALLED=true
+fi
+
+if [ "$_FA_INSTALLED" = true ]; then
+    echo "  [ok] flash-attn installed."
+else
     echo "  [warn] flash-attn unavailable — continuing without it (slower for long sequences)"
+fi
 
 # --- CAMeL Tools (Arabic NLP — Phases 1, 5, 6) ---
 pip install --quiet "camel-tools>=1.5.0" || \
