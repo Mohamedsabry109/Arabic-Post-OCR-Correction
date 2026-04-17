@@ -58,9 +58,8 @@ from qaari_infer import (  # noqa: E402
     discover_images,
     _estimate_area,    # noqa: F401 (used inside discover_images)
     _load_image,
-    _load_hf_model,
-    _hf_run_single,
 )
+from qaari_model import QaariOCR  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,
@@ -114,11 +113,17 @@ def run_sequential(
     pending: list[tuple[Path, Path]],
     args: argparse.Namespace,
 ) -> tuple[int, int]:
-    """Process one image at a time.  No batching, no prefetch, no vLLM."""
-    model, processor = _load_hf_model(
-        args.model,
+    """Process one image at a time.  No batching, no prefetch, no vLLM.
+
+    Uses the shared ``QaariOCR`` wrapper from ``thunder/qaari_model.py`` so
+    that the generation path (model load kwargs, prompt, processor call,
+    decode) is byte-for-byte identical to every other consumer of that
+    class.
+    """
+    ocr = QaariOCR(
+        model_name=args.model,
+        max_tokens=args.max_new_tokens,
         use_flash_attn=not args.no_flash_attn,
-        compile_model=False,
     )
     max_retries = args.max_retries
 
@@ -146,7 +151,7 @@ def run_sequential(
 
         for attempt in range(max_retries + 1):
             try:
-                text = _hf_run_single(model, processor, pil_img, args.max_new_tokens)
+                text = ocr("", pil_img)
                 if text.strip():
                     break
                 last_exc = f"Empty output on attempt {attempt + 1}"
@@ -161,19 +166,23 @@ def run_sequential(
 
         latency = time.monotonic() - t0
 
-        if text.strip():
-            try:
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                out_path.write_text(text.strip(), encoding="utf-8")
+        # Always persist the output — including empty results — so that
+        # (a) downstream analysis can see which images produced nothing,
+        # and (b) resume skips them instead of retrying forever.
+        stripped = text.strip()
+        try:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(stripped, encoding="utf-8")
+            if stripped:
                 n_success += 1
-            except Exception as exc:
-                logger.error("Save failed for %s: %s", img_path.name, exc)
+            else:
                 n_failed += 1
-        else:
-            logger.error(
-                "[%s] All %d attempts failed. Last: %s",
-                img_path.name, max_retries + 1, last_exc,
-            )
+                logger.warning(
+                    "[%s] Empty output saved after %d attempt(s). Last: %s",
+                    img_path.name, max_retries + 1, last_exc,
+                )
+        except Exception as exc:
+            logger.error("Save failed for %s: %s", img_path.name, exc)
             n_failed += 1
 
         torch.cuda.empty_cache()

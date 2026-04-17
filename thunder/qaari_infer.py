@@ -169,7 +169,10 @@ def discover_images(
         for img_path in image_root.rglob(f"*.{ext}"):
             rel = img_path.relative_to(image_root)
             out_path = output_root / rel.with_suffix(".txt")
-            if not force and out_path.exists() and out_path.stat().st_size > 0:
+            if not force and out_path.exists():
+                # Empty files count as done too — they represent images the
+                # model produced nothing for, and we don't want to retry on
+                # resume. Use --force to reprocess.
                 continue
             entries.append((_estimate_area(img_path), img_path, out_path))
 
