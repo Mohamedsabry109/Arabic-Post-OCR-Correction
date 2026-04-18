@@ -1,16 +1,16 @@
 [0] Config.pm:328> INFO - This is Biber 2.21
 [0] Config.pm:331> INFO - Logfile is 'mthesis.blg'
-[139] biber-MSWIN64:342> INFO - === 
-[185] Biber.pm:421> INFO - Reading 'mthesis.bcf'
-[329] Biber.pm:1002> INFO - Found 33 citekeys in bib section 0
-[344] Biber.pm:4487> INFO - Processing section 0
-[360] Biber.pm:4678> INFO - Looking for bibtex file 'thesis.bib' for section 0
-[445] bibtex.pm:1713> INFO - LaTeX decoding ...
-[501] bibtex.pm:1519> INFO - Found BibTeX data source 'thesis.bib'
-[819] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
-[819] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
-[819] Biber.pm:4307> INFO - Sorting list 'none/global//global/global/global' of type 'entry' with template 'none' and locale 'en-US'
-[819] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
-[843] bbl.pm:676> INFO - Writing 'mthesis.bbl' with encoding 'ascii'
-[843] bbl.pm:677> INFO - Converting UTF-8 to TeX macros on output to .bbl
-[895] bbl.pm:779> INFO - Output to mthesis.bbl
+[122] biber-MSWIN64:342> INFO - === 
+[161] Biber.pm:421> INFO - Reading 'mthesis.bcf'
+[295] Biber.pm:1002> INFO - Found 40 citekeys in bib section 0
+[311] Biber.pm:4487> INFO - Processing section 0
+[323] Biber.pm:4678> INFO - Looking for bibtex file 'thesis.bib' for section 0
+[398] bibtex.pm:1713> INFO - LaTeX decoding ...
+[465] bibtex.pm:1519> INFO - Found BibTeX data source 'thesis.bib'
+[840] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[840] UCollate.pm:68> INFO - Overriding locale 'en-US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[840] Biber.pm:4307> INFO - Sorting list 'none/global//global/global/global' of type 'entry' with template 'none' and locale 'en-US'
+[840] Biber.pm:4313> INFO - No sort tailoring available for locale 'en-US'
+[870] bbl.pm:676> INFO - Writing 'mthesis.bbl' with encoding 'ascii'
+[870] bbl.pm:677> INFO - Converting UTF-8 to TeX macros on output to .bbl
+[932] bbl.pm:779> INFO - Output to mthesis.bbl

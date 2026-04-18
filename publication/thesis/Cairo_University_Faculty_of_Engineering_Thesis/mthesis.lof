@@ -2,8 +2,8 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {\if@rl \I {1.3}\else \textLR {3.1}\fi }{\ignorespaces Three-stage pipeline architecture. Stages communicate via JSONL files on disk, enabling inference to run on any cloud GPU without requiring direct access to local data files.}}{\if@rlmain \I {34}\else \textLR {34}\fi }{figure.caption.2}%
-\contentsline {figure}{\numberline {\if@rl \I {2.3}\else \textLR {3.2}\fi }{\ignorespaces LLM corrector class hierarchy. All pipeline code depends only on the \texttt {BaseLLMCorrector} interface; the concrete backend is selected at runtime by \texttt {get\_corrector(config)}.}}{\if@rlmain \I {49}\else \textLR {49}\fi }{figure.caption.7}%
+\contentsline {figure}{\numberline {\if@rl \I {1.3}\else \textLR {3.1}\fi }{\ignorespaces Three-stage pipeline architecture. Stages communicate via JSONL files on disk, enabling inference to run on any cloud GPU without requiring direct access to local data files.}}{\if@rlmain \I {42}\else \textLR {42}\fi }{figure.caption.2}%
+\contentsline {figure}{\numberline {\if@rl \I {2.3}\else \textLR {3.2}\fi }{\ignorespaces LLM corrector class hierarchy. All pipeline code depends only on the \texttt {BaseLLMCorrector} interface; the concrete backend is selected at runtime by \texttt {get\_corrector(config)}.}}{\if@rlmain \I {55}\else \textLR {55}\fi }{figure.caption.6}%
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }

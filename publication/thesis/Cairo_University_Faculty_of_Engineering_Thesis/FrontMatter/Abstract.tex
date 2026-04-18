@@ -3,23 +3,31 @@
 Arabic optical character recognition (OCR) engines produce systematic errors
 rooted in the visual properties of the Arabic script: dot-group character
 confusions, morphologically valid but contextually wrong substitutions, and
-occasional catastrophic repetition artefacts. Open-source engines such as
-Qaari fall short of closed-source alternatives, motivating the question of
-whether post-OCR correction via a large language model (LLM) can close this
-gap without modifying the recognition engine.
+segmentation failures that destroy word boundaries. Open-source engines such as
+Qaari fall short of closed-source vision--language models, motivating the
+question of whether post-OCR correction via a lightweight large language model
+(LLM) can bridge this accuracy gap without modifying the recognition engine
+and without task-specific fine-tuning.
 
-This thesis presents a systematic evaluation of prompt-engineering strategies
-for Arabic post-OCR correction using Qwen3-4B-Instruct-2507, an open-source
-4-billion-parameter instruction-tuned model. Five knowledge augmentation
-conditions are evaluated across nine datasets --- eight typewritten fonts from
-the PATS-A01 corpus and one handwritten corpus (KHATT) --- each changing
-exactly one variable relative to a zero-shot baseline: (1)~character confusion
-matrix injection (Phase~3); (2)~self-reflective prompting from training-split
-error statistics (Phase~4); and (3)~CAMeL Tools morphological post-processing
-with known-overcorrection revert (Phase~5). A combination and ablation study
-(Phase~6) tests pre-selected multi-component systems across four configurations:
-confusion-matrix only (\texttt{conf\_only}), self-reflective only
-(\texttt{self\_only}), both combined (\texttt{conf\_self}), and the best
+This thesis presents a controlled, multi-dataset evaluation of
+knowledge-augmented prompt-engineering strategies for Arabic post-OCR
+correction using Qwen3-4B-Instruct-2507, an open-source 4-billion-parameter
+instruction-tuned model. The experimental design follows an isolation
+principle: five knowledge augmentation conditions are evaluated across nine
+datasets --- eight typewritten fonts from the PATS-A01 corpus (baseline CER
+ranging from 4.3\% to 24.3\%) and one handwritten corpus (KHATT, 44.6\%
+baseline CER) --- each changing exactly one variable relative to a zero-shot
+baseline. The augmentation conditions are: (1)~failure-filtered character
+confusion matrix injection, cross-referenced with the model's own zero-shot
+failures to retain only actionable confusion pairs (Phase~3);
+(2)~self-reflective prompting derived from the model's training-split error
+statistics, including quantified fix and introduction rates, concrete
+word-level error pairs, and an explicit overcorrection warning (Phase~4);
+and (3)~CAMeL Tools morphological post-processing with position-indexed
+known-overcorrection revert (Phase~5). A systematic combination and
+component-removal ablation study (Phase~6) tests four multi-component
+configurations: confusion-matrix only (\texttt{conf\_only}), self-reflective
+only (\texttt{self\_only}), both combined (\texttt{conf\_self}), and the best
 prompt combination augmented with CAMeL post-processing
 (\texttt{best\_camel}).
 
@@ -65,13 +73,32 @@ The \texttt{conf\_self} combination achieves 11.2\% CER on PATS-A01 (a
 yields marginal further gain on PATS-A01 (11.1\%) but a slight reversal on
 KHATT (42.5\%).
 
-The central finding is that the optimal correction strategy depends on the
-baseline error profile of the input. Fonts with CER below approximately 8\%
-are harmed by any LLM intervention; fonts in the 8--25\% range benefit
-substantially from zero-shot correction, with further gains from knowledge
-augmentation. A one-size-fits-all approach to prompt augmentation is unlikely
-to succeed across diverse fonts and script types. The thesis contributes an
-experimental framework, a three-stage export--infer--analyse pipeline, a
-comprehensive multi-dataset evaluation, and an empirical characterisation of
-the over-correction threshold that maps the conditions under which LLM-based
-post-OCR correction helps, hurts, or has no effect.
+The central finding is the identification and formal characterisation of an
+\emph{over-correction threshold}: a baseline CER level ($e^*$) below which the
+LLM introduces more errors than it corrects. The threshold arises because the
+introduction rate (fraction of correct tokens incorrectly changed) is
+approximately constant across fonts, while the fix rate scales with error
+density. Empirically, $e^*$ lies at approximately 6--7\% CER for this
+model--engine pair: Akhbar (4.3\% baseline) is harmed by every strategy
+tested, while Simplified (7.9\%) benefits. Phase~4 is the only strategy that
+partially mitigates over-correction on Akhbar, because its diagnostic text
+explicitly targets the introduction rate rather than only providing correction
+guidance.
+
+The ablation study reveals that Phases~3 and~4 address orthogonal failure
+modes---Phase~3 targets the OCR engine's known confusion patterns (raising the
+fix rate), while Phase~4 targets the correction model's systematic biases
+(lowering the introduction rate)---and combine near-additively. On KHATT
+handwritten text, where 37\% of errors are segmentation failures (word merges
+and splits that destroy word boundaries), text-only correction is structurally
+limited regardless of prompt strategy, achieving only 3.6--5.0\% relative
+improvement despite a 44.6\% baseline CER.
+
+This thesis contributes: (1)~a formal over-correction threshold model with
+empirical estimation; (2)~a novel self-reflective prompting strategy for OCR
+correction achieving the strongest isolated result; (3)~a proof of
+complementarity between confusion-matrix and self-reflective augmentation;
+(4)~a comprehensive nine-dataset evaluation under aligned splits isolating
+font as the sole variable; (5)~a three-stage export--infer--analyse pipeline
+enabling GPU-free local reproducibility; and (6)~an empirical characterisation
+of the structural limits of text-only correction on handwritten text.

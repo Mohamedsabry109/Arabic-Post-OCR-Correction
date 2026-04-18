@@ -3,219 +3,201 @@
 \contentsline {chapter}{Dedication}{\if@rlmain \I {2}\else \textLR {2}\fi }{table.caption.1}%
 \contentsline {chapter}{Acknowledgements}{\if@rlmain \I {3}\else \textLR {3}\fi }{table.caption.1}%
 \contentsline {chapter}{Table of Contents}{\if@rlmain \I {4}\else \textLR {4}\fi }{table.caption.1}%
-\contentsline {chapter}{List of Tables}{\if@rlmain \I {12}\else \textLR {12}\fi }{table.caption.1}%
+\contentsline {chapter}{List of Tables}{\if@rlmain \I {11}\else \textLR {11}\fi }{table.caption.1}%
 \contentsline {chapter}{List of Figures}{\if@rlmain \I {14}\else \textLR {14}\fi }{table.caption.1}%
 \contentsline {chapter}{List of Symbols and Abbreviations}{\if@rlmain \I {15}\else \textLR {15}\fi }{table.caption.1}%
 \contentsline {chapter}{List of Publications}{\if@rlmain \I {17}\else \textLR {17}\fi }{table.0.1}%
 \contentsline {chapter}{Abstract}{\if@rlmain \I {18}\else \textLR {18}\fi }{Item.1}%
-\contentsline {chapter}{\numberline {1}\caseupper {Introduction}}{\if@rlmain \I {20}\else \textLR {20}\fi }{chapter.1}%
+\contentsline {chapter}{\numberline {1}\caseupper {Introduction}}{\if@rlmain \I {1}\else \textLR {1}\fi }{chapter.1}%
 \contentsline {section}{\numberline {\if@rl \I {1.1}\else \textLR {1.1}\fi }The Problem with Arabic OCR}{\if@rlmain \I {1}\else \textLR {1}\fi }{section.1.1}%
-\contentsline {section}{\numberline {\if@rl \I {2.1}\else \textLR {1.2}\fi }The Open-Source vs. Closed-Source Gap}{\if@rlmain \I {2}\else \textLR {2}\fi }{section.1.2}%
-\contentsline {section}{\numberline {\if@rl \I {3.1}\else \textLR {1.3}\fi }Post-OCR Correction as a Text-to-Text Task}{\if@rlmain \I {3}\else \textLR {3}\fi }{section.1.3}%
-\contentsline {section}{\numberline {\if@rl \I {4.1}\else \textLR {1.4}\fi }Research Questions}{\if@rlmain \I {4}\else \textLR {4}\fi }{section.1.4}%
-\contentsline {section}{\numberline {\if@rl \I {5.1}\else \textLR {1.5}\fi }Contributions}{\if@rlmain \I {5}\else \textLR {5}\fi }{section.1.5}%
-\contentsline {section}{\numberline {\if@rl \I {6.1}\else \textLR {1.6}\fi }Thesis Organisation}{\if@rlmain \I {6}\else \textLR {6}\fi }{section.1.6}%
-\contentsline {chapter}{\numberline {2}\caseupper {Background and Literature Review}}{\if@rlmain \I {8}\else \textLR {8}\fi }{chapter.2}%
-\contentsline {section}{\numberline {\if@rl \I {1.2}\else \textLR {2.1}\fi }The Arabic Language and Script}{\if@rlmain \I {9}\else \textLR {9}\fi }{section.2.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.1.2}\else \textLR {2.1.1}\fi }Linguistic Overview}{\if@rlmain \I {9}\else \textLR {9}\fi }{subsection.2.1.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.1.2}\else \textLR {2.1.2}\fi }The Arabic Script}{\if@rlmain \I {10}\else \textLR {10}\fi }{subsection.2.1.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.1.2}\else \textLR {2.1.3}\fi }Arabic Text in Computing}{\if@rlmain \I {12}\else \textLR {12}\fi }{subsection.2.1.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.1.2}\else \textLR {2.1.4}\fi }Challenges for Arabic NLP}{\if@rlmain \I {12}\else \textLR {12}\fi }{subsection.2.1.4}%
-\contentsline {section}{\numberline {\if@rl \I {2.2}\else \textLR {2.2}\fi }Optical Character Recognition}{\if@rlmain \I {13}\else \textLR {13}\fi }{section.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.2.2}\else \textLR {2.2.1}\fi }What Is OCR?}{\if@rlmain \I {13}\else \textLR {13}\fi }{subsection.2.2.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.2.2}\else \textLR {2.2.2}\fi }OCR Architectures}{\if@rlmain \I {14}\else \textLR {14}\fi }{subsection.2.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.2.2}\else \textLR {2.2.3}\fi }Arabic-Specific OCR Challenges}{\if@rlmain \I {15}\else \textLR {15}\fi }{subsection.2.2.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.2.2}\else \textLR {2.2.4}\fi }Qaari: The OCR Engine Used in This Study}{\if@rlmain \I {16}\else \textLR {16}\fi }{subsection.2.2.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.2.2}\else \textLR {2.2.5}\fi }Evaluation Metrics for OCR}{\if@rlmain \I {16}\else \textLR {16}\fi }{subsection.2.2.5}%
-\contentsline {section}{\numberline {\if@rl \I {3.2}\else \textLR {2.3}\fi }Large Language Models}{\if@rlmain \I {17}\else \textLR {17}\fi }{section.2.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.3.2}\else \textLR {2.3.1}\fi }From N-grams to Transformers}{\if@rlmain \I {17}\else \textLR {17}\fi }{subsection.2.3.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.3.2}\else \textLR {2.3.2}\fi }The Transformer Architecture}{\if@rlmain \I {18}\else \textLR {18}\fi }{subsection.2.3.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.3.2}\else \textLR {2.3.3}\fi }Pre-Training and Instruction Tuning}{\if@rlmain \I {19}\else \textLR {19}\fi }{subsection.2.3.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.3.2}\else \textLR {2.3.4}\fi }Qwen3-4B-Instruct-2507}{\if@rlmain \I {20}\else \textLR {20}\fi }{subsection.2.3.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.3.2}\else \textLR {2.3.5}\fi }Arabic LLMs and Arabic NLP with LLMs}{\if@rlmain \I {20}\else \textLR {20}\fi }{subsection.2.3.5}%
-\contentsline {section}{\numberline {\if@rl \I {4.2}\else \textLR {2.4}\fi }Prompt Engineering}{\if@rlmain \I {21}\else \textLR {21}\fi }{section.2.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.4.2}\else \textLR {2.4.1}\fi }Zero-Shot Prompting}{\if@rlmain \I {21}\else \textLR {21}\fi }{subsection.2.4.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.4.2}\else \textLR {2.4.2}\fi }Few-Shot Prompting}{\if@rlmain \I {22}\else \textLR {22}\fi }{subsection.2.4.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.4.2}\else \textLR {2.4.3}\fi }Chain-of-Thought and Instruction Augmentation}{\if@rlmain \I {23}\else \textLR {23}\fi }{subsection.2.4.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.4.2}\else \textLR {2.4.4}\fi }Retrieval-Augmented Generation}{\if@rlmain \I {23}\else \textLR {23}\fi }{subsection.2.4.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.4.2}\else \textLR {2.4.5}\fi }Self-Reflective and Meta-Cognitive Prompting}{\if@rlmain \I {24}\else \textLR {24}\fi }{subsection.2.4.5}%
-\contentsline {section}{\numberline {\if@rl \I {5.2}\else \textLR {2.5}\fi }Knowledge Sources Used in This Study}{\if@rlmain \I {25}\else \textLR {25}\fi }{section.2.5}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.5.2}\else \textLR {2.5.1}\fi }Confusion Matrix as a Knowledge Source}{\if@rlmain \I {25}\else \textLR {25}\fi }{subsection.2.5.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.5.2}\else \textLR {2.5.2}\fi }Arabic Orthographic Rules}{\if@rlmain \I {25}\else \textLR {25}\fi }{subsection.2.5.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.5.2}\else \textLR {2.5.3}\fi }The QALB Corpus}{\if@rlmain \I {26}\else \textLR {26}\fi }{subsection.2.5.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.5.2}\else \textLR {2.5.4}\fi }The OpenITI Corpus}{\if@rlmain \I {26}\else \textLR {26}\fi }{subsection.2.5.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.5.2}\else \textLR {2.5.5}\fi }CAMeL Tools}{\if@rlmain \I {27}\else \textLR {27}\fi }{subsection.2.5.5}%
-\contentsline {section}{\numberline {\if@rl \I {6.2}\else \textLR {2.6}\fi }Related Work on Post-OCR Correction}{\if@rlmain \I {28}\else \textLR {28}\fi }{section.2.6}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.6.2}\else \textLR {2.6.1}\fi }Classical Approaches}{\if@rlmain \I {28}\else \textLR {28}\fi }{subsection.2.6.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.6.2}\else \textLR {2.6.2}\fi }Neural Sequence-to-Sequence Correction}{\if@rlmain \I {28}\else \textLR {28}\fi }{subsection.2.6.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.6.2}\else \textLR {2.6.3}\fi }LLM-Based Post-OCR Correction}{\if@rlmain \I {29}\else \textLR {29}\fi }{subsection.2.6.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.6.2}\else \textLR {2.6.4}\fi }Arabic-Specific OCR Correction}{\if@rlmain \I {30}\else \textLR {30}\fi }{subsection.2.6.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.6.2}\else \textLR {2.6.5}\fi }Positioning of This Work}{\if@rlmain \I {31}\else \textLR {31}\fi }{subsection.2.6.5}%
-\contentsline {chapter}{\numberline {3}\caseupper {System Design and Datasets}}{\if@rlmain \I {32}\else \textLR {32}\fi }{chapter.3}%
-\contentsline {section}{\numberline {\if@rl \I {1.3}\else \textLR {3.1}\fi }Overall Architecture}{\if@rlmain \I {33}\else \textLR {33}\fi }{section.3.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.1.3}\else \textLR {3.1.1}\fi }Three-Stage Pipeline}{\if@rlmain \I {34}\else \textLR {34}\fi }{subsection.3.1.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.1.3}\else \textLR {3.1.2}\fi }JSONL Record Format}{\if@rlmain \I {35}\else \textLR {35}\fi }{subsection.3.1.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.1.3}\else \textLR {3.1.3}\fi }Resume and Force-Rerun Behaviour}{\if@rlmain \I {35}\else \textLR {35}\fi }{subsection.3.1.3}%
-\contentsline {section}{\numberline {\if@rl \I {2.3}\else \textLR {3.2}\fi }Datasets}{\if@rlmain \I {36}\else \textLR {36}\fi }{section.3.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi }PATS-A01 --- Printed Arabic Text Set}{\if@rlmain \I {36}\else \textLR {36}\fi }{subsection.3.2.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .1}Fonts and Coverage}{\if@rlmain \I {36}\else \textLR {36}\fi }{subsubsection.3.2.1.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .2}Ground-Truth Encoding}{\if@rlmain \I {37}\else \textLR {37}\fi }{subsubsection.3.2.1.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .3}Train/Validation Split}{\if@rlmain \I {37}\else \textLR {37}\fi }{subsubsection.3.2.1.3}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .4}Scope of This Thesis}{\if@rlmain \I {37}\else \textLR {37}\fi }{subsubsection.3.2.1.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.2.3}\else \textLR {3.2.2}\fi }KHATT --- Khatt Arabic Handwritten Text}{\if@rlmain \I {38}\else \textLR {38}\fi }{subsection.3.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.2.3}\else \textLR {3.2.3}\fi }Dataset Statistics}{\if@rlmain \I {38}\else \textLR {38}\fi }{subsection.3.2.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.2.3}\else \textLR {3.2.4}\fi }OCR Results Format}{\if@rlmain \I {38}\else \textLR {38}\fi }{subsection.3.2.4}%
-\contentsline {section}{\numberline {\if@rl \I {3.3}\else \textLR {3.3}\fi }Preprocessing and Evaluation}{\if@rlmain \I {39}\else \textLR {39}\fi }{section.3.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.3.3}\else \textLR {3.3.1}\fi }Text Normalisation}{\if@rlmain \I {39}\else \textLR {39}\fi }{subsection.3.3.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.3.3}\else \textLR {3.3.2}\fi }CER and WER Computation}{\if@rlmain \I {40}\else \textLR {40}\fi }{subsection.3.3.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.3.3}\else \textLR {3.3.2}\fi .1}Definitions}{\if@rlmain \I {40}\else \textLR {40}\fi }{subsubsection.3.3.2.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.3.3}\else \textLR {3.3.2}\fi .2}Implementation}{\if@rlmain \I {41}\else \textLR {41}\fi }{subsubsection.3.3.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.3.3}\else \textLR {3.3.3}\fi }Error Taxonomy Construction}{\if@rlmain \I {41}\else \textLR {41}\fi }{subsection.3.3.3}%
-\contentsline {section}{\numberline {\if@rl \I {4.3}\else \textLR {3.4}\fi }Knowledge Base Components}{\if@rlmain \I {42}\else \textLR {42}\fi }{section.3.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.4.3}\else \textLR {3.4.1}\fi }Confusion Matrix Loader}{\if@rlmain \I {43}\else \textLR {43}\fi }{subsection.3.4.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.4.3}\else \textLR {3.4.2}\fi }Rules Loader}{\if@rlmain \I {43}\else \textLR {43}\fi }{subsection.3.4.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.4.3}\else \textLR {3.4.3}\fi }QALB Loader and Filtering}{\if@rlmain \I {44}\else \textLR {44}\fi }{subsection.3.4.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.4.3}\else \textLR {3.4.4}\fi }OpenITI Corpus and RAG Index}{\if@rlmain \I {45}\else \textLR {45}\fi }{subsection.3.4.4}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {4.4.3}\else \textLR {3.4.4}\fi .1}Corpus Processing}{\if@rlmain \I {46}\else \textLR {46}\fi }{subsubsection.3.4.4.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {4.4.3}\else \textLR {3.4.4}\fi .2}FAISS Retrieval Index}{\if@rlmain \I {46}\else \textLR {46}\fi }{subsubsection.3.4.4.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.4.3}\else \textLR {3.4.5}\fi }CAMeL Tools Integration}{\if@rlmain \I {46}\else \textLR {46}\fi }{subsection.3.4.5}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {5.4.3}\else \textLR {3.4.5}\fi .1}MorphAnalyzer}{\if@rlmain \I {47}\else \textLR {47}\fi }{subsubsection.3.4.5.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {5.4.3}\else \textLR {3.4.5}\fi .2}WordValidator and the Revert Strategy}{\if@rlmain \I {47}\else \textLR {47}\fi }{subsubsection.3.4.5.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {6.4.3}\else \textLR {3.4.6}\fi }LLM Insights Loader}{\if@rlmain \I {48}\else \textLR {48}\fi }{subsection.3.4.6}%
-\contentsline {section}{\numberline {\if@rl \I {5.3}\else \textLR {3.5}\fi }The LLM Correction Module}{\if@rlmain \I {48}\else \textLR {48}\fi }{section.3.5}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.5.3}\else \textLR {3.5.1}\fi }Class Hierarchy}{\if@rlmain \I {48}\else \textLR {48}\fi }{subsection.3.5.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.5.3}\else \textLR {3.5.2}\fi }Generation Configuration}{\if@rlmain \I {49}\else \textLR {49}\fi }{subsection.3.5.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.5.3}\else \textLR {3.5.3}\fi }Response Extraction}{\if@rlmain \I {50}\else \textLR {50}\fi }{subsection.3.5.3}%
-\contentsline {section}{\numberline {\if@rl \I {6.3}\else \textLR {3.6}\fi }PromptBuilder}{\if@rlmain \I {51}\else \textLR {51}\fi }{section.3.6}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.6.3}\else \textLR {3.6.1}\fi }Prompt Design Philosophy}{\if@rlmain \I {51}\else \textLR {51}\fi }{subsection.3.6.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi }Prompt Variants}{\if@rlmain \I {52}\else \textLR {52}\fi }{subsection.3.6.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .1}Zero-Shot Prompt (p2v2)}{\if@rlmain \I {52}\else \textLR {52}\fi }{subsubsection.3.6.2.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .2}OCR-Aware Prompt (p3v1)}{\if@rlmain \I {53}\else \textLR {53}\fi }{subsubsection.3.6.2.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .3}Rule-Augmented Prompt (p4av1)}{\if@rlmain \I {53}\else \textLR {53}\fi }{subsubsection.3.6.2.3}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .4}Few-Shot Prompt (p4bv1)}{\if@rlmain \I {53}\else \textLR {53}\fi }{subsubsection.3.6.2.4}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .5}Self-Reflective Prompt (p4dv1)}{\if@rlmain \I {54}\else \textLR {54}\fi }{subsubsection.3.6.2.5}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .6}RAG Prompt (p5v1)}{\if@rlmain \I {54}\else \textLR {54}\fi }{subsubsection.3.6.2.6}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .7}Combined Prompt (p6v1)}{\if@rlmain \I {54}\else \textLR {54}\fi }{subsubsection.3.6.2.7}%
-\contentsline {chapter}{\numberline {4}\caseupper {Experimental Methodology}}{\if@rlmain \I {55}\else \textLR {55}\fi }{chapter.4}%
-\contentsline {section}{\numberline {\if@rl \I {1.4}\else \textLR {4.1}\fi }Experimental Design Principles}{\if@rlmain \I {55}\else \textLR {55}\fi }{section.4.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.1.4}\else \textLR {4.1.1}\fi }The Isolation Principle}{\if@rlmain \I {55}\else \textLR {55}\fi }{subsection.4.1.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.1.4}\else \textLR {4.1.2}\fi }Phase~2 as the Hub Baseline}{\if@rlmain \I {56}\else \textLR {56}\fi }{subsection.4.1.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.1.4}\else \textLR {4.1.3}\fi }Reproducibility Measures}{\if@rlmain \I {56}\else \textLR {56}\fi }{subsection.4.1.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.1.4}\else \textLR {4.1.4}\fi }Why Not Test All Combinations First}{\if@rlmain \I {57}\else \textLR {57}\fi }{subsection.4.1.4}%
-\contentsline {section}{\numberline {\if@rl \I {2.4}\else \textLR {4.2}\fi }Phase 1 --- Baseline and Error Taxonomy}{\if@rlmain \I {57}\else \textLR {57}\fi }{section.4.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.2.4}\else \textLR {4.2.1}\fi }Hypothesis}{\if@rlmain \I {57}\else \textLR {57}\fi }{subsection.4.2.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.2.4}\else \textLR {4.2.2}\fi }Method}{\if@rlmain \I {57}\else \textLR {57}\fi }{subsection.4.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.2.4}\else \textLR {4.2.3}\fi }Output Files}{\if@rlmain \I {58}\else \textLR {58}\fi }{subsection.4.2.3}%
-\contentsline {section}{\numberline {\if@rl \I {3.4}\else \textLR {4.3}\fi }Phase 2 --- Zero-Shot LLM Correction}{\if@rlmain \I {59}\else \textLR {59}\fi }{section.4.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.3.4}\else \textLR {4.3.1}\fi }Hypothesis}{\if@rlmain \I {59}\else \textLR {59}\fi }{subsection.4.3.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.3.4}\else \textLR {4.3.2}\fi }Method}{\if@rlmain \I {59}\else \textLR {59}\fi }{subsection.4.3.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.3.4}\else \textLR {4.3.3}\fi }Prompt Design Rationale}{\if@rlmain \I {59}\else \textLR {59}\fi }{subsection.4.3.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.3.4}\else \textLR {4.3.4}\fi }Output Files}{\if@rlmain \I {60}\else \textLR {60}\fi }{subsection.4.3.4}%
-\contentsline {section}{\numberline {\if@rl \I {4.4}\else \textLR {4.4}\fi }Phase 3 --- OCR-Aware Prompting}{\if@rlmain \I {60}\else \textLR {60}\fi }{section.4.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.4.4}\else \textLR {4.4.1}\fi }Hypothesis}{\if@rlmain \I {60}\else \textLR {60}\fi }{subsection.4.4.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.4.4}\else \textLR {4.4.2}\fi }Method}{\if@rlmain \I {61}\else \textLR {61}\fi }{subsection.4.4.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.4.4}\else \textLR {4.4.3}\fi }Variables}{\if@rlmain \I {61}\else \textLR {61}\fi }{subsection.4.4.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.4.4}\else \textLR {4.4.4}\fi }Output Files}{\if@rlmain \I {61}\else \textLR {61}\fi }{subsection.4.4.4}%
-\contentsline {section}{\numberline {\if@rl \I {5.4}\else \textLR {4.5}\fi }Phase 4A --- Rule-Augmented Prompting}{\if@rlmain \I {62}\else \textLR {62}\fi }{section.4.5}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.5.4}\else \textLR {4.5.1}\fi }Hypothesis}{\if@rlmain \I {62}\else \textLR {62}\fi }{subsection.4.5.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.5.4}\else \textLR {4.5.2}\fi }Method}{\if@rlmain \I {62}\else \textLR {62}\fi }{subsection.4.5.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.5.4}\else \textLR {4.5.3}\fi }Variables}{\if@rlmain \I {62}\else \textLR {62}\fi }{subsection.4.5.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.5.4}\else \textLR {4.5.4}\fi }Output Files}{\if@rlmain \I {63}\else \textLR {63}\fi }{subsection.4.5.4}%
-\contentsline {section}{\numberline {\if@rl \I {6.4}\else \textLR {4.6}\fi }Phase 4B --- Few-Shot Examples}{\if@rlmain \I {63}\else \textLR {63}\fi }{section.4.6}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.6.4}\else \textLR {4.6.1}\fi }Hypothesis}{\if@rlmain \I {63}\else \textLR {63}\fi }{subsection.4.6.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.6.4}\else \textLR {4.6.2}\fi }Method}{\if@rlmain \I {63}\else \textLR {63}\fi }{subsection.4.6.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.6.4}\else \textLR {4.6.3}\fi }Transfer Gap Discussion}{\if@rlmain \I {64}\else \textLR {64}\fi }{subsection.4.6.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.6.4}\else \textLR {4.6.4}\fi }Output Files}{\if@rlmain \I {64}\else \textLR {64}\fi }{subsection.4.6.4}%
-\contentsline {section}{\numberline {\if@rl \I {7.4}\else \textLR {4.7}\fi }Phase 4C --- CAMeL Morphological Post-Processing}{\if@rlmain \I {64}\else \textLR {64}\fi }{section.4.7}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.7.4}\else \textLR {4.7.1}\fi }Hypothesis}{\if@rlmain \I {64}\else \textLR {64}\fi }{subsection.4.7.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.7.4}\else \textLR {4.7.2}\fi }Method}{\if@rlmain \I {65}\else \textLR {65}\fi }{subsection.4.7.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.7.4}\else \textLR {4.7.3}\fi }Revert Strategy Rationale}{\if@rlmain \I {66}\else \textLR {66}\fi }{subsection.4.7.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.7.4}\else \textLR {4.7.4}\fi }Output Files}{\if@rlmain \I {66}\else \textLR {66}\fi }{subsection.4.7.4}%
-\contentsline {section}{\numberline {\if@rl \I {8.4}\else \textLR {4.8}\fi }Phase 4D --- Self-Reflective Prompting}{\if@rlmain \I {66}\else \textLR {66}\fi }{section.4.8}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.8.4}\else \textLR {4.8.1}\fi }Hypothesis}{\if@rlmain \I {66}\else \textLR {66}\fi }{subsection.4.8.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.8.4}\else \textLR {4.8.2}\fi }Three-Stage Method}{\if@rlmain \I {67}\else \textLR {67}\fi }{subsection.4.8.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.8.4}\else \textLR {4.8.2}\fi .1}Stage~1: Training-Split Analysis (analyze-train mode)}{\if@rlmain \I {67}\else \textLR {67}\fi }{subsubsection.4.8.2.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.8.4}\else \textLR {4.8.2}\fi .2}Insights Derived from Training Data}{\if@rlmain \I {67}\else \textLR {67}\fi }{subsubsection.4.8.2.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.8.4}\else \textLR {4.8.2}\fi .3}Stage~2: Export (export mode)}{\if@rlmain \I {68}\else \textLR {68}\fi }{subsubsection.4.8.2.3}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.8.4}\else \textLR {4.8.2}\fi .4}Stage~3: Analyze (analyze mode)}{\if@rlmain \I {69}\else \textLR {69}\fi }{subsubsection.4.8.2.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.8.4}\else \textLR {4.8.3}\fi }Output Files}{\if@rlmain \I {69}\else \textLR {69}\fi }{subsection.4.8.3}%
-\contentsline {section}{\numberline {\if@rl \I {9.4}\else \textLR {4.9}\fi }Phase 5 --- Retrieval-Augmented Generation}{\if@rlmain \I {70}\else \textLR {70}\fi }{section.4.9}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.9.4}\else \textLR {4.9.1}\fi }Hypothesis}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsection.4.9.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.9.4}\else \textLR {4.9.2}\fi }Method}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsection.4.9.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.9.4}\else \textLR {4.9.2}\fi .1}Build Mode}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsubsection.4.9.2.1}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.9.4}\else \textLR {4.9.2}\fi .2}Export Mode}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsubsection.4.9.2.2}%
-\contentsline {subsubsection}{\numberline {\if@rl \I {2.9.4}\else \textLR {4.9.2}\fi .3}Analyze Mode}{\if@rlmain \I {71}\else \textLR {71}\fi }{subsubsection.4.9.2.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.9.4}\else \textLR {4.9.3}\fi }Retrieval Quality}{\if@rlmain \I {71}\else \textLR {71}\fi }{subsection.4.9.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.9.4}\else \textLR {4.9.4}\fi }Output Files}{\if@rlmain \I {72}\else \textLR {72}\fi }{subsection.4.9.4}%
-\contentsline {section}{\numberline {\if@rl \I {10.4}\else \textLR {4.10}\fi }Phase 6 --- Combinations and Ablation}{\if@rlmain \I {72}\else \textLR {72}\fi }{section.4.10}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.10.4}\else \textLR {4.10.1}\fi }Purpose}{\if@rlmain \I {72}\else \textLR {72}\fi }{subsection.4.10.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.10.4}\else \textLR {4.10.2}\fi }Combinations Tested}{\if@rlmain \I {72}\else \textLR {72}\fi }{subsection.4.10.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.10.4}\else \textLR {4.10.3}\fi }Ablation Design}{\if@rlmain \I {72}\else \textLR {72}\fi }{subsection.4.10.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.10.4}\else \textLR {4.10.4}\fi }Statistical Testing}{\if@rlmain \I {73}\else \textLR {73}\fi }{subsection.4.10.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.10.4}\else \textLR {4.10.5}\fi }Output Files}{\if@rlmain \I {74}\else \textLR {74}\fi }{subsection.4.10.5}%
-\contentsline {section}{\numberline {\if@rl \I {11.4}\else \textLR {4.11}\fi }Phase Summary}{\if@rlmain \I {74}\else \textLR {74}\fi }{section.4.11}%
-\contentsline {chapter}{\numberline {5}\caseupper {Results and Analysis}}{\if@rlmain \I {75}\else \textLR {75}\fi }{chapter.5}%
-\contentsline {section}{\numberline {\if@rl \I {1.5}\else \textLR {5.1}\fi }Phase 1 Results --- OCR Error Characterisation}{\if@rlmain \I {75}\else \textLR {75}\fi }{section.5.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.1.5}\else \textLR {5.1.1}\fi }Aggregate Error Rates}{\if@rlmain \I {75}\else \textLR {75}\fi }{subsection.5.1.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.1.5}\else \textLR {5.1.2}\fi }Error Type Distribution}{\if@rlmain \I {76}\else \textLR {76}\fi }{subsection.5.1.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.1.5}\else \textLR {5.1.3}\fi }Confusion Matrix Analysis}{\if@rlmain \I {77}\else \textLR {77}\fi }{subsection.5.1.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.1.5}\else \textLR {5.1.4}\fi }Morphological Validity Analysis}{\if@rlmain \I {78}\else \textLR {78}\fi }{subsection.5.1.4}%
-\contentsline {section}{\numberline {\if@rl \I {2.5}\else \textLR {5.2}\fi }Phase 2 Results --- Zero-Shot LLM Baseline}{\if@rlmain \I {79}\else \textLR {79}\fi }{section.5.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.2.5}\else \textLR {5.2.1}\fi }Aggregate Performance}{\if@rlmain \I {79}\else \textLR {79}\fi }{subsection.5.2.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.2.5}\else \textLR {5.2.2}\fi }Comparison to Phase 1}{\if@rlmain \I {79}\else \textLR {79}\fi }{subsection.5.2.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {2.2.5}\else \textLR {5.2.2}\fi .0.1}Relative to all-samples OCR (CER 17.01\%).}{\if@rlmain \I {79}\else \textLR {79}\fi }{paragraph.5.2.2.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {2.2.5}\else \textLR {5.2.2}\fi .0.2}Relative to normal-samples OCR (CER 1.37\%).}{\if@rlmain \I {80}\else \textLR {80}\fi }{paragraph.5.2.2.0.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.2.5}\else \textLR {5.2.3}\fi }Per-Sample Analysis}{\if@rlmain \I {80}\else \textLR {80}\fi }{subsection.5.2.3}%
-\contentsline {section}{\numberline {\if@rl \I {3.5}\else \textLR {5.3}\fi }Phases 3--5 Results --- Knowledge Augmentation Evaluation}{\if@rlmain \I {81}\else \textLR {81}\fi }{section.5.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.3.5}\else \textLR {5.3.1}\fi }Phase 3 --- Confusion Matrix Injection}{\if@rlmain \I {81}\else \textLR {81}\fi }{subsection.5.3.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.3.5}\else \textLR {5.3.2}\fi }Phase 4A --- Rule-Augmented Prompting}{\if@rlmain \I {82}\else \textLR {82}\fi }{subsection.5.3.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.3.5}\else \textLR {5.3.3}\fi }Phase 4B --- Few-Shot Examples}{\if@rlmain \I {83}\else \textLR {83}\fi }{subsection.5.3.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.3.5}\else \textLR {5.3.4}\fi }Phase 4C --- CAMeL Morphological Post-Processing}{\if@rlmain \I {84}\else \textLR {84}\fi }{subsection.5.3.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {5.3.5}\else \textLR {5.3.5}\fi }Phase 4D --- Self-Reflective Prompting}{\if@rlmain \I {85}\else \textLR {85}\fi }{subsection.5.3.5}%
-\contentsline {subsection}{\numberline {\if@rl \I {6.3.5}\else \textLR {5.3.6}\fi }Phase 5 --- Retrieval-Augmented Generation}{\if@rlmain \I {86}\else \textLR {86}\fi }{subsection.5.3.6}%
-\contentsline {section}{\numberline {\if@rl \I {4.5}\else \textLR {5.4}\fi }Phase 6 Results --- Combinations and Ablation}{\if@rlmain \I {88}\else \textLR {88}\fi }{section.5.4}%
-\contentsline {section}{\numberline {\if@rl \I {5.5}\else \textLR {5.5}\fi }Summary and Ranking}{\if@rlmain \I {89}\else \textLR {89}\fi }{section.5.5}%
-\contentsline {chapter}{\numberline {6}\caseupper {Discussion and Conclusion}}{\if@rlmain \I {91}\else \textLR {91}\fi }{chapter.6}%
-\contentsline {section}{\numberline {\if@rl \I {1.6}\else \textLR {6.1}\fi }Revisiting the Research Questions}{\if@rlmain \I {91}\else \textLR {91}\fi }{section.6.1}%
-\contentsline {section}{\numberline {\if@rl \I {2.6}\else \textLR {6.2}\fi }The Over-Correction Problem}{\if@rlmain \I {96}\else \textLR {96}\fi }{section.6.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.2.6}\else \textLR {6.2.1}\fi }What Over-Correction Is}{\if@rlmain \I {96}\else \textLR {96}\fi }{subsection.6.2.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.2.6}\else \textLR {6.2.2}\fi }Why Over-Correction Happens}{\if@rlmain \I {97}\else \textLR {97}\fi }{subsection.6.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.2.6}\else \textLR {6.2.3}\fi }Why Augmentation Makes Over-Correction Worse}{\if@rlmain \I {98}\else \textLR {98}\fi }{subsection.6.2.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.2.6}\else \textLR {6.2.4}\fi }Connection to the Broader Literature}{\if@rlmain \I {98}\else \textLR {98}\fi }{subsection.6.2.4}%
-\contentsline {section}{\numberline {\if@rl \I {3.6}\else \textLR {6.3}\fi }When Would Augmentation Help?}{\if@rlmain \I {99}\else \textLR {99}\fi }{section.6.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.3.6}\else \textLR {6.3.0}\fi .0.1}Higher baseline CER.}{\if@rlmain \I {99}\else \textLR {99}\fi }{paragraph.6.3.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.3.6}\else \textLR {6.3.0}\fi .0.2}Domain-matched retrieval corpus.}{\if@rlmain \I {100}\else \textLR {100}\fi }{paragraph.6.3.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.3.6}\else \textLR {6.3.0}\fi .0.3}OCR-native few-shot pairs.}{\if@rlmain \I {100}\else \textLR {100}\fi }{paragraph.6.3.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.3.6}\else \textLR {6.3.0}\fi .0.4}Larger or fine-tuned models.}{\if@rlmain \I {100}\else \textLR {100}\fi }{paragraph.6.3.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.3.6}\else \textLR {6.3.0}\fi .0.5}Confidence-based selective correction.}{\if@rlmain \I {100}\else \textLR {100}\fi }{paragraph.6.3.0.0.5}%
-\contentsline {section}{\numberline {\if@rl \I {4.6}\else \textLR {6.4}\fi }Implications for System Design}{\if@rlmain \I {101}\else \textLR {101}\fi }{section.6.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.4.6}\else \textLR {6.4.0}\fi .0.1}For high-quality typewritten Arabic OCR: use zero-shot, do not augment.}{\if@rlmain \I {101}\else \textLR {101}\fi }{paragraph.6.4.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.4.6}\else \textLR {6.4.0}\fi .0.2}Apply LLM correction selectively, not universally.}{\if@rlmain \I {101}\else \textLR {101}\fi }{paragraph.6.4.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.4.6}\else \textLR {6.4.0}\fi .0.3}The LLM is a safety net for runaway artefacts.}{\if@rlmain \I {101}\else \textLR {101}\fi }{paragraph.6.4.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.4.6}\else \textLR {6.4.0}\fi .0.4}Include CAMeL post-processing as a zero-cost defensive layer.}{\if@rlmain \I {102}\else \textLR {102}\fi }{paragraph.6.4.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.4.6}\else \textLR {6.4.0}\fi .0.5}Do not deploy RAG unless the retrieval corpus is domain-matched.}{\if@rlmain \I {102}\else \textLR {102}\fi }{paragraph.6.4.0.0.5}%
-\contentsline {section}{\numberline {\if@rl \I {5.6}\else \textLR {6.5}\fi }Limitations}{\if@rlmain \I {102}\else \textLR {102}\fi }{section.6.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.1}Single dataset.}{\if@rlmain \I {102}\else \textLR {102}\fi }{paragraph.6.5.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.2}Single OCR engine.}{\if@rlmain \I {102}\else \textLR {102}\fi }{paragraph.6.5.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.3}Single LLM.}{\if@rlmain \I {103}\else \textLR {103}\fi }{paragraph.6.5.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.4}No statistical significance testing on isolated phases.}{\if@rlmain \I {103}\else \textLR {103}\fi }{paragraph.6.5.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.5}Phase 6 not yet executed.}{\if@rlmain \I {103}\else \textLR {103}\fi }{paragraph.6.5.0.0.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.6}QALB transfer gap.}{\if@rlmain \I {103}\else \textLR {103}\fi }{paragraph.6.5.0.0.6}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.7}Classical corpus for RAG.}{\if@rlmain \I {103}\else \textLR {103}\fi }{paragraph.6.5.0.0.7}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.8}Diacritic stripping in evaluation.}{\if@rlmain \I {104}\else \textLR {104}\fi }{paragraph.6.5.0.0.8}%
-\contentsline {section}{\numberline {\if@rl \I {6.6}\else \textLR {6.6}\fi }Future Work}{\if@rlmain \I {104}\else \textLR {104}\fi }{section.6.6}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.1}Evaluate on KHATT and all PATS-A01 fonts.}{\if@rlmain \I {104}\else \textLR {104}\fi }{paragraph.6.6.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.2}Generate OCR-native few-shot pairs for Phase 4B.}{\if@rlmain \I {104}\else \textLR {104}\fi }{paragraph.6.6.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.3}Build a domain-matched retrieval corpus for Phase 5.}{\if@rlmain \I {104}\else \textLR {104}\fi }{paragraph.6.6.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.4}Fine-tune Qwen3-4B for conservative OCR correction.}{\if@rlmain \I {105}\else \textLR {105}\fi }{paragraph.6.6.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.5}Test with larger models.}{\if@rlmain \I {105}\else \textLR {105}\fi }{paragraph.6.6.0.0.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.6}Study over-correction as a standalone research question.}{\if@rlmain \I {105}\else \textLR {105}\fi }{paragraph.6.6.0.0.6}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.7}Confidence-guided selective correction.}{\if@rlmain \I {105}\else \textLR {105}\fi }{paragraph.6.6.0.0.7}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.8}Extension to dialectal Arabic OCR.}{\if@rlmain \I {106}\else \textLR {106}\fi }{paragraph.6.6.0.0.8}%
-\contentsline {section}{\numberline {\if@rl \I {7.6}\else \textLR {6.7}\fi }Conclusion}{\if@rlmain \I {106}\else \textLR {106}\fi }{section.6.7}%
+\contentsline {section}{\numberline {\if@rl \I {2.1}\else \textLR {1.2}\fi }The Open-Source vs.\ Closed-Source Gap}{\if@rlmain \I {2}\else \textLR {2}\fi }{section.1.2}%
+\contentsline {section}{\numberline {\if@rl \I {3.1}\else \textLR {1.3}\fi }Post-OCR Correction as a Text-to-Text Task}{\if@rlmain \I {4}\else \textLR {4}\fi }{section.1.3}%
+\contentsline {section}{\numberline {\if@rl \I {4.1}\else \textLR {1.4}\fi }Motivation for a Knowledge-Augmented Approach}{\if@rlmain \I {5}\else \textLR {5}\fi }{section.1.4}%
+\contentsline {section}{\numberline {\if@rl \I {5.1}\else \textLR {1.5}\fi }Research Questions}{\if@rlmain \I {6}\else \textLR {6}\fi }{section.1.5}%
+\contentsline {section}{\numberline {\if@rl \I {6.1}\else \textLR {1.6}\fi }Contributions}{\if@rlmain \I {7}\else \textLR {7}\fi }{section.1.6}%
+\contentsline {section}{\numberline {\if@rl \I {7.1}\else \textLR {1.7}\fi }Scope and Boundaries}{\if@rlmain \I {9}\else \textLR {9}\fi }{section.1.7}%
+\contentsline {section}{\numberline {\if@rl \I {8.1}\else \textLR {1.8}\fi }Thesis Organisation}{\if@rlmain \I {10}\else \textLR {10}\fi }{section.1.8}%
+\contentsline {chapter}{\numberline {2}\caseupper {Background and Literature Review}}{\if@rlmain \I {12}\else \textLR {12}\fi }{chapter.2}%
+\contentsline {section}{\numberline {\if@rl \I {1.2}\else \textLR {2.1}\fi }The Arabic Language and Script}{\if@rlmain \I {13}\else \textLR {13}\fi }{section.2.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.1.2}\else \textLR {2.1.1}\fi }Linguistic Overview}{\if@rlmain \I {13}\else \textLR {13}\fi }{subsection.2.1.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.1.2}\else \textLR {2.1.2}\fi }The Arabic Script}{\if@rlmain \I {14}\else \textLR {14}\fi }{subsection.2.1.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.1.2}\else \textLR {2.1.3}\fi }Arabic Text in Computing}{\if@rlmain \I {16}\else \textLR {16}\fi }{subsection.2.1.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.1.2}\else \textLR {2.1.4}\fi }Challenges for Arabic NLP}{\if@rlmain \I {16}\else \textLR {16}\fi }{subsection.2.1.4}%
+\contentsline {section}{\numberline {\if@rl \I {2.2}\else \textLR {2.2}\fi }Optical Character Recognition}{\if@rlmain \I {17}\else \textLR {17}\fi }{section.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.2.2}\else \textLR {2.2.1}\fi }What Is OCR?}{\if@rlmain \I {17}\else \textLR {17}\fi }{subsection.2.2.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.2.2}\else \textLR {2.2.2}\fi }OCR Architectures}{\if@rlmain \I {18}\else \textLR {18}\fi }{subsection.2.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.2.2}\else \textLR {2.2.3}\fi }Arabic-Specific OCR Challenges}{\if@rlmain \I {19}\else \textLR {19}\fi }{subsection.2.2.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.2.2}\else \textLR {2.2.4}\fi }Qaari: The OCR Engine Used in This Study}{\if@rlmain \I {20}\else \textLR {20}\fi }{subsection.2.2.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.2.2}\else \textLR {2.2.5}\fi }Evaluation Metrics for OCR}{\if@rlmain \I {20}\else \textLR {20}\fi }{subsection.2.2.5}%
+\contentsline {section}{\numberline {\if@rl \I {3.2}\else \textLR {2.3}\fi }Large Language Models}{\if@rlmain \I {21}\else \textLR {21}\fi }{section.2.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.3.2}\else \textLR {2.3.1}\fi }Why LLMs for Post-OCR Correction}{\if@rlmain \I {21}\else \textLR {21}\fi }{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.3.2}\else \textLR {2.3.2}\fi }From N-grams to Transformers}{\if@rlmain \I {23}\else \textLR {23}\fi }{subsection.2.3.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.3.2}\else \textLR {2.3.3}\fi }The Transformer Architecture}{\if@rlmain \I {25}\else \textLR {25}\fi }{subsection.2.3.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.3.2}\else \textLR {2.3.4}\fi }Pre-Training and Instruction Tuning}{\if@rlmain \I {26}\else \textLR {26}\fi }{subsection.2.3.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.3.2}\else \textLR {2.3.5}\fi }Qwen3-4B-Instruct-2507}{\if@rlmain \I {28}\else \textLR {28}\fi }{subsection.2.3.5}%
+\contentsline {subsection}{\numberline {\if@rl \I {6.3.2}\else \textLR {2.3.6}\fi }Arabic LLMs and Arabic NLP with LLMs}{\if@rlmain \I {28}\else \textLR {28}\fi }{subsection.2.3.6}%
+\contentsline {section}{\numberline {\if@rl \I {4.2}\else \textLR {2.4}\fi }Prompt Engineering}{\if@rlmain \I {29}\else \textLR {29}\fi }{section.2.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.4.2}\else \textLR {2.4.1}\fi }Zero-Shot Prompting}{\if@rlmain \I {29}\else \textLR {29}\fi }{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.4.2}\else \textLR {2.4.2}\fi }Few-Shot Prompting}{\if@rlmain \I {30}\else \textLR {30}\fi }{subsection.2.4.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.4.2}\else \textLR {2.4.3}\fi }Chain-of-Thought and Instruction Augmentation}{\if@rlmain \I {31}\else \textLR {31}\fi }{subsection.2.4.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.4.2}\else \textLR {2.4.4}\fi }Retrieval-Augmented Generation}{\if@rlmain \I {31}\else \textLR {31}\fi }{subsection.2.4.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.4.2}\else \textLR {2.4.5}\fi }Self-Reflective and Meta-Cognitive Prompting}{\if@rlmain \I {32}\else \textLR {32}\fi }{subsection.2.4.5}%
+\contentsline {section}{\numberline {\if@rl \I {5.2}\else \textLR {2.5}\fi }Knowledge Sources Used in This Study}{\if@rlmain \I {33}\else \textLR {33}\fi }{section.2.5}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.5.2}\else \textLR {2.5.1}\fi }Confusion Matrix as a Knowledge Source}{\if@rlmain \I {33}\else \textLR {33}\fi }{subsection.2.5.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.5.2}\else \textLR {2.5.2}\fi }Arabic Orthographic Rules}{\if@rlmain \I {33}\else \textLR {33}\fi }{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.5.2}\else \textLR {2.5.3}\fi }The QALB Corpus}{\if@rlmain \I {34}\else \textLR {34}\fi }{subsection.2.5.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.5.2}\else \textLR {2.5.4}\fi }The OpenITI Corpus}{\if@rlmain \I {34}\else \textLR {34}\fi }{subsection.2.5.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.5.2}\else \textLR {2.5.5}\fi }CAMeL Tools}{\if@rlmain \I {35}\else \textLR {35}\fi }{subsection.2.5.5}%
+\contentsline {section}{\numberline {\if@rl \I {6.2}\else \textLR {2.6}\fi }Related Work on Post-OCR Correction}{\if@rlmain \I {36}\else \textLR {36}\fi }{section.2.6}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.6.2}\else \textLR {2.6.1}\fi }Classical Approaches}{\if@rlmain \I {36}\else \textLR {36}\fi }{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.6.2}\else \textLR {2.6.2}\fi }Neural Sequence-to-Sequence Correction}{\if@rlmain \I {36}\else \textLR {36}\fi }{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.6.2}\else \textLR {2.6.3}\fi }LLM-Based Post-OCR Correction}{\if@rlmain \I {37}\else \textLR {37}\fi }{subsection.2.6.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.6.2}\else \textLR {2.6.4}\fi }Arabic-Specific OCR Correction}{\if@rlmain \I {38}\else \textLR {38}\fi }{subsection.2.6.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.6.2}\else \textLR {2.6.5}\fi }Positioning of This Work}{\if@rlmain \I {39}\else \textLR {39}\fi }{subsection.2.6.5}%
+\contentsline {chapter}{\numberline {3}\caseupper {System Design and Datasets}}{\if@rlmain \I {40}\else \textLR {40}\fi }{chapter.3}%
+\contentsline {section}{\numberline {\if@rl \I {1.3}\else \textLR {3.1}\fi }Overall Architecture}{\if@rlmain \I {41}\else \textLR {41}\fi }{section.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.1.3}\else \textLR {3.1.1}\fi }Three-Stage Pipeline}{\if@rlmain \I {42}\else \textLR {42}\fi }{subsection.3.1.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.1.3}\else \textLR {3.1.2}\fi }JSONL Record Format}{\if@rlmain \I {43}\else \textLR {43}\fi }{subsection.3.1.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.1.3}\else \textLR {3.1.3}\fi }Resume and Force-Rerun Behaviour}{\if@rlmain \I {43}\else \textLR {43}\fi }{subsection.3.1.3}%
+\contentsline {section}{\numberline {\if@rl \I {2.3}\else \textLR {3.2}\fi }Datasets}{\if@rlmain \I {44}\else \textLR {44}\fi }{section.3.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi }PATS-A01 --- Printed Arabic Text Set}{\if@rlmain \I {44}\else \textLR {44}\fi }{subsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .1}Fonts and Coverage}{\if@rlmain \I {44}\else \textLR {44}\fi }{subsubsection.3.2.1.1}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .2}Ground-Truth Encoding}{\if@rlmain \I {45}\else \textLR {45}\fi }{subsubsection.3.2.1.2}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .3}Train/Validation Split}{\if@rlmain \I {45}\else \textLR {45}\fi }{subsubsection.3.2.1.3}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {1.2.3}\else \textLR {3.2.1}\fi .4}Scope of This Thesis}{\if@rlmain \I {46}\else \textLR {46}\fi }{subsubsection.3.2.1.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.2.3}\else \textLR {3.2.2}\fi }KHATT --- Khatt Arabic Handwritten Text}{\if@rlmain \I {46}\else \textLR {46}\fi }{subsection.3.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.2.3}\else \textLR {3.2.3}\fi }Dataset Statistics}{\if@rlmain \I {47}\else \textLR {47}\fi }{subsection.3.2.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.2.3}\else \textLR {3.2.4}\fi }OCR Results Format}{\if@rlmain \I {47}\else \textLR {47}\fi }{subsection.3.2.4}%
+\contentsline {section}{\numberline {\if@rl \I {3.3}\else \textLR {3.3}\fi }Preprocessing and Evaluation}{\if@rlmain \I {48}\else \textLR {48}\fi }{section.3.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.3.3}\else \textLR {3.3.1}\fi }Text Normalisation}{\if@rlmain \I {48}\else \textLR {48}\fi }{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.3.3}\else \textLR {3.3.2}\fi }CER and WER Computation}{\if@rlmain \I {49}\else \textLR {49}\fi }{subsection.3.3.2}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.3.3}\else \textLR {3.3.2}\fi .1}Definitions}{\if@rlmain \I {49}\else \textLR {49}\fi }{subsubsection.3.3.2.1}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.3.3}\else \textLR {3.3.2}\fi .2}Implementation}{\if@rlmain \I {50}\else \textLR {50}\fi }{subsubsection.3.3.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.3.3}\else \textLR {3.3.3}\fi }Error Taxonomy Construction}{\if@rlmain \I {50}\else \textLR {50}\fi }{subsection.3.3.3}%
+\contentsline {section}{\numberline {\if@rl \I {4.3}\else \textLR {3.4}\fi }Knowledge Base Components}{\if@rlmain \I {50}\else \textLR {50}\fi }{section.3.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.4.3}\else \textLR {3.4.1}\fi }Confusion Matrix Loader}{\if@rlmain \I {51}\else \textLR {51}\fi }{subsection.3.4.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.4.3}\else \textLR {3.4.2}\fi }Word Error Pairs Loader}{\if@rlmain \I {52}\else \textLR {52}\fi }{subsection.3.4.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.4.3}\else \textLR {3.4.3}\fi }CAMeL Tools Integration}{\if@rlmain \I {53}\else \textLR {53}\fi }{subsection.3.4.3}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {3.4.3}\else \textLR {3.4.3}\fi .1}MorphAnalyzer}{\if@rlmain \I {53}\else \textLR {53}\fi }{subsubsection.3.4.3.1}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {3.4.3}\else \textLR {3.4.3}\fi .2}WordValidator and the Revert Strategy}{\if@rlmain \I {53}\else \textLR {53}\fi }{subsubsection.3.4.3.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.4.3}\else \textLR {3.4.4}\fi }LLM Insights Loader}{\if@rlmain \I {54}\else \textLR {54}\fi }{subsection.3.4.4}%
+\contentsline {section}{\numberline {\if@rl \I {5.3}\else \textLR {3.5}\fi }The LLM Correction Module}{\if@rlmain \I {55}\else \textLR {55}\fi }{section.3.5}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.5.3}\else \textLR {3.5.1}\fi }Class Hierarchy}{\if@rlmain \I {55}\else \textLR {55}\fi }{subsection.3.5.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.5.3}\else \textLR {3.5.2}\fi }Generation Configuration}{\if@rlmain \I {56}\else \textLR {56}\fi }{subsection.3.5.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.5.3}\else \textLR {3.5.3}\fi }Response Extraction}{\if@rlmain \I {57}\else \textLR {57}\fi }{subsection.3.5.3}%
+\contentsline {section}{\numberline {\if@rl \I {6.3}\else \textLR {3.6}\fi }PromptBuilder}{\if@rlmain \I {57}\else \textLR {57}\fi }{section.3.6}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.6.3}\else \textLR {3.6.1}\fi }Prompt Design Philosophy}{\if@rlmain \I {58}\else \textLR {58}\fi }{subsection.3.6.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi }Prompt Variants}{\if@rlmain \I {58}\else \textLR {58}\fi }{subsection.3.6.2}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .1}Zero-Shot Prompt (p2v2)}{\if@rlmain \I {58}\else \textLR {58}\fi }{subsubsection.3.6.2.1}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .2}OCR-Aware Prompt (p3v1)}{\if@rlmain \I {59}\else \textLR {59}\fi }{subsubsection.3.6.2.2}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .3}Self-Reflective Prompt (p4v3)}{\if@rlmain \I {59}\else \textLR {59}\fi }{subsubsection.3.6.2.3}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.6.3}\else \textLR {3.6.2}\fi .4}Combined Prompt (p6v1)}{\if@rlmain \I {60}\else \textLR {60}\fi }{subsubsection.3.6.2.4}%
+\contentsline {chapter}{\numberline {4}\caseupper {Experimental Methodology}}{\if@rlmain \I {61}\else \textLR {61}\fi }{chapter.4}%
+\contentsline {section}{\numberline {\if@rl \I {1.4}\else \textLR {4.1}\fi }Experimental Design Principles}{\if@rlmain \I {61}\else \textLR {61}\fi }{section.4.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.1.4}\else \textLR {4.1.1}\fi }The Isolation Principle}{\if@rlmain \I {61}\else \textLR {61}\fi }{subsection.4.1.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.1.4}\else \textLR {4.1.2}\fi }Phase~2 as the Hub Baseline}{\if@rlmain \I {62}\else \textLR {62}\fi }{subsection.4.1.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.1.4}\else \textLR {4.1.3}\fi }Reproducibility Measures}{\if@rlmain \I {62}\else \textLR {62}\fi }{subsection.4.1.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.1.4}\else \textLR {4.1.4}\fi }Why Not Test All Combinations First}{\if@rlmain \I {63}\else \textLR {63}\fi }{subsection.4.1.4}%
+\contentsline {section}{\numberline {\if@rl \I {2.4}\else \textLR {4.2}\fi }Phase 1 --- Baseline and Error Taxonomy}{\if@rlmain \I {63}\else \textLR {63}\fi }{section.4.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.2.4}\else \textLR {4.2.1}\fi }Hypothesis}{\if@rlmain \I {63}\else \textLR {63}\fi }{subsection.4.2.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.2.4}\else \textLR {4.2.2}\fi }Method}{\if@rlmain \I {64}\else \textLR {64}\fi }{subsection.4.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.2.4}\else \textLR {4.2.3}\fi }Output Files}{\if@rlmain \I {65}\else \textLR {65}\fi }{subsection.4.2.3}%
+\contentsline {section}{\numberline {\if@rl \I {3.4}\else \textLR {4.3}\fi }Phase 2 --- Zero-Shot LLM Correction}{\if@rlmain \I {66}\else \textLR {66}\fi }{section.4.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.3.4}\else \textLR {4.3.1}\fi }Hypothesis}{\if@rlmain \I {66}\else \textLR {66}\fi }{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.3.4}\else \textLR {4.3.2}\fi }Method}{\if@rlmain \I {66}\else \textLR {66}\fi }{subsection.4.3.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.3.4}\else \textLR {4.3.3}\fi }Prompt Design Rationale}{\if@rlmain \I {67}\else \textLR {67}\fi }{subsection.4.3.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.3.4}\else \textLR {4.3.4}\fi }Output Files}{\if@rlmain \I {67}\else \textLR {67}\fi }{subsection.4.3.4}%
+\contentsline {section}{\numberline {\if@rl \I {4.4}\else \textLR {4.4}\fi }Phase 3 --- OCR-Aware Prompting}{\if@rlmain \I {68}\else \textLR {68}\fi }{section.4.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.4.4}\else \textLR {4.4.1}\fi }Hypothesis}{\if@rlmain \I {68}\else \textLR {68}\fi }{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.4.4}\else \textLR {4.4.2}\fi }Method}{\if@rlmain \I {68}\else \textLR {68}\fi }{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.4.4}\else \textLR {4.4.3}\fi }Variables}{\if@rlmain \I {69}\else \textLR {69}\fi }{subsection.4.4.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.4.4}\else \textLR {4.4.4}\fi }Design Rationale}{\if@rlmain \I {69}\else \textLR {69}\fi }{subsection.4.4.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.4.4}\else \textLR {4.4.5}\fi }Output Files}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsection.4.4.5}%
+\contentsline {section}{\numberline {\if@rl \I {5.4}\else \textLR {4.5}\fi }Phase 4 --- Self-Reflective Prompting}{\if@rlmain \I {70}\else \textLR {70}\fi }{section.4.5}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.5.4}\else \textLR {4.5.1}\fi }Hypothesis}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.5.4}\else \textLR {4.5.2}\fi }Three-Stage Method}{\if@rlmain \I {70}\else \textLR {70}\fi }{subsection.4.5.2}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.5.4}\else \textLR {4.5.2}\fi .1}Stage~1: Training-Split Analysis}{\if@rlmain \I {71}\else \textLR {71}\fi }{subsubsection.4.5.2.1}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.5.4}\else \textLR {4.5.2}\fi .2}Insights Derived from Training Data}{\if@rlmain \I {72}\else \textLR {72}\fi }{subsubsection.4.5.2.2}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.5.4}\else \textLR {4.5.2}\fi .3}Stage~2: Export}{\if@rlmain \I {73}\else \textLR {73}\fi }{subsubsection.4.5.2.3}%
+\contentsline {subsubsection}{\numberline {\if@rl \I {2.5.4}\else \textLR {4.5.2}\fi .4}Stage~3: Analyse}{\if@rlmain \I {73}\else \textLR {73}\fi }{subsubsection.4.5.2.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.5.4}\else \textLR {4.5.3}\fi }Variables}{\if@rlmain \I {74}\else \textLR {74}\fi }{subsection.4.5.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.5.4}\else \textLR {4.5.4}\fi }No-Leakage Guarantee}{\if@rlmain \I {74}\else \textLR {74}\fi }{subsection.4.5.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.5.4}\else \textLR {4.5.5}\fi }Output Files}{\if@rlmain \I {74}\else \textLR {74}\fi }{subsection.4.5.5}%
+\contentsline {section}{\numberline {\if@rl \I {6.4}\else \textLR {4.6}\fi }Phase 5 --- CAMeL Morphological Post-Processing}{\if@rlmain \I {75}\else \textLR {75}\fi }{section.4.6}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.6.4}\else \textLR {4.6.1}\fi }Hypothesis}{\if@rlmain \I {75}\else \textLR {75}\fi }{subsection.4.6.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.6.4}\else \textLR {4.6.2}\fi }Method}{\if@rlmain \I {75}\else \textLR {75}\fi }{subsection.4.6.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.6.4}\else \textLR {4.6.3}\fi }Implementation Note: Position-Indexed Revert}{\if@rlmain \I {76}\else \textLR {76}\fi }{subsection.4.6.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.6.4}\else \textLR {4.6.4}\fi }Revert Strategy Rationale}{\if@rlmain \I {77}\else \textLR {77}\fi }{subsection.4.6.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.6.4}\else \textLR {4.6.5}\fi }Expected Limitations}{\if@rlmain \I {77}\else \textLR {77}\fi }{subsection.4.6.5}%
+\contentsline {subsection}{\numberline {\if@rl \I {6.6.4}\else \textLR {4.6.6}\fi }Output Files}{\if@rlmain \I {78}\else \textLR {78}\fi }{subsection.4.6.6}%
+\contentsline {section}{\numberline {\if@rl \I {7.4}\else \textLR {4.7}\fi }Phase 6 --- Combinations and Ablation}{\if@rlmain \I {78}\else \textLR {78}\fi }{section.4.7}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.7.4}\else \textLR {4.7.1}\fi }Purpose}{\if@rlmain \I {78}\else \textLR {78}\fi }{subsection.4.7.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.7.4}\else \textLR {4.7.2}\fi }Combinations Tested}{\if@rlmain \I {78}\else \textLR {78}\fi }{subsection.4.7.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.7.4}\else \textLR {4.7.3}\fi }Ablation Design}{\if@rlmain \I {79}\else \textLR {79}\fi }{subsection.4.7.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.7.4}\else \textLR {4.7.4}\fi }Statistical Testing}{\if@rlmain \I {79}\else \textLR {79}\fi }{subsection.4.7.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {5.7.4}\else \textLR {4.7.5}\fi }Output Files}{\if@rlmain \I {80}\else \textLR {80}\fi }{subsection.4.7.5}%
+\contentsline {section}{\numberline {\if@rl \I {8.4}\else \textLR {4.8}\fi }Phase Summary}{\if@rlmain \I {80}\else \textLR {80}\fi }{section.4.8}%
+\contentsline {chapter}{\numberline {5}\caseupper {Results and Analysis}}{\if@rlmain \I {82}\else \textLR {82}\fi }{chapter.5}%
+\contentsline {section}{\numberline {\if@rl \I {1.5}\else \textLR {5.1}\fi }Phase 1 Results --- OCR Error Characterisation}{\if@rlmain \I {83}\else \textLR {83}\fi }{section.5.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.1.5}\else \textLR {5.1.1}\fi }Per-Font Baseline Error Rates}{\if@rlmain \I {83}\else \textLR {83}\fi }{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.1.5}\else \textLR {5.1.2}\fi }Error Type Distribution Across Fonts}{\if@rlmain \I {85}\else \textLR {85}\fi }{subsection.5.1.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.1.5}\else \textLR {5.1.3}\fi }Confusion Matrix Analysis}{\if@rlmain \I {85}\else \textLR {85}\fi }{subsection.5.1.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.1.5}\else \textLR {5.1.4}\fi }Morphological Validity Analysis}{\if@rlmain \I {86}\else \textLR {86}\fi }{subsection.5.1.4}%
+\contentsline {section}{\numberline {\if@rl \I {2.5}\else \textLR {5.2}\fi }Phase 2 Results --- Zero-Shot LLM Baseline}{\if@rlmain \I {87}\else \textLR {87}\fi }{section.5.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.2.5}\else \textLR {5.2.1}\fi }Per-Font Correction Performance}{\if@rlmain \I {87}\else \textLR {87}\fi }{subsection.5.2.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.2.5}\else \textLR {5.2.2}\fi }Error Introduction Rate Analysis}{\if@rlmain \I {89}\else \textLR {89}\fi }{subsection.5.2.2}%
+\contentsline {section}{\numberline {\if@rl \I {3.5}\else \textLR {5.3}\fi }Phases 3--5 Results --- Isolated Knowledge Augmentation}{\if@rlmain \I {90}\else \textLR {90}\fi }{section.5.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.3.5}\else \textLR {5.3.1}\fi }Phase 3 --- OCR-Aware Prompting (Confusion Matrix)}{\if@rlmain \I {90}\else \textLR {90}\fi }{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.3.5}\else \textLR {5.3.2}\fi }Phase 4 --- Self-Reflective Prompting}{\if@rlmain \I {91}\else \textLR {91}\fi }{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.3.5}\else \textLR {5.3.3}\fi }Phase 5 --- CAMeL Morphological Post-Processing}{\if@rlmain \I {92}\else \textLR {92}\fi }{subsection.5.3.3}%
+\contentsline {section}{\numberline {\if@rl \I {4.5}\else \textLR {5.4}\fi }Per-Font Comparison Across All Phases}{\if@rlmain \I {94}\else \textLR {94}\fi }{section.5.4}%
+\contentsline {section}{\numberline {\if@rl \I {5.5}\else \textLR {5.5}\fi }Phase 6 Results --- Combinations and Ablation}{\if@rlmain \I {95}\else \textLR {95}\fi }{section.5.5}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.5.5}\else \textLR {5.5.1}\fi }Combination Results}{\if@rlmain \I {95}\else \textLR {95}\fi }{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.5.5}\else \textLR {5.5.2}\fi }Per-Font Combination Results}{\if@rlmain \I {96}\else \textLR {96}\fi }{subsection.5.5.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.5.5}\else \textLR {5.5.3}\fi }Ablation Results}{\if@rlmain \I {96}\else \textLR {96}\fi }{subsection.5.5.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.5.5}\else \textLR {5.5.4}\fi }Statistical Significance}{\if@rlmain \I {97}\else \textLR {97}\fi }{subsection.5.5.4}%
+\contentsline {section}{\numberline {\if@rl \I {6.5}\else \textLR {5.6}\fi }Summary and Final Ranking}{\if@rlmain \I {98}\else \textLR {98}\fi }{section.5.6}%
+\contentsline {chapter}{\numberline {6}\caseupper {Discussion and Conclusion}}{\if@rlmain \I {99}\else \textLR {99}\fi }{chapter.6}%
+\contentsline {section}{\numberline {\if@rl \I {1.6}\else \textLR {6.1}\fi }Revisiting the Research Questions}{\if@rlmain \I {99}\else \textLR {99}\fi }{section.6.1}%
+\contentsline {section}{\numberline {\if@rl \I {2.6}\else \textLR {6.2}\fi }The Over-Correction Threshold: A Theoretical Account}{\if@rlmain \I {103}\else \textLR {103}\fi }{section.6.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.2.6}\else \textLR {6.2.1}\fi }Formal Definition}{\if@rlmain \I {104}\else \textLR {104}\fi }{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.2.6}\else \textLR {6.2.2}\fi }Empirical Estimation}{\if@rlmain \I {104}\else \textLR {104}\fi }{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.2.6}\else \textLR {6.2.3}\fi }Why Augmentation Raises the Threshold}{\if@rlmain \I {105}\else \textLR {105}\fi }{subsection.6.2.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.2.6}\else \textLR {6.2.4}\fi }Connection to the Broader Literature}{\if@rlmain \I {105}\else \textLR {105}\fi }{subsection.6.2.4}%
+\contentsline {section}{\numberline {\if@rl \I {3.6}\else \textLR {6.3}\fi }Why Phase~3 and Phase~4 Combine Synergistically}{\if@rlmain \I {106}\else \textLR {106}\fi }{section.6.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.3.6}\else \textLR {6.3.1}\fi }Orthogonal Failure Mode Coverage}{\if@rlmain \I {106}\else \textLR {106}\fi }{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.3.6}\else \textLR {6.3.2}\fi }Quantitative Evidence of Synergy}{\if@rlmain \I {107}\else \textLR {107}\fi }{subsection.6.3.2}%
+\contentsline {section}{\numberline {\if@rl \I {4.6}\else \textLR {6.4}\fi }Why Handwritten Correction Differs}{\if@rlmain \I {107}\else \textLR {107}\fi }{section.6.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.4.6}\else \textLR {6.4.1}\fi }The Role of Error Type}{\if@rlmain \I {107}\else \textLR {107}\fi }{subsection.6.4.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.4.6}\else \textLR {6.4.2}\fi }Why Zero-Shot Correction Provides Limited Benefit on KHATT}{\if@rlmain \I {108}\else \textLR {108}\fi }{subsection.6.4.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.4.6}\else \textLR {6.4.3}\fi }What Could Improve KHATT Correction}{\if@rlmain \I {108}\else \textLR {108}\fi }{subsection.6.4.3}%
+\contentsline {section}{\numberline {\if@rl \I {5.6}\else \textLR {6.5}\fi }Implications for System Design}{\if@rlmain \I {109}\else \textLR {109}\fi }{section.6.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.1}Apply correction selectively, not universally.}{\if@rlmain \I {109}\else \textLR {109}\fi }{paragraph.6.5.0.0.1}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.2}Use the \texttt {conf\_self} configuration as the default.}{\if@rlmain \I {109}\else \textLR {109}\fi }{paragraph.6.5.0.0.2}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.3}Add Phase~5 CAMeL post-processing on typewritten text only.}{\if@rlmain \I {109}\else \textLR {109}\fi }{paragraph.6.5.0.0.3}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.4}Compute per-font evaluation before deployment.}{\if@rlmain \I {109}\else \textLR {109}\fi }{paragraph.6.5.0.0.4}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.5}Recalibrate self-reflective insights for new OCR engines.}{\if@rlmain \I {110}\else \textLR {110}\fi }{paragraph.6.5.0.0.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.6}Use the aligned split design for future multi-font studies.}{\if@rlmain \I {110}\else \textLR {110}\fi }{paragraph.6.5.0.0.6}%
+\contentsline {section}{\numberline {\if@rl \I {6.6}\else \textLR {6.6}\fi }Limitations}{\if@rlmain \I {110}\else \textLR {110}\fi }{section.6.6}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.1}Single OCR engine (Qaari).}{\if@rlmain \I {110}\else \textLR {110}\fi }{paragraph.6.6.0.0.1}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.2}Single LLM (Qwen3-4B).}{\if@rlmain \I {110}\else \textLR {110}\fi }{paragraph.6.6.0.0.2}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.3}Single text content (PATS-A01).}{\if@rlmain \I {111}\else \textLR {111}\fi }{paragraph.6.6.0.0.3}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.4}Text-only correction.}{\if@rlmain \I {111}\else \textLR {111}\fi }{paragraph.6.6.0.0.4}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.5}Diacritic stripping.}{\if@rlmain \I {111}\else \textLR {111}\fi }{paragraph.6.6.0.0.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.6}Morphological database coverage.}{\if@rlmain \I {111}\else \textLR {111}\fi }{paragraph.6.6.0.0.6}%
+\contentsline {section}{\numberline {\if@rl \I {7.6}\else \textLR {6.7}\fi }Future Work}{\if@rlmain \I {112}\else \textLR {112}\fi }{section.6.7}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.1}Characterise the threshold across models and engines.}{\if@rlmain \I {112}\else \textLR {112}\fi }{paragraph.6.7.0.0.1}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.2}Fine-tune for conservative OCR correction.}{\if@rlmain \I {112}\else \textLR {112}\fi }{paragraph.6.7.0.0.2}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.3}Test with larger and Arabic-specialised models.}{\if@rlmain \I {112}\else \textLR {112}\fi }{paragraph.6.7.0.0.3}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.4}Multi-modal correction for handwritten text.}{\if@rlmain \I {112}\else \textLR {112}\fi }{paragraph.6.7.0.0.4}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.5}Confidence-guided selective correction.}{\if@rlmain \I {113}\else \textLR {113}\fi }{paragraph.6.7.0.0.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.6}Extension to dialectal Arabic.}{\if@rlmain \I {113}\else \textLR {113}\fi }{paragraph.6.7.0.0.6}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.7}Cross-engine comparison.}{\if@rlmain \I {113}\else \textLR {113}\fi }{paragraph.6.7.0.0.7}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.8}Adversarial stress testing.}{\if@rlmain \I {113}\else \textLR {113}\fi }{paragraph.6.7.0.0.8}%
+\contentsline {section}{\numberline {\if@rl \I {8.6}\else \textLR {6.8}\fi }Conclusion}{\if@rlmain \I {114}\else \textLR {114}\fi }{section.6.8}%
 \select@language {english}
-\contentsline {chapter}{\nameref {ch_references}}{\if@rlmain \I {109}\else \textLR {109}\fi }{chapter*.22}%
-\contentsline {chapter}{Appendix \numberline {A}\caseupper {Full Prompt Templates}}{\if@rlmain \I {112}\else \textLR {112}\fi }{appendix.1.A}%
-\contentsline {chapter}{Appendix \numberline {B}\caseupper {Phase 4D Self-Reflective Insights}}{\if@rlmain \I {120}\else \textLR {120}\fi }{appendix.1.B}%
-\contentsline {chapter}{Appendix \numberline {C}\caseupper {Configuration Files}}{\if@rlmain \I {124}\else \textLR {124}\fi }{appendix.1.C}%
-\contentsline {chapter}{Appendix \numberline {D}\caseupper {PATS-A01 Error Examples}}{\if@rlmain \I {129}\else \textLR {129}\fi }{appendix.1.D}%
+\contentsline {chapter}{\nameref {ch_references}}{\if@rlmain \I {117}\else \textLR {117}\fi }{chapter*.27}%
+\contentsline {chapter}{Appendix \numberline {A}\caseupper {Full Prompt Templates}}{\if@rlmain \I {120}\else \textLR {120}\fi }{appendix.1.A}%
+\contentsline {chapter}{Appendix \numberline {B}\caseupper {Phase 4 Self-Reflective Insights}}{\if@rlmain \I {126}\else \textLR {126}\fi }{appendix.1.B}%
+\contentsline {chapter}{Appendix \numberline {C}\caseupper {Configuration Files}}{\if@rlmain \I {130}\else \textLR {130}\fi }{appendix.1.C}%
+\contentsline {chapter}{Appendix \numberline {D}\caseupper {PATS-A01 Error Examples}}{\if@rlmain \I {135}\else \textLR {135}\fi }{appendix.1.D}%

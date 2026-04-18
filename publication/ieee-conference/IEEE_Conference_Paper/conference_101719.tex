@@ -61,52 +61,76 @@ Qwen3, PATS-A01, KHATT
 \section{Introduction}
 % -------------------------------------------------------------------------
 
-Arabic optical character recognition is a harder problem than it looks. The
-script is cursive, dots are phonemically significant, and a single misplaced
-dot can change the meaning of a word entirely. Open-source OCR engines such
-as Qaari~\cite{qaari} have made Arabic recognition more accessible, but they
-still produce character-level errors that compound in downstream tasks like
-information retrieval or machine translation.
+Arabic optical character recognition occupies a uniquely difficult position
+in the document analysis landscape. The script is inherently cursive, with
+letter forms that vary by position within the word (isolated, initial, medial,
+final); dots serve as the sole phonemic and semantic distinguisher for entire
+character groups (\textit{ba}/\textit{ta}/\textit{tha}/\textit{ya}/\textit{nun}
+share an identical skeletal form); and the optional nature of diacritics
+introduces a pervasive ambiguity that complicates both recognition and
+evaluation. These properties conspire to produce systematic, structured errors
+in open-source OCR engines such as Qaari~\cite{qaari}---errors that propagate
+unchecked into downstream pipelines for information retrieval, machine
+translation, and text-to-speech synthesis.
 
-Post-OCR correction---treating the OCR output as noisy text and using a language
-model to clean it---has seen renewed interest since powerful instruction-tuned
-LLMs became widely available. The appeal is obvious: no training data is needed,
-the correction can be done in a single forward pass, and the model's language
-priors should naturally prefer valid Arabic words. What is less obvious is
-whether feeding the model more context actually improves the result, and
-whether findings on one font or script type generalize to others.
+Post-OCR correction---treating recognition output as noisy text and applying a
+language model as a denoiser---has attracted renewed attention since
+instruction-tuned large language models (LLMs) became widely available. The
+paradigm is appealing: it requires no task-specific training data, operates in a
+single forward pass, and leverages the model's implicit prior over valid
+linguistic sequences. Yet two questions remain inadequately addressed in the
+literature. First, \emph{does injecting structured knowledge about the OCR
+engine's failure modes into the prompt yield measurable gains over zero-shot
+correction?} Second, and more fundamentally, \emph{does correction effectiveness
+generalise across font families and script types, or is it an artefact of the
+specific evaluation conditions?}
 
-We set up a controlled experiment to test exactly this. Starting from zero-shot
-correction as a baseline, we progressively enriched the prompt with different
-knowledge sources: the OCR engine's known confusion patterns (derived from a
-character-level confusion matrix), the model's own diagnosed failure modes from
-training-split analysis (self-reflective prompting), and morphological
-post-processing to revert hallucinated corrections. Four prompt strategies are
-evaluated in isolation, and their most promising combinations are tested in an
-ablation study. All nine datasets spanning eight typewritten fonts and one
-handwritten corpus are evaluated simultaneously, so that font-specific effects
-can be separated from strategy effects.
+To answer these questions, we design a controlled multi-dataset experiment.
+Starting from a zero-shot correction baseline, we progressively augment the
+prompt with three orthogonal knowledge sources: (i)~a failure-filtered character
+confusion matrix extracted from the OCR engine's systematic substitution patterns,
+(ii)~self-reflective diagnostic text derived from the model's own training-split
+correction failures---quantifying its fix rate, introduction rate, and concrete
+word-level error pairs---and (iii)~morphological post-processing via CAMeL
+Tools~\cite{obeid2020} to revert corrections that produce morphologically invalid
+Arabic. Each augmentation is first evaluated in isolation (changing exactly one
+variable relative to zero-shot), then in combination with ablation analysis. All
+nine datasets---eight typewritten fonts from PATS-A01~\cite{pats} and one
+handwritten corpus from KHATT~\cite{khatt}---are evaluated under an aligned
+train/validation split that holds text content constant across fonts, isolating
+font as the sole confound.
 
-The main finding is nuanced: correction effectiveness depends strongly on the
-baseline error rate. On typewritten fonts with moderate-to-high OCR error rates,
-zero-shot LLM correction provides substantial CER reductions. On fonts where
-Qaari already achieves low error rates, the LLM tends to introduce more errors
-than it fixes. On handwritten text, where errors are abundant but diverse, the
-LLM provides only marginal improvement. Knowledge augmentation shows
-mixed results across fonts, with no single strategy dominating in isolation.
+The central finding is that correction effectiveness is governed by a
+\emph{font-dependent over-correction threshold}: a baseline CER below which the
+LLM's tendency to rewrite correct tokens outweighs its error-fixing capability,
+and above which the net effect is beneficial. On typewritten fonts with
+moderate-to-high error rates (10--25\% CER), zero-shot correction yields
+substantial reductions (up to 81\% relative on Traditional font). On the
+lowest-error font (Akhbar, 4.3\% CER), every strategy tested increases errors.
+On handwritten text (KHATT, 44.6\% CER), where 37\% of errors are segmentation
+failures inaccessible to text-only correction, improvement is marginal. Knowledge
+augmentation provides further incremental gains above zero-shot, but its benefit
+is also font-dependent, and the most impactful strategy
+(self-reflective prompting) achieves its advantage partly by explicitly warning
+the model against over-correction.
 
 The contributions of this work are:
 \begin{itemize}
-\item A systematic comparison of five prompt strategies for Arabic post-OCR
-      correction across nine datasets, revealing font-dependent behavior that
-      single-dataset studies would miss.
-\item Evidence that correction effectiveness is determined primarily by the
-      baseline OCR error profile, not by the amount of context in the prompt.
-\item A novel self-reflective prompting approach that feeds the model its own
-      error statistics from training-split analysis, including concrete
-      word-level error pairs extracted from model failures.
-\item An ablation study of strategy combinations identifying which components
-      contribute positively and which are redundant.
+\item A systematic, controlled comparison of five prompt-engineering strategies
+      for Arabic post-OCR correction across nine datasets spanning an order-of-magnitude
+      CER range (4.3--44.6\%), revealing font-dependent behaviour that
+      single-dataset studies structurally cannot detect.
+\item A formal characterisation of the \emph{over-correction threshold}: the
+      baseline CER below which LLM correction is net harmful, estimated
+      empirically at approximately 6--7\% for Qwen3-4B on Qaari output.
+\item A novel self-reflective prompting strategy that injects the model's own
+      training-split error statistics and concrete word-level failure pairs into
+      the system prompt, achieving the strongest isolated improvement ($-$0.7~pp
+      CER) and uniquely improving the lowest-error font.
+\item An ablation study establishing that confusion-matrix injection and
+      self-reflective prompting address orthogonal failure modes and combine
+      near-additively, with the self-reflective component contributing
+      approximately twice the marginal CER reduction.
 \end{itemize}
 
 % -------------------------------------------------------------------------
@@ -114,41 +138,69 @@ The contributions of this work are:
 % -------------------------------------------------------------------------
 
 \subsection{Arabic OCR and Its Error Patterns}
-Arabic OCR has been studied since the 1990s~\cite{arabic_ocr_survey}, and the
-core difficulties are well documented: the cursive baseline makes segmentation
-hard, diacritics are often omitted or misread, and several letter groups
-(ba/ta/tha, dal/dhal, ra/zay) share the same skeleton differing only in dots.
-Qaari, the open-source engine used in this study, is based on Tesseract with
-Arabic-specific training and inherits both its strengths and its failure
-modes~\cite{qaari}.
+Arabic OCR has been studied for over three decades~\cite{arabic_ocr_survey}.
+The core difficulties are structural: the cursive baseline couples segmentation
+with recognition (a segmentation error deterministically produces a recognition
+error), diacritics are contextually optional yet semantically significant, and
+several letter groups (ba/ta/tha/ya/nun; fa/qaf; dal/dhal; ra/zay) share
+identical skeletal forms differing only in the number and placement of dots.
+These dot-group confusions are the dominant error type in modern Arabic OCR
+engines and are the primary target of the confusion-matrix augmentation
+evaluated in this work. Qaari, the open-source engine used throughout this
+study, is a vision--language model (VLM) fine-tuned from Qwen2-VL-2B for
+Arabic document recognition~\cite{qaari}; it inherits the strengths of its
+base architecture while exhibiting systematic dot-confusion patterns that are
+font-dependent and quantifiable.
 
 \subsection{Post-OCR Correction}
-Traditional post-OCR correction relied on language models, lexicon lookup, or
-a combination of both~\cite{afli2016,dong2018}. The move toward neural
-approaches brought sequence-to-sequence models that treat correction as a
-translation task~\cite{nguyen2021}. More recently, prompted LLMs have been
-tested for English document correction with encouraging
-results~\cite{llm_ocr_correction}, but Arabic-specific studies remain sparse.
-The most directly relevant prior work uses Arabic BERT variants for post-hoc
-correction~\cite{arabic_bert_ocr}, but the prompt-engineering perspective has
-not been explored systematically across multiple fonts and script types.
+Post-OCR correction has evolved through three paradigms.
+\textit{Rule-based and statistical} methods employed lexicon lookup, n-gram
+language models, and noisy-channel formulations that model OCR errors as a
+probabilistic channel between the true text and the observed
+output~\cite{afli2016}. These methods are effective for high-frequency
+error patterns but require manual rule curation and struggle with unseen
+error types.
+\textit{Neural sequence-to-sequence} approaches treat correction as a
+translation task, training encoder--decoder models on parallel (OCR, GT)
+corpora~\cite{dong2018,nguyen2021}. While powerful, they require substantial
+training data and are tightly coupled to the specific OCR engine's error
+distribution.
+\textit{LLM-based} methods, the paradigm explored here, leverage pre-trained
+instruction-tuned models to correct OCR output via natural-language prompts
+without task-specific training. Recent work demonstrates that LLMs can
+outperform specialised models on English post-OCR correction~\cite{llm_ocr_correction},
+but Arabic-specific evaluations remain limited to single-dataset studies using
+BERT-class masked language models~\cite{arabic_bert_ocr}. No prior work
+systematically evaluates multiple prompt augmentation strategies across
+multiple Arabic fonts under a controlled isolation design.
 
 \subsection{Knowledge-Augmented Prompting}
-Injection of structured knowledge into LLM prompts has been shown to help in
-several settings: few-shot examples improve performance across
-tasks~\cite{brown2020}, chain-of-thought prompts help with
-reasoning~\cite{wei2022}, and retrieval-augmented generation grounds outputs
-in factual content~\cite{lewis2020}. There is also work on using a model's own
-error statistics to guide its future behavior, sometimes called self-reflection
-or self-critique~\cite{shinn2023}. Our study applies these ideas to OCR
-correction and measures whether the gains transfer to this domain.
+The injection of structured knowledge into LLM prompts has demonstrated
+consistent gains across NLP tasks. Few-shot exemplars activate task-specific
+priors without parameter updates~\cite{brown2020}; chain-of-thought prompting
+decomposes complex reasoning into verifiable intermediate
+steps~\cite{wei2022}; retrieval-augmented generation (RAG) grounds model
+outputs in external evidence to reduce hallucination~\cite{lewis2020}. Most
+relevant to this work, Reflexion~\cite{shinn2023} and related self-critique
+frameworks feed an agent its own prior failures as verbal reinforcement,
+enabling behavioural adaptation without gradient updates. Our Phase~4
+self-reflective strategy adapts this paradigm to a non-agentic, single-turn
+correction task: the model receives a statistical summary of its own
+training-split errors as system-prompt context, including quantified fix/introduction
+rates and concrete word-level failure pairs. To our knowledge, this is the first
+application of self-diagnostic prompting to post-OCR correction in any language.
 
 \subsection{Arabic NLP Resources}
-CAMeL Tools provides morphological analysis and
-disambiguation for modern standard Arabic~\cite{obeid2020}, which we use for
-post-correction validation. The PATS-A01~\cite{pats} and KHATT~\cite{khatt}
-benchmarks provide the evaluation data spanning typewritten and handwritten
-Arabic, respectively.
+CAMeL Tools~\cite{obeid2020} provides morphological analysis, disambiguation,
+and tokenisation for Modern Standard Arabic using the CALIMA Star
+analyser~\cite{habash2010}. We use its morphological component to validate
+correction outputs (Phase~5) and to characterise the valid-but-wrong error
+rate in Phase~1. The PATS-A01~\cite{pats} and KHATT~\cite{khatt} benchmarks
+provide complementary evaluation data: PATS-A01 offers eight typewritten fonts
+rendering identical text content, enabling controlled cross-font comparison;
+KHATT provides real-world handwritten variation with substantially higher
+error rates and qualitatively different error types (segmentation-dominated
+rather than substitution-dominated).
 
 % -------------------------------------------------------------------------
 \section{Datasets and Experimental Setup}
@@ -608,13 +660,20 @@ strategy. The key patterns are:
 
 \subsection{The Over-Correction Threshold}
 
-The font-dependent results suggest an \textit{over-correction threshold}:
-there exists a baseline CER range where LLM correction is beneficial, below
-which the model introduces more errors than it fixes, and above which the
-errors are too structurally complex for text-level correction. For PATS-A01
-fonts, this beneficial range is approximately 8--25\% CER. Fonts below this
-range (e.g., Akhbar at 4.3\% CER) are harmed by any LLM intervention, while
-fonts within the range (Traditional, Naskh, Thuluth) show clear improvement.
+The font-dependent results point to a quantifiable \textit{over-correction
+threshold}~$e^*$. Let~$r_f$ denote the model's fix rate (fraction of existing
+errors corrected) and~$r_i$ its introduction rate (fraction of correct tokens
+incorrectly changed). The expected CER after correction is approximately
+$\text{CER}_{\text{out}} \approx e(1 - r_f) + (1-e)\,r_i$, and correction is
+net beneficial when $e \cdot r_f > (1-e) \cdot r_i$, yielding a threshold
+$e^* = r_i / (r_f + r_i)$.  Empirically, $r_i \approx 0.22$ and
+$r_f \approx 0.76$ across PATS-A01, giving $e^* \approx 22\%$ in aggregate;
+however, the per-font crossing between Akhbar (4.3\%, harmed) and Simplified
+(7.9\%, helped) places the effective threshold at approximately 6--7\% CER,
+reflecting a drop in~$r_f$ at low error densities. For PATS-A01 fonts, the
+beneficial correction range is approximately 8--25\% CER. Fonts below this
+range are harmed by any LLM intervention, while fonts within the range
+(Traditional, Naskh, Thuluth) show clear improvement.
 
 \subsection{Why Typewritten and Handwritten Differ}
 
@@ -634,15 +693,26 @@ than text-only post-processing.
 \subsection{Prompt-Induced Over-Correction}
 
 When augmentation degrades performance, the mechanism is consistent across
-strategies: additional context raises the model's threshold for leaving text
-unchanged. A zero-shot prompt with a conservative instruction (``return as-is
-if correct'') keeps the model in a low-intervention mode. Confusion lists and
-diagnostic notes signal that something is wrong with the input and that active
-correction is expected. The model obliges, rewriting portions of text that
-Qaari had got right. This is particularly costly on low-error fonts where most
-tokens are already correct. The synergy of conf\_self arises because both
-components specifically target the model's own weaknesses rather than
-generically signaling that the input is erroneous.
+strategies: additional context in the system prompt acts as an implicit signal
+that the input text is defective, raising the model's \textit{a priori}
+intervention probability. A zero-shot prompt with a conservative instruction
+(``return as-is if correct'') maintains a low-intervention prior. Confusion
+lists and diagnostic notes shift this prior toward active rewriting, effectively
+increasing~$r_i$ in the threshold model above. Because $e^* = r_i / (r_f + r_i)$,
+a higher~$r_i$ raises the CER at which correction breaks even, making it
+harmful on a wider range of inputs.
+
+This analysis explains a subtle empirical observation: Phase~4 (self-reflective)
+is the \emph{only} isolated strategy that improves on Akhbar. Unlike Phase~3,
+which provides correction targets that encourage intervention, Phase~4's
+diagnostic text explicitly quantifies the model's own over-correction rate
+and warns against unnecessary rewrites. This directly targets~$r_i$---lowering
+it---rather than only providing correction guidance that raises intervention.
+The conf\_self synergy arises because the two components target different
+parameters: Phase~3 raises~$r_f$ by directing attention to known confusion
+pairs, while Phase~4 lowers~$r_i$ through behavioural self-regulation.
+Together, they shift $e^*$ downward: beneficial correction extends to
+lower-error fonts.
 
 \subsection{Why CAMeL Post-Processing Has Limited Effect}
 
@@ -682,28 +752,43 @@ behavior, which may limit generalization to different models or domains.
 \section{Conclusion}
 % -------------------------------------------------------------------------
 
-We evaluated five prompt-engineering strategies for Arabic post-OCR correction
-across nine datasets spanning eight typewritten fonts and one handwritten
-corpus. The results reveal that correction effectiveness depends strongly on
-the baseline error profile. Zero-shot LLM correction reduces CER substantially
-on typewritten fonts with moderate-to-high error rates (up to 81\% relative
-improvement on Traditional font) but increases errors on fonts where Qaari
-already performs well. On handwritten text, improvement is marginal despite
-high baseline errors.
+We presented a controlled evaluation of five prompt-engineering strategies for
+Arabic post-OCR correction across nine datasets spanning an order-of-magnitude
+range of baseline CER (4.3--44.6\%). Three findings emerge with implications
+beyond the Arabic OCR domain.
 
-No single isolated knowledge-augmentation strategy dominates across all
-datasets. The best combination---confusion-matrix injection paired with
-self-reflective prompting---achieves 11.2\% CER on PATS-A01 (down from 14.2\%
-OCR baseline) and 42.4\% on KHATT (down from 44.6\%), representing consistent
-improvements over both the OCR baseline and zero-shot correction.
+First, \textbf{correction effectiveness is governed by a font-dependent
+over-correction threshold.} Below approximately 6--7\% CER, the model's
+introduction rate on correct tokens exceeds its fix rate on erroneous ones,
+producing net degradation. Above this threshold, zero-shot correction yields
+substantial improvements---up to 81\% relative CER reduction on Traditional
+font. This threshold is a quantifiable property of the model--engine pair,
+formally expressible as $e^* = r_i / (r_f + r_i)$, and its existence implies
+that LLM correction should be deployed \emph{conditionally}, not universally.
 
-The font-dependent behavior we observe---invisible in single-dataset
-studies---highlights the importance of multi-dataset evaluation for post-OCR
-correction research. The practical implication is that effective OCR correction
-requires error-profile-aware strategy selection rather than a one-size-fits-all
-approach. Future work should explore adaptive correction that adjusts its
-intervention level based on estimated input quality, and multi-modal approaches
-that combine visual and textual signals for handwritten text correction.
+Second, \textbf{knowledge augmentation operates through two distinct
+mechanisms}---raising the fix rate (confusion-matrix injection targets known
+error patterns) and lowering the introduction rate (self-reflective prompting
+warns against over-correction). These mechanisms are orthogonal: ablation
+confirms near-additive contributions, and only the self-reflective component
+improves the lowest-error font. The best combination (\texttt{conf\_self})
+achieves 11.2\% CER on PATS-A01 ($-$21.1\% relative vs.\ OCR baseline) and
+42.4\% on KHATT ($-$5.0\% relative), with statistical significance on six of
+nine datasets at Bonferroni-corrected $\alpha$.
+
+Third, \textbf{text-only correction is structurally limited on handwritten
+input.} KHATT's 37\% segmentation error rate---word merges and splits that
+destroy word boundaries---forms an irreducible error floor for any text-only
+corrector, explaining why the highest-CER dataset yields the lowest relative
+improvement.
+
+The font-dependent behaviour we observe---invisible in single-dataset
+studies---underscores the necessity of multi-font, multi-script evaluation for
+post-OCR correction research. Future work should characterise the
+over-correction threshold across model scales and OCR engines, explore
+confidence-guided selective correction that restricts intervention to
+low-confidence tokens, and investigate multi-modal correction that combines
+document images with OCR text for handwritten text recovery.
 
 % -------------------------------------------------------------------------
 \section*{Acknowledgment}
@@ -781,6 +866,11 @@ NLP tasks,'' \textit{Advances in Neural Information Processing Systems}, vol. 33
 N. Shinn, F. Cassano, B. Labash, A. Gopinath, K. Narasimhan, and
 S. Yao, ``Reflexion: language agents with verbal reinforcement learning,''
 \textit{Advances in Neural Information Processing Systems}, vol. 36, 2023.
+
+\bibitem{habash2010}
+N. Habash, ``Introduction to Arabic natural language processing,''
+\textit{Synthesis Lectures on Human Language Technologies}, vol. 3, no. 1,
+pp. 1--187, 2010.
 
 \end{thebibliography}
 

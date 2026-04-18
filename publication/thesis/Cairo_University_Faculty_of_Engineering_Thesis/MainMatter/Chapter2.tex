@@ -359,35 +359,162 @@ as primary throughout this thesis.
 \label{sec:llms}
 % ============================================================
 
+\subsection{Why LLMs for Post-OCR Correction}
+\label{subsec:why_llms}
+
+Before introducing the technical foundations of large language models, it is
+worth establishing \emph{why} they are the right tool for Arabic post-OCR
+correction, and why this thesis adopts a prompt-engineering paradigm rather
+than the traditional or deep-learning approaches reviewed in
+Section~\ref{sec:related}.
+
+Post-OCR correction is fundamentally a \emph{conditional text restoration}
+task: given a noisy observation of a clean text (the OCR output), produce the
+most likely original.  Historically, this task has been addressed by three
+paradigm families, each with characteristic limitations for Arabic.
+
+\textbf{Rule-based and statistical methods} (n-gram language models, lexicon
+lookup, noisy-channel formulations) require hand-crafted rules or
+frequency tables for each error type and language pair.
+For Arabic, the combinatorial explosion of positional glyph variants,
+dot-group confusions, and morphological inflections makes rule curation
+infeasible at the scale required for robust coverage.
+N-gram models capture local context (typically 3--5 tokens) but cannot
+leverage sentential or discourse-level coherence, which is essential for
+resolving valid-but-wrong substitutions --- the dominant error type in Arabic
+OCR (71\% of errors in this study).
+
+\textbf{Neural sequence-to-sequence models} (encoder--decoder
+architectures such as those based on LSTMs or smaller transformers)
+treat correction as a translation task from noisy to clean text.
+They can learn complex error patterns from data but require large parallel
+corpora of (OCR output, ground truth) pairs.
+For Arabic OCR, such corpora are scarce: the only substantial Arabic
+error correction dataset (QALB~\cite{zaghouani2014qalb}) targets \emph{grammatical}
+errors in human-authored text, not \emph{visual} errors produced by OCR
+engines.
+Building an OCR-specific training corpus requires rendering text in multiple
+fonts, running OCR, and aligning output with ground truth --- a process
+that is engine-specific (a model trained on Tesseract errors does not
+transfer to Qaari errors) and must be repeated for each font and engine
+combination.
+Furthermore, seq2seq models trained on one error distribution are brittle
+when the error profile changes: a font change alters the confusion matrix
+and can invalidate the learned correction mapping.
+
+\textbf{Large language models} (LLMs) offer a fundamentally different
+proposition.
+A model pre-trained on hundreds of billions of tokens of multilingual text
+acquires, as a byproduct of next-token prediction, an implicit probability
+distribution over valid Arabic sentences.
+This distribution functions as an extremely rich language model that captures
+not just n-gram statistics but morphological constraints, syntactic structure,
+semantic coherence, and world knowledge --- all without any task-specific
+training.
+Instruction tuning then teaches the model to follow explicit correction
+instructions, converting this passive language competence into an active
+error-correction capability.
+
+The advantages of this paradigm for Arabic post-OCR correction are:
+
+\begin{enumerate}
+  \item \textbf{No parallel training data required.}  The model's correction
+        capability derives from its pre-trained language prior, not from
+        OCR-specific training pairs.  This eliminates the data bottleneck that
+        limits seq2seq approaches for low-resource OCR correction scenarios.
+
+  \item \textbf{Engine and font agnosticism.}  Because the model corrects
+        based on its understanding of valid Arabic rather than on memorised
+        error patterns, the same model and prompt can be applied to output from
+        any OCR engine without retraining.  Knowledge augmentation (Phases~3
+        and~4) can adapt the prompt to a specific engine's error profile, but
+        the base capability transfers.
+
+  \item \textbf{Rich contextual reasoning.}  Unlike n-gram models, LLMs
+        process the full input sequence through multi-layer self-attention,
+        enabling them to use long-range context to disambiguate locally
+        ambiguous tokens.  This is particularly important for Arabic, where
+        valid-but-wrong OCR errors can only be detected by semantic or
+        syntactic analysis of the surrounding sentence.
+
+  \item \textbf{Zero-shot applicability.}  An instruction-tuned LLM can
+        perform correction immediately upon deployment, without any
+        task-specific training phase.  This enables rapid experimentation with
+        different prompt strategies (the core methodology of this thesis)
+        without the computational cost of model training.
+
+  \item \textbf{Interpretable prompt engineering.}  The knowledge injected
+        into the model's prompt (confusion matrices, self-reflective insights,
+        correction rules) is human-readable and auditable.  Unlike neural
+        model weights, prompt content can be inspected, modified, and
+        version-controlled, supporting transparent and reproducible research.
+\end{enumerate}
+
+The primary risk of the LLM paradigm --- and a central finding of this
+thesis --- is \emph{over-correction}: the model's tendency to rewrite
+tokens that are already correct, introducing new errors.
+This risk is inherent to instruction-following models operating on text that
+is mostly correct, and it is the reason that knowledge augmentation
+(Phases~3--5) and prompt design (conservative v2 prompt) are necessary to
+constrain the model's intervention behaviour.
+Understanding and quantifying this over-correction tendency is a major
+contribution of this work.
+
 \subsection{From N-grams to Transformers}
 \label{subsec:lm_history}
 
 Statistical language modelling has a long history in NLP.
 N-gram language models assign a probability to a sequence of words by decomposing
 the joint probability into a product of conditional probabilities of each word
-given the preceding $n-1$ words.
+given the preceding $n-1$ words:
+\begin{equation}\label{eq:ngram}
+  P(w_1, w_2, \ldots, w_m) \approx \prod_{i=1}^{m} P(w_i \mid w_{i-n+1}, \ldots, w_{i-1})
+\end{equation}
 They were the dominant approach for language modelling and speech recognition
 through the 1990s and 2000s.
-Their limitations -- sparse counts for long contexts and inability to generalise
-across syntactically similar contexts -- motivated neural approaches.
+Their limitations --- sparse counts for long contexts (the \emph{curse of
+dimensionality}: the number of possible n-grams grows exponentially with $n$),
+inability to generalise across syntactically similar contexts that happen to use
+different vocabulary, and the practical ceiling of $n \leq 5$ due to memory
+constraints --- motivated neural approaches.
 
 Bengio et al.\ \cite{bengio2003neural} introduced the neural probabilistic language
-model, which represents words as dense real-valued vectors (embeddings) and uses
-a feedforward network to predict the next word given a fixed-width context window.
+model, which represents each word as a dense real-valued vector (an
+\emph{embedding}) in a continuous space and uses a feedforward network to predict
+the next word given a fixed-width context window.
 This model demonstrated that neural approaches could outperform n-gram models by
-generalising across similar word contexts.
+exploiting the geometric structure of embedding space: words used in similar
+contexts are mapped to nearby vectors, enabling the model to generalise from
+observed contexts to unseen but structurally similar ones.
 
-Recurrent Neural Networks (RNNs) extended this to variable-length contexts.
+Recurrent Neural Networks (RNNs) extended this to variable-length contexts by
+maintaining a hidden state vector that is updated at each time step, enabling the
+model to condition its prediction on the entire preceding sequence.
 Long Short-Term Memory (LSTM) networks \cite{hochreiter1997long} addressed the
-vanishing gradient problem of vanilla RNNs with gated memory cells, enabling
-effective modelling of long-range dependencies.
+vanishing gradient problem of vanilla RNNs with gated memory cells --- input,
+forget, and output gates that control the flow of information into and out of a
+persistent cell state --- enabling effective modelling of long-range
+dependencies over hundreds of tokens.
 LSTM-based language models and encoder-decoder sequence-to-sequence models
-dominated NLP in the early 2010s.
+\cite{sutskever2014sequence} dominated NLP in the early 2010s, achieving
+state-of-the-art results in machine translation, text summarisation, and
+dialogue systems.
 
 The transformer architecture \cite{vaswani2017attention}, introduced in 2017,
-replaced recurrence with self-attention mechanisms.
-Transformers train orders of magnitude faster than LSTMs on parallel hardware
-and scale more effectively with data and model size.
+replaced recurrence entirely with self-attention mechanisms.
+By computing attention over all positions simultaneously rather than sequentially,
+transformers eliminated the sequential bottleneck of RNNs and enabled
+embarrassingly parallel training on modern GPU hardware.
+The result was a dramatic improvement in training efficiency: transformers train
+orders of magnitude faster than LSTMs on the same data and, critically, exhibit
+favourable \emph{scaling laws} --- their performance improves predictably as a
+power law of model size, dataset size, and compute
+\cite{kaplan2020scaling,hoffmann2022training}.
+This scalability property is the foundation of the modern LLM paradigm: given
+sufficient data and compute, a transformer-based model can be scaled to sizes
+where qualitatively new capabilities emerge --- instruction following, few-shot
+learning, chain-of-thought reasoning --- that are not present at smaller scales
+\cite{wei2022emergent}.
 All modern large language models are transformer-based.
 
 \subsection{The Transformer Architecture}
@@ -431,37 +558,70 @@ autoregressive generation.
 \subsection{Pre-Training and Instruction Tuning}
 \label{subsec:pretraining}
 
-Modern LLMs are trained in two stages.
+Modern LLMs are trained in two or three stages, each adding a qualitatively
+different capability.
 
-\textbf{Pre-training.}
+\textbf{Stage 1: Pre-training (next-token prediction).}
 The model is trained to predict the next token given all preceding tokens, on a
-massive corpus of text scraped from the internet, books, code, and other sources.
-Pre-training instils broad language competence, world knowledge, and the ability
-to reason across many domains, all from the statistical structure of the training
-corpus.
+massive corpus of text scraped from the internet, books, code, scientific
+papers, and other sources --- typically trillions of tokens spanning dozens
+of languages.
+The training objective is the standard autoregressive language modelling loss:
+\begin{equation}\label{eq:pretraining}
+  \mathcal{L} = -\sum_{t=1}^{T} \log P_\theta(x_t \mid x_1, \ldots, x_{t-1})
+\end{equation}
+where $\theta$ denotes the model parameters and $x_1, \ldots, x_T$ is a
+tokenised training sequence.
+Despite its simplicity, this objective is remarkably powerful: by learning to
+predict the next token across a sufficiently large and diverse corpus, the model
+acquires broad language competence, world knowledge, logical reasoning patterns,
+and the ability to perform tasks it was never explicitly trained for --- purely
+from the statistical structure of human language.
 GPT-3 \cite{brown2020language} demonstrated that scaling pre-training to 175
 billion parameters enables dramatic improvements in few-shot performance across
-NLP tasks.
+NLP tasks, establishing the empirical basis for the \emph{scaling hypothesis}:
+larger models trained on more data exhibit qualitatively new capabilities.
 
-\textbf{Instruction tuning and RLHF.}
+For Arabic post-OCR correction, the critical consequence of pre-training is
+that the model learns an implicit distribution over valid Arabic text.
+When presented with a noisy OCR sequence, the model's next-token predictions
+are biased toward tokens that form valid Arabic words and coherent sentences,
+effectively functioning as a powerful contextual spell-checker --- but one that
+operates at the semantic and syntactic level, not just the lexical level.
+
+\textbf{Stage 2: Instruction tuning (supervised fine-tuning, SFT).}
 A pre-trained model produces likely continuations of text; it does not
 reliably follow explicit instructions.
 Instruction tuning \cite{ouyang2022training} fine-tunes the model on a curated
-set of instruction-response pairs, teaching it to interpret instructions as tasks
-and produce helpful, structured outputs.
-Reinforcement Learning from Human Feedback (RLHF) further aligns the model's
-outputs with human preferences by training a reward model on human comparisons
-and optimising the language model against it using policy gradient methods.
-The result is an instruction-tuned model that follows natural language
-instructions reliably across a wide range of tasks without requiring task-specific
-fine-tuning.
+set of (instruction, response) pairs, teaching it to interpret natural-language
+instructions as tasks and produce helpful, structured outputs.
+The fine-tuning dataset covers diverse tasks --- question answering, summarisation,
+translation, code generation, text editing --- formatted as multi-turn dialogues
+with system prompts, user messages, and assistant responses.
+After instruction tuning, the model responds predictably to prompts of the form
+``correct this OCR text and return only the corrected version,'' making it
+directly applicable to the post-OCR correction task without further training.
 
-Instruction-tuned models are the right choice for post-OCR correction because
-they can follow a correction instruction directly.
-Unlike pre-trained base models, which require careful prompt engineering to
-elicit a specific output format, instruction-tuned models respond predictably
-to system messages of the form ``correct this text and return only the corrected
-version.''
+\textbf{Stage 3: Alignment (RLHF / DPO).}
+Reinforcement Learning from Human Feedback (RLHF)~\cite{ouyang2022training}
+further aligns the model's outputs with human preferences.
+A reward model is trained on human comparisons of model outputs (``output A is
+better than output B for this prompt''), and the language model is then
+optimised against this reward model using policy gradient methods (typically
+Proximal Policy Optimisation, PPO~\cite{schulman2017proximal}).
+More recent approaches such as Direct Preference Optimisation
+(DPO)~\cite{rafailov2023direct} bypass the reward model entirely and
+optimise the policy directly on preference pairs.
+The result is a model that not only follows instructions but does so in a way
+that is helpful, harmless, and honest --- reducing the frequency of
+hallucinations, harmful outputs, and unnecessary rewrites.
+
+For post-OCR correction, alignment is particularly important because it
+reduces the model's tendency to ``hallucinate'' --- to generate plausible but
+incorrect text that replaces what the OCR actually produced.
+An aligned model is more likely to return the input unchanged when it is
+already correct, which is precisely the conservative behaviour needed to
+avoid over-correction on low-error input.
 
 \subsection{Qwen3-4B-Instruct-2507}
 \label{subsec:qwen3}

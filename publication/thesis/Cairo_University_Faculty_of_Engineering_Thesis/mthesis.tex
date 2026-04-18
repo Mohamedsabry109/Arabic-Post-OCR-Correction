@@ -1,6 +1,12 @@
 %------------------<Beginning of Master LaTeX Thesis File>---------------
 % mthesis.tex
 %------------------------------------------------------------------------
+% Pre-load inputenc with utf8 BEFORE cufethesis.cls loads babel->arabi,
+% which would otherwise default to cp1256.  PassOptionsToPackage ensures
+% that when arabic.ldf calls \RequirePackage[cp1256]{inputenc}, the
+% already-loaded utf8 option takes precedence (arabi's \@ifpackageloaded
+% guard skips the require entirely because inputenc is already loaded).
+\RequirePackage[utf8]{inputenc}
 \documentclass{cufethesis}
 
 
@@ -52,7 +58,7 @@ citestyle=numeric-comp]{biblatex}
 \addbibresource{thesis.bib}
 
 \usepackage[T1]{fontenc}
-\usepackage[cp1256]{inputenc}  % cp1256 required by arabi package for Arabic text
+% inputenc[utf8] already loaded before \documentclass — see preamble comment
 \usepackage{lmodern}
 \usepackage{array}
 \usepackage{paralist}
@@ -136,19 +142,31 @@ citestyle=numeric-comp]{biblatex}
 
 \ThesisKeywords{Arabic OCR; Post-OCR Correction; Large Language Models; Prompt Engineering; Qwen3; PATS-A01; KHATT; Error Taxonomy; Self-Reflective Prompting; CAMeL Tools}
 
-\ThesisSummary{This thesis investigates whether a lightweight open-source instruction-tuned large
-language model can correct errors produced by the Qaari Arabic OCR engine through prompt
-engineering alone, and whether injecting linguistic knowledge into the prompt improves
-correction quality. Five prompt-engineering strategies are evaluated across nine
-datasets---eight typewritten fonts from PATS-A01 and one handwritten corpus (KHATT)---using
-Qwen3-4B-Instruct-2507. Strategies include zero-shot correction (Phase~2), confusion-matrix
-injection (Phase~3), self-reflective prompting from training-split error statistics (Phase~4),
-morphological post-processing via CAMeL Tools (Phase~5), and strategy combinations with
-ablation (Phase~6). Results reveal that correction effectiveness is strongly font-dependent:
-the best combination (confusion-matrix injection + self-reflective prompting) achieves 11.2\%
-CER on PATS-A01 (down from 14.2\% OCR baseline) and 42.4\% on KHATT (down from 44.6\%).
-The optimal correction strategy depends on the baseline error profile, and no single
-augmentation approach dominates across all fonts and script types.}
+\ThesisSummary{This thesis investigates whether a lightweight open-source instruction-tuned
+large language model (Qwen3-4B-Instruct-2507, 4 billion parameters) can correct systematic
+errors produced by the Qaari Arabic OCR engine through prompt engineering alone, without
+task-specific fine-tuning. Five knowledge-augmentation strategies are evaluated in a
+controlled isolation design across nine datasets---eight typewritten fonts from PATS-A01
+(4.3--24.3\% baseline CER) and one handwritten corpus from KHATT (44.6\% baseline CER)---each
+changing exactly one variable relative to a zero-shot baseline. Strategies include
+confusion-matrix injection filtered by LLM failures (Phase~3), self-reflective prompting
+derived from the model's own training-split error statistics (Phase~4), morphological
+post-processing via CAMeL Tools with known-overcorrection revert (Phase~5), and systematic
+strategy combinations with component-removal ablation (Phase~6). The central finding is the
+identification and formal characterisation of an \emph{over-correction threshold}: a baseline
+CER below which the LLM introduces more errors than it fixes ($e^* \approx$ 6--7\% for
+this model--engine pair). Above this threshold, the best combination---confusion-matrix
+injection paired with self-reflective prompting (\texttt{conf\_self})---achieves 11.2\%
+CER on PATS-A01 (a 21.1\% relative reduction vs.\ OCR baseline) and 42.4\% on KHATT
+(5.0\% relative reduction), with statistical significance on six of nine datasets at
+Bonferroni-corrected $\alpha = 0.0125$. Ablation analysis reveals that the two strategies
+address orthogonal failure modes and combine near-additively, with self-reflective prompting
+contributing approximately twice the marginal improvement of confusion-matrix injection.
+On handwritten text, where 37\% of errors are segmentation failures inaccessible to
+text-only correction, improvement is structurally limited---motivating future multi-modal
+approaches. The thesis contributes an experimental framework, a three-stage
+export--infer--analyse pipeline, and an empirical characterisation of the conditions under
+which LLM-based post-OCR correction helps, hurts, or has no effect.}
 
 
 

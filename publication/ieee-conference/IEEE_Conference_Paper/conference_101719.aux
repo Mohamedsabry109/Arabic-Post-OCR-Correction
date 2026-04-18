@@ -1,10 +1,13 @@
 \relax 
 \citation{qaari}
+\citation{obeid2020}
+\citation{pats}
+\citation{khatt}
 \@writefile{toc}{\contentsline {section}{\numberline {I}Introduction}{1}{}\protected@file@percent }
 \citation{arabic_ocr_survey}
 \citation{qaari}
-\citation{afli2016,dong2018}
-\citation{nguyen2021}
+\citation{afli2016}
+\citation{dong2018,nguyen2021}
 \citation{llm_ocr_correction}
 \citation{arabic_bert_ocr}
 \citation{brown2020}
@@ -12,11 +15,10 @@
 \citation{lewis2020}
 \citation{shinn2023}
 \citation{obeid2020}
+\citation{habash2010}
 \citation{pats}
 \citation{khatt}
 \citation{pats}
-\citation{khatt}
-\citation{qwen3}
 \@writefile{toc}{\contentsline {section}{\numberline {II}Related Work}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-A}}Arabic OCR and Its Error Patterns}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-B}}Post-OCR Correction}{2}{}\protected@file@percent }
@@ -24,53 +26,50 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {II-D}}Arabic NLP Resources}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {III}Datasets and Experimental Setup}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Datasets}{2}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Evaluation datasets. PATS-A01 fonts share the same text content rendered in different typefaces. KHATT is a separate handwritten corpus.}}{2}{}\protected@file@percent }
-\newlabel{tab:datasets}{{I}{2}{}{table.1}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}OCR Engine}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Correction Model}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Evaluation Metrics}{2}{}\protected@file@percent }
-\newlabel{eq:cer}{{1}{2}{}{equation.1}{}}
+\citation{khatt}
+\citation{qwen3}
 \citation{obeid2020}
-\citation{obeid2020}
+\@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Evaluation datasets. PATS-A01 fonts share the same text content rendered in different typefaces. KHATT is a separate handwritten corpus.}}{3}{}\protected@file@percent }
+\newlabel{tab:datasets}{{I}{3}{}{table.1}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}OCR Engine}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Correction Model}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Evaluation Metrics}{3}{}\protected@file@percent }
+\newlabel{eq:cer}{{1}{3}{}{equation.1}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Pipeline Architecture}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {IV}Experimental Methodology}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-A}}Phase 1: OCR Baseline and Error Taxonomy}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-B}}Phase 2: Zero-Shot LLM Correction (Baseline)}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Phase 3: OCR-Aware Prompting (Confusion-Matrix Injection)}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Phase 4: Self-Reflective Prompting}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Phase 5: CAMeL Morphological Post-Processing}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Phase 6: Combinations and Ablation}{3}{}\protected@file@percent }
+\citation{obeid2020}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-C}}Phase 3: OCR-Aware Prompting (Confusion-Matrix Injection)}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-D}}Phase 4: Self-Reflective Prompting}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-E}}Phase 5: CAMeL Morphological Post-Processing}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IV-F}}Phase 6: Combinations and Ablation}{4}{}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Phase 1: Qaari OCR baseline CER and WER per dataset (diacritics stripped). Fonts are ordered by increasing CER.}}{4}{}\protected@file@percent }
 \newlabel{tab:phase1}{{II}{4}{}{table.2}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {V}Results}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Phase 1: OCR Baseline Error Profile}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Phase 2: Zero-Shot LLM Correction}{4}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Phase 2: Zero-shot LLM correction vs.\ OCR baseline (diacritics stripped). $\Delta $CER is absolute change in percentage points; negative indicates improvement.}}{4}{}\protected@file@percent }
-\newlabel{tab:phase2}{{III}{4}{}{table.3}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Isolated augmentation strategies vs.\ Phase~2 zero-shot baseline. PATS-A01 CER is the unweighted mean across all eight fonts. KHATT is reported separately. Diacritics stripped. Best LLM result per column in \textbf  {bold}.}}{4}{}\protected@file@percent }
-\newlabel{tab:isolated}{{IV}{4}{}{table.4}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Phases 3--5: Isolated Knowledge Augmentation}{4}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces Phase 2: Zero-shot LLM correction vs.\ OCR baseline (diacritics stripped). $\Delta $CER is absolute change in percentage points; negative indicates improvement.}}{5}{}\protected@file@percent }
+\newlabel{tab:phase2}{{III}{5}{}{table.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {IV}{\ignorespaces Isolated augmentation strategies vs.\ Phase~2 zero-shot baseline. PATS-A01 CER is the unweighted mean across all eight fonts. KHATT is reported separately. Diacritics stripped. Best LLM result per column in \textbf  {bold}.}}{5}{}\protected@file@percent }
+\newlabel{tab:isolated}{{IV}{5}{}{table.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Phases 3--5: Isolated Knowledge Augmentation}{5}{}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {V}{\ignorespaces Phase 6: Strategy combinations vs.\ Phase~2 zero-shot baseline. conf=confusion-matrix injection, self=self-reflective, camel=CAMeL post-processing. PATS-A01 CER is the unweighted macro-average. Diacritics stripped. Best result per column in \textbf  {bold}.}}{5}{}\protected@file@percent }
 \newlabel{tab:combos}{{V}{5}{}{table.5}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-D}}Phase 6: Combinations and Ablation}{5}{}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces Best LLM strategy per font (CER, diacritics stripped). $\Delta $ is vs.\ OCR baseline in percentage points. The optimal strategy varies across fonts, confirming that no single approach dominates universally.}}{5}{}\protected@file@percent }
-\newlabel{tab:perfont}{{VI}{5}{}{table.6}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-E}}Per-Font Analysis}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-F}}Summary}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VI}Discussion}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}The Over-Correction Threshold}{5}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {VI}{\ignorespaces Best LLM strategy per font (CER, diacritics stripped). $\Delta $ is vs.\ OCR baseline in percentage points. The optimal strategy varies across fonts, confirming that no single approach dominates universally.}}{6}{}\protected@file@percent }
+\newlabel{tab:perfont}{{VI}{6}{}{table.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-E}}Per-Font Analysis}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-F}}Summary}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Discussion}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}The Over-Correction Threshold}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Why Typewritten and Handwritten Differ}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Prompt-Induced Over-Correction}{6}{}\protected@file@percent }
 \bibcite{qaari}{1}
 \bibcite{arabic_ocr_survey}{2}
 \bibcite{pats}{3}
 \bibcite{khatt}{4}
 \bibcite{obeid2020}{5}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}Why Typewritten and Handwritten Differ}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Prompt-Induced Over-Correction}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Why CAMeL Post-Processing Has Limited Effect}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-E}}Practical Implications}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-F}}Limitations}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VII}Conclusion}{6}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{References}{6}{}\protected@file@percent }
 \bibcite{qwen3}{6}
 \bibcite{afli2016}{7}
 \bibcite{dong2018}{8}
@@ -78,7 +77,13 @@
 \bibcite{llm_ocr_correction}{10}
 \bibcite{arabic_bert_ocr}{11}
 \bibcite{brown2020}{12}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Why CAMeL Post-Processing Has Limited Effect}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-E}}Practical Implications}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-F}}Limitations}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VII}Conclusion}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{References}{7}{}\protected@file@percent }
 \bibcite{wei2022}{13}
 \bibcite{lewis2020}{14}
 \bibcite{shinn2023}{15}
-\gdef \@abspage@last{7}
+\bibcite{habash2010}{16}
+\gdef \@abspage@last{8}
