@@ -11,6 +11,13 @@ scipy>=1.10.0
 # DSPy prompt optimization (Phase 7)
 dspy-ai>=2.4.0
 
+# BM25 retrieval (Phase 8 — RAG)
+rank-bm25>=0.2.2
+
+# Optional: Dense retrieval (Phase 8 — hybrid/dense mode)
+# faiss-cpu>=1.7.4
+# sentence-transformers>=2.2.0
+
 # Testing
 pytest>=7.0.0
 

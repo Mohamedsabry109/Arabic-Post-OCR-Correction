@@ -6,6 +6,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-18 — Phase 8: RAG (Retrieval-Augmented Correction)
+
+### Added
+- `src/data/rag_index.py` — RAG index and retriever for OCR correction
+  - `RAGIndexBuilder`: builds BM25 indices over character n-grams from Phase 2 training corrections
+  - Sentence-level store (OCR-GT pairs) and word-level store (error word pairs via difflib)
+  - Optional dense retrieval: sentence-transformers + FAISS (hybrid mode)
+  - `save()`/`load()` for index serialization (JSONL + pickle + FAISS)
+  - `RAGRetriever`: per-sample retrieval with BM25, dense, or hybrid scoring
+  - `retrieve_sentences()` / `retrieve_words()` with formatted prompt output
+- `pipelines/run_phase8.py` — 3-mode pipeline (build-index / export / analyze)
+  - `build-index`: discovers Phase 2 training corrections, builds and saves RAG index
+  - `export`: retrieves per-sample context, writes inference_input.jsonl with prompt_type="rag"
+  - `analyze`: CER/WER metrics, Phase 2 comparison, error change analysis, Markdown report
+  - Retrieval diagnostics saved per dataset (hit rate, avg scores, coverage)
+- `src/core/prompt_builder.py` — `build_rag()` method with `<retrieved_corrections>` and
+  `<retrieved_word_fixes>` XML sections; prompt version `p8v1`
+- `scripts/infer.py` — `"rag"` prompt_type dispatch branch
+- `configs/config.yaml` — `phase8:` config block (retrieval_mode, alpha, n-gram sizes,
+  top_k settings, embedding config, index filters)
+- `requirements.txt` — added `rank-bm25>=0.2.2`; optional `faiss-cpu`, `sentence-transformers`
+
+### Changed
+- `CLAUDE.md` — updated to 8-phase structure, added Phase 8 to table and status
+
 ## [1.0.0] - 2026-04-09 — Phase refactoring: remove 4A/4B, enhance 3/4/5, redesign combos
 
 ### Removed

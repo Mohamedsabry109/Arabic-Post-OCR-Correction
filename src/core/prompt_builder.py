@@ -68,6 +68,7 @@ class PromptBuilder:
     OCR_AWARE_PROMPT_VERSION: str = "p3v2"          # Phase 3 — improved section labels
     SELF_REFLECTIVE_PROMPT_VERSION: str = "p4v2"    # Phase 4 — improved labels + few-shot
     COMBINED_PROMPT_VERSION: str = "p6v2"           # Phase 6 — improved labels + few-shot
+    RAG_PROMPT_VERSION: str = "p8v1"                # Phase 8 — RAG retrieval-augmented
     CRAFTED_PROMPT_VERSION: str = "crafted_v1"      # standalone crafted
     META_PROMPT_VERSION: str = "meta_v1"            # meta-prompting
 
@@ -119,6 +120,23 @@ class PromptBuilder:
         "When you see the LEFT form in the input, correct it to the RIGHT form:\n\n"
         "{confusion_context}\n"
         "</confusion_patterns>"
+    )
+
+    # Phase 8 — RAG retrieval-augmented sections.
+    _RAG_SENTENCES_SECTION: str = (
+        "<retrieved_corrections>\n"
+        "These are corrections from similar OCR texts in the training data. "
+        "Use them as reference for fixing similar errors in the input:\n\n"
+        "{retrieved_sentences}\n"
+        "</retrieved_corrections>"
+    )
+
+    _RAG_WORDS_SECTION: str = (
+        "<retrieved_word_fixes>\n"
+        "Word-level corrections from similar OCR contexts "
+        "(OCR form \u2192 correct form):\n\n"
+        "{retrieved_words}\n"
+        "</retrieved_word_fixes>"
     )
 
     # Combined-phase section body for confusion (same as standalone).
@@ -514,6 +532,76 @@ class PromptBuilder:
     def combined_prompt_version(self) -> str:
         """Phase 6 prompt version string."""
         return self.COMBINED_PROMPT_VERSION
+
+    # -----------------------------------------------------------------------
+    # Phase 8 — RAG (Retrieval-Augmented Generation)
+    # -----------------------------------------------------------------------
+
+    def build_rag(
+        self,
+        ocr_text: str,
+        retrieved_sentences: str = "",
+        retrieved_words: str = "",
+        few_shot_examples: str = "",
+    ) -> list[dict]:
+        """Build Phase 8 RAG correction prompt.
+
+        Injects per-sample retrieved corrections (sentences and/or word
+        fixes) into the crafted system prompt.  Falls back to zero-shot
+        if both retrieval contexts are empty.
+
+        Injection order in the final system prompt::
+
+            <error_patterns>          (from crafted base)
+            <retrieved_corrections>   (similar sentence corrections)
+            <retrieved_word_fixes>    (similar word-level corrections)
+            <examples>
+              [static examples from crafted base]
+              [dynamic few-shot examples — appended here if provided]
+            </examples>
+            <output_format>
+
+        Args:
+            ocr_text: OCR prediction text to correct.
+            retrieved_sentences: Pre-formatted INPUT/OUTPUT pairs from
+                ``RAGRetriever.format_sentences_for_prompt()``.
+            retrieved_words: Pre-formatted word corrections from
+                ``RAGRetriever.format_words_for_prompt()``.
+            few_shot_examples: Optional pre-formatted INPUT/OUTPUT examples
+                from ``FewShotExampleSelector.format_for_prompt()``.
+
+        Returns:
+            Two-element messages list in OpenAI chat format.
+        """
+        has_sentences = bool(retrieved_sentences.strip())
+        has_words = bool(retrieved_words.strip())
+
+        if not has_sentences and not has_words:
+            return self.build_zero_shot(ocr_text, few_shot_examples=few_shot_examples)
+
+        base = self._load_crafted_base()
+
+        if has_sentences:
+            section = self._RAG_SENTENCES_SECTION.format(
+                retrieved_sentences=retrieved_sentences,
+            )
+            base = self._inject_knowledge(base, section)
+
+        if has_words:
+            section = self._RAG_WORDS_SECTION.format(
+                retrieved_words=retrieved_words,
+            )
+            base = self._inject_knowledge(base, section)
+
+        if few_shot_examples.strip():
+            base = self._inject_dynamic_examples(base, few_shot_examples)
+
+        return self._messages(base, ocr_text)
+
+    @property
+    def rag_prompt_version(self) -> str:
+        """Phase 8 prompt version string."""
+        return self.RAG_PROMPT_VERSION
 
     # -----------------------------------------------------------------------
     # Crafted Prompt (standalone — used by scripts/craft_prompt.py)

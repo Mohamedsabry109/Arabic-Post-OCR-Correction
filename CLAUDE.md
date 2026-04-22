@@ -12,7 +12,7 @@
 - **Metrics**: CER (Character Error Rate), WER (Word Error Rate)
 - **Model**: Qwen3-4B-Instruct-2507 (primary)
 
-## Experimental Structure (7 Phases)
+## Experimental Structure (8 Phases)
 
 | Phase | Name | Research Question | Comparison |
 |-------|------|-------------------|------------|
@@ -23,8 +23,9 @@
 | **5** | CAMeL Validation | Does morphological post-processing help? (enhanced: known-overcorrection revert) | vs Phase 2 (**isolated**) |
 | **6** | Combinations | What's optimal? What contributes? | conf_only, self_only, conf_self, best_camel |
 | **7** | DSPy Prompt Optimization | Can automated optimization beat hand-crafted prompts? | vs Phase 2 |
+| **8** | RAG (Retrieval-Augmented) | Does per-sample retrieval of similar corrections help? | vs Phase 2 (**isolated**) |
 
-**Key Design**: Phases 3-5 are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests 3 inference combos (confusion only, self-reflective only, both) plus 1 CAMeL combo. Phase 7 uses DSPy to automatically discover optimal prompts.
+**Key Design**: Phases 3-5, 8 are **isolated experiments** comparing to Phase 2 baseline. Phase 6 tests 3 inference combos (confusion only, self-reflective only, both) plus 1 CAMeL combo. Phase 7 uses DSPy to automatically discover optimal prompts. Phase 8 retrieves similar OCR-GT pairs from training data via BM25 character n-grams.
 
 **Phase 4 pipeline**: Reads pre-computed training artifacts from `results/phase2-training/analysis/` — `word_pairs_llm_failures.txt` (UNFIXED + INTRODUCED sections) and `sample_classification.json`. No circular re-analysis.
 
@@ -37,6 +38,7 @@
 | Confusion Matrix | Generated in Phase 1 | Phase 3, 6 |
 | Training Artifacts | `results/phase2-training/analysis/` | Phase 3, 4, 5, 6 |
 | CAMeL Tools | `pip install camel-tools` | Phase 1, 5, 6 |
+| RAG Index (BM25) | Built from Phase 2 training corrections | Phase 8 |
 
 ### CAMeL Tools (Morphological Analysis)
 
@@ -54,7 +56,7 @@ Arabic-Post-OCR-Correction/
 │   ├── linguistic/     # CAMeL Tools wrappers (MorphAnalyzer, WordValidator)
 │   ├── core/           # LLMCorrector, PromptBuilder
 │   └── analysis/       # Metrics, ErrorAnalyzer, StatsTester, Visualizer
-├── pipelines/          # run_phase1.py ... run_phase5.py, run_phase4d.py, run_phase7.py
+├── pipelines/          # run_phase1.py ... run_phase5.py, run_phase4d.py, run_phase7.py, run_phase8.py
 ├── configs/            # config.yaml
 ├── results/            # Phase outputs (gitignored)
 ├── docs/               # Architecture.md, Guidelines.md
@@ -122,3 +124,4 @@ See `docs/Guidelines.md` for full standards.
 - [x] Phase 5: CAMeL Validation (enhanced: known-overcorrection revert)
 - [x] Phase 6: Combinations (redesigned: 3 inference + 1 CAMeL combo)
 - [x] Phase 7: DSPy Prompt Optimization
+- [x] Phase 8: RAG (Retrieval-Augmented Correction)

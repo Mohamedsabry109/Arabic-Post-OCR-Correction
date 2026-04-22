@@ -279,6 +279,27 @@ phase7:
   max_retries: 2
 
 # ---------------------------------------------------------------------------
+# Phase 8 specific (RAG — retrieval-augmented correction)
+# ---------------------------------------------------------------------------
+phase8:
+  retrieval_mode: "bm25"           # "bm25" | "dense" | "hybrid"
+  alpha: 0.6                       # hybrid weight: alpha*BM25 + (1-alpha)*dense
+  char_ngram_n: 3                  # character n-gram size for BM25 sentence retrieval
+  word_ngram_n: 2                  # character n-gram size for BM25 word retrieval
+  embedding_model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+  embedding_batch_size: 64
+  embedding_device: "auto"
+  top_k_sentences: 3               # retrieved sentence-level examples per query
+  top_k_words: 10                  # total word-level corrections returned
+  top_k_candidates: 50             # BM25 candidate pool before scoring
+  word_top_k_per_input_word: 3     # candidates per input word
+  min_cer: 0.0                     # minimum CER to include a sample in the index (0 = keep all)
+  max_text_len: 500                # skip training samples longer than this
+  source_corrections: null         # null = auto-discover from results/phase2-training/
+  analyze_errors: true
+  max_retries: 2
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:

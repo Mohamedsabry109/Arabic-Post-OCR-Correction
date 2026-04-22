@@ -445,6 +445,13 @@ def main() -> None:
                 rec.get("overcorrection_context", ""),
                 few_shot_examples=few_shot,
             )
+        if pt == "rag":
+            return builder.build_rag(
+                rec["ocr_text"],
+                retrieved_sentences=rec.get("retrieved_sentences", ""),
+                retrieved_words=rec.get("retrieved_words", ""),
+                few_shot_examples=few_shot,
+            )
         if pt == "meta_prompt":
             return builder.build_meta_prompt(rec["ocr_text"])
         if pt == "crafted":
