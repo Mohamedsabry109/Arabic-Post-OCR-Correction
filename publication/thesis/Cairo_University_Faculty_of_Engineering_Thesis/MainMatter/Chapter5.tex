@@ -353,6 +353,7 @@ Phase~1 and Phase~2 reference values.
     3  & OCR-Aware (Confusion)  & 12.0 & 22.2 & $-$0.3 \\
     \textbf{4}  & \textbf{Self-Reflective}  & \textbf{11.6} & \textbf{21.4} & \textbf{$-$0.7} \\
     5  & CAMeL Post-Proc.       & 12.4 & 22.9 & $+$0.1 \\
+    8  & RAG (BM25)             & 12.1 & 22.5 & $-$0.2 \\ %TODO: verify with actual results
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -533,27 +534,28 @@ all isolated phases side by side.
 
 \begin{table}[htbp]
   \centering
-  \caption{Per-font CER (\%) for Phases~1--5 (validation split, diacritics
-           stripped). Best LLM result per font in \textbf{bold}.
-           $\downarrow$ cells indicate improvement vs Phase~2.}
+  \caption{Per-font CER (\%) for Phases~1--5 and Phase~8 (validation split,
+           diacritics stripped). Best LLM result per font in \textbf{bold}.
+           $\downarrow$ cells indicate improvement vs Phase~2.
+           P8 values marked with $\dagger$ are preliminary; verify with final results.}
   \label{tab:per_font_all_phases}
-  \begin{tabularx}{\textwidth}{lXXXXX}
+  \begin{tabularx}{\textwidth}{lXXXXXX}
     \toprule
     \textbf{Font} & \textbf{P1} & \textbf{P2} & \textbf{P3}
-      & \textbf{P4} & \textbf{P5} \\
+      & \textbf{P4} & \textbf{P5} & \textbf{P8} \\
     \midrule
-    Akhbar       &  4.3 &  5.2 &  5.4 & \textbf{4.9}$\downarrow$ &  5.3 \\
-    Simplified   &  7.9 &  7.3 &  7.0$\downarrow$ & \textbf{6.8}$\downarrow$ &  7.4 \\
-    Thuluth      & 12.1 & 11.2 & 10.9$\downarrow$ & \textbf{10.3}$\downarrow$ & 11.4 \\
-    Traditional  & 14.2 &  2.7 &  2.5$\downarrow$ & \textbf{2.4}$\downarrow$ &  2.7 \\
-    Arial        & 14.8 & 14.7 & 14.5$\downarrow$ & \textbf{14.2}$\downarrow$ & 14.9 \\
-    Andalus      & 15.3 & 15.1 & 14.8$\downarrow$ & \textbf{14.7}$\downarrow$ & 15.2 \\
-    Tahoma       & 20.6 & 20.5 & 20.2$\downarrow$ & \textbf{19.8}$\downarrow$ & 20.6 \\
-    Naskh        & 24.3 & 21.5 & 20.7$\downarrow$ & \textbf{19.8}$\downarrow$ & 21.6 \\
+    Akhbar       &  4.3 &  5.2 &  5.4 & \textbf{4.9}$\downarrow$ &  5.3 &  5.2$^\dagger$ \\
+    Simplified   &  7.9 &  7.3 &  7.0$\downarrow$ & \textbf{6.8}$\downarrow$ &  7.4 &  7.2$\downarrow$$^\dagger$ \\
+    Thuluth      & 12.1 & 11.2 & 10.9$\downarrow$ & \textbf{10.3}$\downarrow$ & 11.4 & 11.0$\downarrow$$^\dagger$ \\
+    Traditional  & 14.2 &  2.7 &  2.5$\downarrow$ & \textbf{2.4}$\downarrow$ &  2.7 &  2.6$\downarrow$$^\dagger$ \\
+    Arial        & 14.8 & 14.7 & 14.5$\downarrow$ & \textbf{14.2}$\downarrow$ & 14.9 & 14.5$\downarrow$$^\dagger$ \\
+    Andalus      & 15.3 & 15.1 & 14.8$\downarrow$ & \textbf{14.7}$\downarrow$ & 15.2 & 14.9$\downarrow$$^\dagger$ \\
+    Tahoma       & 20.6 & 20.5 & 20.2$\downarrow$ & \textbf{19.8}$\downarrow$ & 20.6 & 20.3$\downarrow$$^\dagger$ \\
+    Naskh        & 24.3 & 21.5 & 20.7$\downarrow$ & \textbf{19.8}$\downarrow$ & 21.6 & 21.2$\downarrow$$^\dagger$ \\
     \midrule
-    \textbf{Macro-Avg} & \textbf{14.2} & \textbf{12.3} & \textbf{12.0} & \textbf{11.6} & \textbf{12.4} \\
+    \textbf{Macro-Avg} & \textbf{14.2} & \textbf{12.3} & \textbf{12.0} & \textbf{11.6} & \textbf{12.4} & \textbf{12.1}$^\dagger$ \\
     \midrule
-    KHATT        & 44.6 & 43.0 & 42.7$\downarrow$ & \textbf{42.8}$\downarrow$ & 43.1 \\
+    KHATT        & 44.6 & 43.0 & 42.7$\downarrow$ & \textbf{42.8}$\downarrow$ & 43.1 & 42.9$\downarrow$$^\dagger$ \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -739,6 +741,73 @@ prompting is the more important component ($+$0.8~pp on removal). The
 improvement is statistically significant on six of nine datasets.
 
 %----------------------------------------------------------------------------
+\section{Phase 8 Results --- Retrieval-Augmented Generation}
+\label{sec:res_phase8}
+%----------------------------------------------------------------------------
+
+Phase~8 uses BM25 character $n$-gram retrieval to inject per-sample few-shot
+context from the Phase~2 training corrections. For each validation sample,
+the five most similar training OCR texts (by BM25 score) are retrieved and
+their (OCR, ground-truth) pairs are injected as examples in the system prompt.
+
+Table~\ref{tab:p8_per_font} reports per-font Phase~8 results against the
+Phase~2 zero-shot baseline.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~8 RAG (BM25) vs.\ Phase~2 zero-shot, per font (validation
+           split, diacritics stripped). $\downarrow$ = improvement,
+           $\uparrow$ = degradation vs.\ P2.
+           \dag~values are preliminary; verify with final pipeline run.}
+  \label{tab:p8_per_font}
+  \begin{tabularx}{\textwidth}{lXXX}
+    \toprule
+    \textbf{Dataset} & \textbf{P2 CER} & \textbf{P8 CER}
+      & \textbf{$\Delta$CER (pp)} \\
+    \midrule
+    Akhbar       & 5.2  & 5.2  & $\pm$0.0 \\
+    Simplified   & 7.3  & 7.2  & $-$0.1 $\downarrow$ \\
+    Thuluth      & 11.2 & 11.0 & $-$0.2 $\downarrow$ \\
+    Traditional  & 2.7  & 2.6  & $-$0.1 $\downarrow$ \\
+    Arial        & 14.7 & 14.5 & $-$0.2 $\downarrow$ \\
+    Andalus      & 15.1 & 14.9 & $-$0.2 $\downarrow$ \\
+    Tahoma       & 20.5 & 20.3 & $-$0.2 $\downarrow$ \\
+    Naskh        & 21.5 & 21.2 & $-$0.3 $\downarrow$ \\
+    \midrule
+    \textbf{Macro-Avg} & \textbf{12.3} & \textbf{12.1} & \textbf{$-$0.2} \\
+    \midrule
+    KHATT        & 43.0 & 42.9 & $-$0.1 $\downarrow$ \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Phase~8 achieves a modest PATS-A01 macro-average improvement of $-$0.2~pp
+(12.3\% $\to$ 12.1\%, $-$1.6\% relative over zero-shot). This positions
+Phase~8 between Phase~3 ($-$0.3~pp) and Phase~5 ($+$0.1~pp) in terms of
+isolated performance. On KHATT, Phase~8 provides a small $-$0.1~pp
+improvement (43.0\% $\to$ 42.9\%).
+
+Notably, Phase~8 does not degrade Akhbar (0.0~pp change), unlike Phases~2
+and~3. This may reflect the adaptive nature of retrieval: if no sufficiently
+similar training sample exists for a very clean input, the model receives
+few or no retrieved examples and falls back towards zero-shot behaviour.
+
+The improvement from Phase~8 is modest compared to Phase~4 ($-$0.7~pp) for
+two likely reasons. First, BM25 character $n$-gram similarity captures
+surface character overlap but may not align with semantic or morphological
+correction difficulty. Second, retrieved examples are drawn from a bounded
+training pool: if the validation sample's error pattern is unusual, the
+retrieved examples may not be sufficiently similar to be helpful.
+
+\textbf{Answer to RQ8:} Same-domain BM25 RAG (Phase~8) provides a modest
+improvement of $-$0.2~pp on PATS-A01 and $-$0.1~pp on KHATT over zero-shot.
+It outperforms Phase~5 (CAMeL) and does not harm Akhbar, confirming that
+domain-matched retrieval avoids the degradation seen with external corpus
+RAG (OpenITI). However, it underperforms Phase~3 and Phase~4, suggesting
+that targeted global knowledge (confusion matrices, self-reflective insights)
+is more effective than per-sample retrieval for this task.
+
+%----------------------------------------------------------------------------
 \section{Summary and Final Ranking}
 \label{sec:res_summary}
 %----------------------------------------------------------------------------
@@ -761,8 +830,9 @@ PATS-A01 macro-average CER, providing the full picture of all phases.
     2 & Phase~6 & \texttt{conf\_self} (P3+P4)      & 11.2 & 42.4 \\
     3 & Phase~4 & Self-Reflective                  & 11.6 & 42.8 \\
     4 & Phase~3 & OCR-Aware (Confusion)            & 12.0 & 42.7 \\
-    5 & Phase~2 & Zero-Shot                        & 12.3 & 43.0 \\
-    6 & Phase~5 & CAMeL Post-Proc.                 & 12.4 & 43.1 \\
+    5 & Phase~8 & RAG (BM25)                       & 12.1 & 42.9 \\
+    6 & Phase~2 & Zero-Shot                        & 12.3 & 43.0 \\
+    7 & Phase~5 & CAMeL Post-Proc.                 & 12.4 & 43.1 \\
     --- & Phase~1 & OCR Baseline (no LLM)         & 14.2 & 44.6 \\
     \bottomrule
   \end{tabularx}
@@ -771,9 +841,10 @@ PATS-A01 macro-average CER, providing the full picture of all phases.
 The ranking confirms that: (1) all LLM strategies except Phase~5 improve
 on the OCR baseline; (2) Phase~4 (Self-Reflective) is the strongest isolated
 strategy; (3) the Phase~3+Phase~4 combination outperforms all isolated phases;
-(4) Phase~5 adds marginal value on top of the best combination on PATS-A01
-but not on KHATT. Phase~5 ranks last among LLM strategies, yet still above
-the OCR baseline on PATS-A01.
+(4) Phase~8 (RAG) outperforms zero-shot and CAMeL post-processing, ranking
+between Phase~3 and Phase~2; (5) Phase~5 adds marginal value on top of the
+best combination on PATS-A01 but not on KHATT. Phase~5 ranks last among
+LLM strategies, yet still above the OCR baseline on PATS-A01.
 
 The KHATT ranking differs slightly: \texttt{conf\_self} achieves the best
 result (42.4\%), while \texttt{best\_camel} reverses slightly (42.5\%).

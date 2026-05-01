@@ -564,6 +564,37 @@ invalid Arabic form while the OCR had a morphologically valid one.
 The validator records summary statistics for each text: total Arabic tokens
 compared, reverted count, and revert rate.
 
+\subsection{RAG Index (BM25 Retriever)}
+\label{subsec:kb_rag}
+
+\texttt{src/data/rag\_index.py} provides two classes for Phase~8.
+
+\textbf{\texttt{RAGIndexBuilder}} constructs a BM25 index from Phase~2
+training-split corrections. Each index entry corresponds to one training
+sample and stores the OCR text, the ground-truth text, and extracted
+word-level OCR$\to$GT correction pairs. Tokenisation uses character
+$n$-grams (default $n \in \{2,3,4\}$) computed by the \texttt{char\_ngrams()}
+utility. Character-level tokenisation is chosen over word-level tokenisation
+because Arabic OCR errors are primarily character confusions; character
+$n$-grams create a retrieval signal that is sensitive to the specific
+character substitutions present in the query, enabling the index to surface
+training samples with similar visual confusion patterns.
+
+\textbf{\texttt{RAGRetriever}} wraps the built index and exposes a
+\texttt{retrieve(query\_ocr, k=5)} interface. At inference time, the query
+OCR text is tokenised with the same character $n$-gram scheme, and the
+BM25 score is computed against every index entry. The top-$k$ entries by
+score are returned as a list of (ocr\_text, gt\_text, word\_pairs) tuples.
+These are formatted by \texttt{PromptBuilder.build\_rag()} into an Arabic
+few-shot block for injection into the system prompt.
+
+The index is built from the Phase~2 training-split JSONL file
+(\texttt{results/phase2-training/corrections.jsonl}) during the
+\texttt{--mode build-index} stage of \texttt{pipelines/run\_phase8.py}.
+An optional dense retrieval mode using FAISS embeddings is also available
+(\texttt{--retrieval-mode dense}), but all reported Phase~8 experiments use
+BM25 (\texttt{--retrieval-mode bm25}).
+
 \subsection{LLM Insights Loader}
 \label{subsec:kb_insights}
 
@@ -783,6 +814,7 @@ Table~\ref{tab:prompts} provides a complete registry of all prompt variants.
 \texttt{build\_ocr\_aware()}       & p3v1  & Top-10 Qaari character confusion pairs          & 3    \\
 \texttt{build\_self\_reflective()} & p4v3  & LLM error statistics + word error pairs         & 4    \\
 \texttt{build\_combined()}         & p6v1  & Subset of confusion + self-reflective contexts  & 6    \\
+\texttt{build\_rag()}              & p8v1  & $k$=5 retrieved (OCR, GT) training pairs       & 8    \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -838,3 +870,16 @@ Phase~6 evaluates four pre-selected combination identifiers:
 post-processing applied on top).
 This design makes Phase~6 ablation experiments straightforward to specify and
 fully reproducible from the combination identifier alone.
+
+\subsubsection{RAG Prompt (p8v1)}
+
+\texttt{build\_rag()} accepts the OCR text and a list of retrieved
+(OCR, ground-truth) training pairs. The system message extends the zero-shot
+v2 base instruction with a \texttt{<similar\_corrections>} XML block
+containing up to $k=5$ retrieved examples. Each example shows the training
+OCR text, the corrected ground-truth text, and the specific word-level
+changes made. The model is instructed to use these examples as reference for
+the kinds of corrections appropriate to this input, while still applying the
+conservative correction constraint. If no similar examples are retrieved
+(empty index or below-threshold score), \texttt{build\_rag()} falls back
+transparently to the zero-shot prompt.

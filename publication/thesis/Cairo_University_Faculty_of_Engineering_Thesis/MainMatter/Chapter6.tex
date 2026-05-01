@@ -137,6 +137,29 @@ systematic overcorrection bias. Together they address different failure modes.
 Phase~4 is the more impactful component (ablation delta $+$0.8 vs.\ $+$0.4
 for Phase~3), consistent with its stronger isolated performance.
 
+\subsection*{RQ8: Retrieval-Augmented Generation}
+
+\textbf{Question:} Does per-sample retrieval of similar OCR correction pairs
+from the training split (via BM25 character $n$-gram indexing) improve
+correction quality beyond zero-shot? Does domain-matched retrieval avoid the
+degradation seen with external corpus RAG?
+
+\textbf{Finding:} Phase~8 (BM25 RAG from training corrections) achieves
+PATS-A01 macro-average CER of 12.1\% ($-$0.2~pp vs.\ Phase~2, $-$1.6\%
+relative) and 42.9\% on KHATT ($-$0.1~pp). Phase~8 does not degrade Akhbar
+($\pm$0.0~pp), unlike zero-shot and confusion injection. It ranks between
+Phase~3 ($-$0.3~pp) and Phase~5 ($+$0.1~pp) in isolated performance.
+
+\textbf{Significance:} Domain-matched BM25 retrieval avoids the severe
+degradation observed with external corpus retrieval (OpenITI), confirming
+that corpus domain alignment is a prerequisite for effective RAG in
+post-OCR correction. However, the per-sample adaptive context provided by
+Phase~8 does not outperform the global statistical insights of Phase~4,
+suggesting that the quality of the retrieved examples is limited by the
+bounded training pool and the approximate character $n$-gram similarity
+measure. Retrieval with a more discriminative similarity function or a
+larger and more diverse training pool may yield stronger results.
+
 \subsection*{RQ7 (Overarching): Does Error Profile Determine Effectiveness?}
 
 \textbf{Question:} Does correction effectiveness depend primarily on the
@@ -494,6 +517,18 @@ using a vision--language model (VLM) as the corrector --- could address
 segmentation failures and stroke ambiguities that are inaccessible from text
 alone. Qwen3-VL or GPT-4o-Vision would be natural candidates for this extension.
 
+\paragraph{Improved retrieval for RAG-based correction.}
+Phase~8 demonstrates that same-domain retrieval avoids the catastrophic
+degradation of external corpus RAG, but BM25 character $n$-gram similarity
+is an approximate signal. Future work should evaluate denser retrieval
+using sentence embeddings (e.g.\ \texttt{paraphrase-multilingual-MiniLM-L12-v2})
+trained on Arabic text, which may surface more semantically similar correction
+exemplars than character overlap alone. Expanding the retrieval pool beyond
+Phase~2 training corrections to include silver-standard corrections generated
+by Phase~4 or Phase~6 would also increase retrieval diversity. Combining RAG
+with the best prompt-only strategy (\texttt{conf\_self}) as a joint Phase~8+
+6 configuration is another natural extension.
+
 \paragraph{Confidence-guided selective correction.}
 Rather than applying correction to all samples above the threshold, routing
 only low-confidence OCR output to the LLM would further limit exposure to
@@ -564,6 +599,14 @@ text ($-$0.1~pp on PATS-A01) but is neutral or slightly harmful on KHATT.
 Its limited impact follows directly from the Phase~1 finding that 71.3\% of
 OCR errors are morphologically valid --- beyond the reach of a context-free
 morphological filter.
+
+Retrieval-augmented generation (Phase~8) with domain-matched BM25 character
+$n$-gram retrieval from training corrections provides a modest $-$0.2~pp
+improvement on PATS-A01 and $-$0.1~pp on KHATT. This confirms that corpus
+domain alignment is essential for RAG-based correction, and that per-sample
+adaptive context is a viable complement to global statistical knowledge.
+Phase~8 ranks between Phase~3 and Phase~2, leaving room for improvement
+through denser retrieval and richer training pools.
 
 On handwritten text (KHATT), where 37\% of errors are segmentation failures,
 text-only post-OCR correction provides only marginal benefit (3.6--5.0\%

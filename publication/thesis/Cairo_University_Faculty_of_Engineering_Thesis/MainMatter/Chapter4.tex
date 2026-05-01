@@ -772,6 +772,140 @@ improvements. These tests are implemented in
 \textbf{Research question answered:} RQ6.
 
 % ============================================================
+\section{Phase 8 --- Retrieval-Augmented Generation}
+\label{sec:phase8}
+% ============================================================
+
+\subsection{Hypothesis}
+Retrieving the most similar OCR correction pairs from the training split ---
+using BM25 character $n$-gram matching --- and injecting them as per-sample
+few-shot context will improve correction quality beyond zero-shot by providing
+the model with concrete, domain-matched correction exemplars. Unlike the
+global statistics of Phases~3 and~4, retrieved examples adapt to the specific
+error pattern of each input sample, potentially providing more precise
+guidance. The use of a same-domain corpus (training corrections from the same
+OCR engine and text type) avoids the domain-mismatch degradation observed with
+external corpus retrieval.
+
+\subsection{Method}
+\label{subsec:phase8_method}
+
+Phase~8 is itself divided into three pipeline stages:
+
+\subsubsection{Stage~1: Build Index}
+
+\begin{enumerate}
+  \item Load Phase~2 training-split corrections from
+        \texttt{results/phase2-training/corrections.jsonl}.
+        Each record provides an (OCR text, ground-truth text, LLM correction)
+        triple for a training sample.
+
+  \item Extract word-level OCR$\to$GT pairs for each training sample using
+        \texttt{extract\_word\_errors()}, which aligns OCR and ground-truth
+        tokens and records positions where they differ.
+
+  \item Build a BM25 index (\texttt{RAGIndexBuilder}) where each document
+        corresponds to one training sample. The indexing field is the OCR
+        text, tokenised into character $n$-grams ($n \in \{2, 3, 4\}$) by
+        \texttt{char\_ngrams()}.
+
+  \item Persist the index and the associated (OCR, GT, word-pairs) metadata
+        to \texttt{results/phase8/index/}.
+\end{enumerate}
+
+\subsubsection{Stage~2: Export}
+
+\begin{enumerate}
+  \item For each validation sample, query the BM25 index with the sample's
+        OCR text (also tokenised as character $n$-grams).
+
+  \item Retrieve the top-$k$ training entries by BM25 score ($k = 5$,
+        configured as \texttt{phase8.top\_k}).
+
+  \item Format the retrieved entries as an Arabic few-shot block using
+        \texttt{PromptBuilder.build\_rag(ocr\_text, retrieved\_pairs)}.
+        The block is embedded in a \texttt{<similar\_corrections>} XML section
+        that shows the model: (a) the training OCR text, (b) the corrected
+        ground-truth text, and (c) the specific word-level changes made. The
+        block is prepended to the zero-shot v2 conservative instruction.
+
+  \item Write the prompts to \texttt{results/phase8/inference\_input.jsonl}.
+        The prompt version tag is \texttt{p8v1}.
+\end{enumerate}
+
+\subsubsection{Stage~3: Analyse}
+
+\begin{enumerate}
+  \item Run inference on Kaggle GPU using \texttt{scripts/infer.py}.
+  \item Load \texttt{results/phase8/corrections.jsonl}.
+  \item Compute CER/WER per dataset; compare to Phase~2 zero-shot baseline.
+  \item Write reports to \texttt{results/phase8/\{dataset\}/}.
+\end{enumerate}
+
+\subsection{Variables}
+\begin{itemize}
+  \item \textbf{Changed from Phase~2:} Per-sample few-shot RAG context
+        injected in \texttt{<similar\_corrections>} block; retrieved from
+        Phase~2 training corrections via BM25 character $n$-gram index.
+  \item \textbf{Fixed:} Model, dataset, generation parameters, evaluation
+        protocol, conservative correction instruction.
+  \item \textbf{Data used:} Phase~2 training-split corrections only
+        (no validation-split leakage; retrieval pool contains no
+        validation-split ground truth).
+  \item \textbf{Retrieval mode:} BM25 (\texttt{--retrieval-mode bm25}).
+        Dense retrieval mode (FAISS + embedding) is available as an
+        alternative but is not used in reported experiments.
+\end{itemize}
+
+\subsection{Design Rationale}
+\label{subsec:phase8_rationale}
+
+The key advantage of Phase~8 relative to other isolated strategies is
+per-sample adaptivity. Phases~3 and~4 inject global knowledge about the
+engine's confusion patterns or the model's aggregate failure statistics.
+These are averaged over the training set and applied identically to every
+validation sample. Phase~8 instead retrieves different context for each
+input: a sample with heavy dot-confusion errors will retrieve training
+examples dominated by dot-confusion pairs; a sample with segmentation errors
+will retrieve training examples with similar segmentation patterns.
+
+Character $n$-gram retrieval is chosen over word-level BM25 for two reasons.
+First, Arabic OCR errors often corrupt individual characters within words,
+making character-level similarity a more direct signal than word overlap.
+Second, character $n$-grams are robust to word-boundary errors (merges and
+splits), which would cause word-level matching to fail at boundaries created
+by segmentation errors.
+
+The same-domain retrieval corpus (Phase~2 training corrections from Qaari on
+PATS-A01/KHATT) is the critical design choice that distinguishes Phase~8 from
+the OpenITI-based RAG considered in the background literature review. The
+domain match ensures that retrieved examples exhibit the same visual confusion
+patterns as the query, making them genuinely useful as correction exemplars
+rather than distracting context.
+
+\subsection{No-Leakage Guarantee}
+
+The retrieval index is built exclusively from training-split samples. The
+validation-split samples are never present in the index, ensuring no
+ground-truth leakage. Because the retrieved context contains only training
+OCR texts and ground-truth texts (no validation-split information), there is
+no mechanism by which Phase~8 could convey held-out information to the model.
+
+\subsection{Output Files}
+\begin{itemize}
+  \item \texttt{results/phase8/index/} --- BM25 index and metadata
+  \item \texttt{results/phase8/inference\_input.jsonl}
+  \item \texttt{results/phase8/corrections.jsonl}
+  \item \texttt{results/phase8/\{dataset\}/metrics.json}
+  \item \texttt{results/phase8/\{dataset\}/comparison\_vs\_phase2.json}
+  \item \texttt{results/phase8/comparison.json} --- cross-dataset summary
+  \item \texttt{results/phase8/report.md} --- human-readable summary
+\end{itemize}
+
+\noindent
+\textbf{Research question answered:} RQ8.
+
+% ============================================================
 \section{Phase Summary}
 \label{sec:phase_summary}
 % ============================================================
@@ -795,6 +929,7 @@ Phase~3  & Failure-filtered confusion matrix       & Phase~2  & RQ3 \\
 Phase~4  & Self-reflective insights + word pairs  & Phase~2  & RQ4 \\
 Phase~5  & CAMeL morphological revert + overcorrection revert & Phase~2 & RQ5 \\
 Phase~6  & Combinations + ablation (4 configs)    & Phase~2 + best combo & RQ6 \\
+Phase~8  & BM25 RAG: $k$=5 retrieved training corrections & Phase~2 & RQ8 \\
 \bottomrule
 \end{tabularx}
 \end{table}

@@ -187,6 +187,15 @@ Arabic OCR correction, several knowledge sources are plausible:
   When the LLM introduces such an invalid word from a valid OCR source,
   a revert to the OCR original is a conservative and reliable corrective action.
 
+  \item \textbf{Retrieval-augmented examples} drawn from Phase~2
+  training-split corrections provide per-sample adaptive context.
+  A BM25 index built on character n-grams of training OCR texts retrieves
+  the $k$ most similar (OCR, ground-truth) pairs for each validation sample.
+  These are injected into the prompt as concrete correction exemplars,
+  tailoring the prompt to the specific error pattern of the current input.
+  Unlike the global statistics of Phases~3 and~4, retrieved examples adapt
+  sample-by-sample to the input at hand.
+
 \end{itemize}
 
 Each of these sources addresses a different aspect of the correction
@@ -236,6 +245,13 @@ What is the marginal contribution of each component in ablation, and does
 adding Phase~5 CAMeL post-processing provide further benefit on top of the
 best prompt-only combination?
 
+\textbf{RQ8 --- Retrieval-Augmented Correction:} Does per-sample retrieval
+of similar OCR correction pairs from the training split --- via a BM25 index
+over character n-grams --- improve correction quality beyond zero-shot
+prompting? Does retrieving from the same domain and engine (training-split
+corrections) overcome the domain-mismatch problem that limits external corpus
+retrieval?
+
 \textbf{RQ7 (overarching):} Does correction effectiveness depend primarily
 on the baseline OCR error profile of the input, or can knowledge augmentation
 overcome the over-correction problem observed on low-error fonts?
@@ -243,8 +259,9 @@ overcome the over-correction problem observed on low-error fonts?
 RQ1 is addressed in Chapter~\ref{ch_results}, Section~\ref{sec:res_phase1},
 using Phase~1 outputs. RQ2--RQ5 are each addressed by a corresponding
 isolated experiment (Phases~2--5), all reporting on the validation split.
-RQ6 is addressed by the combination and ablation study (Phase~6). RQ7 is
-addressed by synthesising findings across Phases~2--6 in
+RQ6 is addressed by the combination and ablation study (Phase~6). RQ8 is
+addressed by the retrieval-augmented experiment (Phase~8). RQ7 is
+addressed by synthesising findings across Phases~2--6 and~8 in
 Chapter~\ref{ch_conc}.
 
 %----------------------------------------------------------------------------
@@ -257,7 +274,7 @@ This thesis makes the following contributions.
 \begin{enumerate}
 
   \item \textbf{A systematic multi-dataset evaluation framework for Arabic
-  post-OCR correction.} Five prompt-engineering strategies are evaluated
+  post-OCR correction.} Six prompt-engineering strategies are evaluated
   across nine datasets (eight PATS-A01 typewritten fonts and KHATT
   handwritten text) using aligned train/validation splits, each changing
   exactly one variable relative to the zero-shot baseline. This isolation
@@ -323,6 +340,18 @@ This thesis makes the following contributions.
   combination (\texttt{conf\_self}) achieves 11.2\% CER on PATS-A01
   (21.1\% relative improvement over OCR baseline) and 42.4\% on KHATT
   (5.0\% relative improvement).
+
+  \item \textbf{A retrieval-augmented correction strategy using same-domain
+  training examples.} Phase~8 builds a BM25 index over character n-grams
+  of Phase~2 training corrections and, for each validation sample, retrieves
+  the $k$ most similar (OCR, ground-truth) pairs to inject as per-sample
+  few-shot context. This design sidesteps the domain-mismatch problem that
+  caused external corpus retrieval (OpenITI) to degrade performance, by
+  restricting the retrieval pool to the same OCR engine and text domain as
+  the evaluation data. To the author's knowledge, this is the first
+  application of BM25 character-n-gram retrieval to Arabic post-OCR
+  correction, providing an adaptive, per-sample complement to the global
+  statistical patterns of Phases~3 and~4.
 
   \item \textbf{Open-source code and reproducible configuration.}
   All pipelines, prompt templates, knowledge base loaders, and evaluation
@@ -405,8 +434,9 @@ describes each experimental phase as a self-contained experiment with a
 stated hypothesis, step-by-step method, variables changed vs.\ Phase~2,
 output files, and the research question answered. Phases~1 through~5 are
 covered as isolated experiments, followed by Phase~6 (combinations and
-ablation), with particular attention to the isolation principle that ensures
-each augmentation condition can be attributed to a single knowledge source.
+ablation) and Phase~8 (retrieval-augmented generation), with particular
+attention to the isolation principle that ensures each augmentation condition
+can be attributed to a single knowledge source.
 
 \textbf{Chapter~\ref{ch_results} --- Results and Analysis}
 reports all numerical results across the nine evaluation datasets.

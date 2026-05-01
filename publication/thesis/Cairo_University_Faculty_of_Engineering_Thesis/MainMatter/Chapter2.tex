@@ -805,19 +805,22 @@ The RAG pipeline consists of the following components:
 \end{enumerate}
 
 \noindent
-This study uses the \texttt{paraphrase-multilingual-MiniLM-L12-v2} model
-\cite{reimers2019sentence} for both corpus and query encoding.
-This is a compact 12-layer multilingual sentence encoder with strong Arabic
-support, suitable for embedding the 200,000-sentence OpenITI index on a CPU
-without excessive memory usage.
-
 An important consideration for RAG quality is \emph{domain match}: if the
 retrieval corpus covers a different domain or time period than the input text,
 retrieved passages may not be relevant and could mislead the model.
-The domain mismatch between the classical OpenITI corpus and modern
-newspaper text is a known limitation that was identified in preliminary
-experiments and led to the exclusion of RAG from the final experimental
-design of this thesis.
+Section~\ref{subsec:ks_openiti} discusses how the classical OpenITI corpus
+proved too domain-mismatched for this task.
+
+Phase~8 of this study uses a domain-matched retrieval corpus: the Phase~2
+training-split corrections themselves. Instead of dense embedding retrieval,
+Phase~8 employs BM25 \cite{robertson2009bm25} with character $n$-gram
+tokenisation, querying a pre-built BM25 index of training OCR texts to
+retrieve the $k=5$ most similar (OCR, ground-truth) pairs for each validation
+sample. These pairs are injected into the system prompt as per-sample
+few-shot correction examples. This design sidesteps domain mismatch entirely,
+since the retrieval corpus is drawn from the same OCR engine and text domain
+as the evaluation data. The RAGIndexBuilder and RAGRetriever components are
+implemented in \texttt{src/data/rag\_index.py}.
 
 \subsection{Self-Reflective and Meta-Cognitive Prompting}
 \label{subsec:self_reflective}
@@ -931,9 +934,11 @@ texts are classical and historical, while PATS-A01 documents are modern
 newspaper text. The semantic and lexical overlap between medieval religious
 scholarship and contemporary news reporting is low. Preliminary experiments
 with OpenITI-based RAG showed severe degradation due to this mismatch, and
-the RAG approach was not included in the final experimental design of this
-thesis. A retrieval corpus drawn from modern Arabic newspapers would be
-required for effective RAG-based correction.
+the OpenITI corpus was not used in the RAG experiments of this thesis.
+Phase~8 instead uses a domain-matched retrieval corpus --- the Phase~2
+training-split corrections from the same OCR engine and text domain --- and
+employs BM25 character $n$-gram retrieval rather than dense embedding search
+(see Section~\ref{subsec:rag} and Section~\ref{sec:phase8}).
 
 \subsection{CAMeL Tools}
 \label{subsec:ks_camel}

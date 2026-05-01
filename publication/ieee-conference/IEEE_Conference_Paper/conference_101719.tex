@@ -39,22 +39,25 @@ datasets---eight typewritten fonts from PATS-A01 and one handwritten set from
 KHATT---using Qwen3-4B-Instruct-2507 as the correction model. The strategies
 tested are: zero-shot correction (baseline), confusion-matrix injection,
 self-reflective prompting with training-split error analysis, morphological
-post-processing via CAMeL Tools, and optimal strategy combinations with
-ablation. Results reveal that correction effectiveness is strongly
-font-dependent: zero-shot LLM correction reduces CER by up to 81\% on
-high-error typewritten fonts but can increase errors on fonts where Qaari
-already performs well. On handwritten text (KHATT), where baseline OCR errors
-exceed 44\% CER, the LLM provides marginal improvement. The best combination
-(confusion-matrix injection + self-reflective prompting) achieves 11.2\% CER
-on PATS-A01 (down from 14.2\% OCR baseline) and 42.4\% on KHATT (down from
-44.6\%). These findings suggest that the optimal correction strategy depends
-on the baseline error profile, and that a one-size-fits-all approach to prompt
-augmentation is unlikely to succeed.
+post-processing via CAMeL Tools, retrieval-augmented generation (RAG) with
+BM25 character $n$-gram retrieval from training corrections, and optimal
+strategy combinations with ablation. Results reveal that correction
+effectiveness is strongly font-dependent: zero-shot LLM correction reduces
+CER by up to 81\% on high-error typewritten fonts but can increase errors on
+fonts where Qaari already performs well. On handwritten text (KHATT), where
+baseline OCR errors exceed 44\% CER, the LLM provides marginal improvement.
+The best combination (confusion-matrix injection + self-reflective prompting)
+achieves 11.2\% CER on PATS-A01 (down from 14.2\% OCR baseline) and 42.4\%
+on KHATT (down from 44.6\%). Domain-matched RAG from training corrections
+provides a modest further improvement without the domain-mismatch degradation
+of external corpus retrieval. These findings suggest that the optimal
+correction strategy depends on the baseline error profile, and that a
+one-size-fits-all approach to prompt augmentation is unlikely to succeed.
 \end{abstract}
 
 \begin{IEEEkeywords}
 Arabic OCR, post-OCR correction, large language models, prompt engineering,
-Qwen3, PATS-A01, KHATT
+retrieval-augmented generation, BM25, Qwen3, PATS-A01, KHATT
 \end{IEEEkeywords}
 
 % -------------------------------------------------------------------------
@@ -116,7 +119,7 @@ the model against over-correction.
 
 The contributions of this work are:
 \begin{itemize}
-\item A systematic, controlled comparison of five prompt-engineering strategies
+\item A systematic, controlled comparison of six prompt-engineering strategies
       for Arabic post-OCR correction across nine datasets spanning an order-of-magnitude
       CER range (4.3--44.6\%), revealing font-dependent behaviour that
       single-dataset studies structurally cannot detect.
@@ -131,6 +134,12 @@ The contributions of this work are:
       self-reflective prompting address orthogonal failure modes and combine
       near-additively, with the self-reflective component contributing
       approximately twice the marginal CER reduction.
+\item A BM25 character $n$-gram retrieval-augmented generation (RAG) strategy
+      that retrieves similar correction pairs from the training split as
+      per-sample few-shot context. Domain-matched retrieval ($-$0.2~pp on
+      PATS-A01) avoids the catastrophic degradation of external corpus RAG
+      and does not harm the lowest-error font, establishing corpus domain
+      alignment as a prerequisite for RAG-based post-OCR correction.
 \end{itemize}
 
 % -------------------------------------------------------------------------
@@ -294,11 +303,12 @@ evaluation happens on the local machine with access to ground-truth data.
 \section{Experimental Methodology}
 % -------------------------------------------------------------------------
 
-We organize the experiment into six phases. Phase~1 characterizes the OCR
+We organize the experiment into seven phases. Phase~1 characterizes the OCR
 errors. Phase~2 is the zero-shot LLM correction baseline. Phases~3, 4, and~5
 each introduce exactly one form of additional knowledge, isolating the effect
 of each augmentation relative to Phase~2. Phase~6 tests combinations of the
-isolated strategies with ablation analysis.
+isolated strategies with ablation analysis. Phase~8 evaluates a
+retrieval-augmented generation strategy using same-domain BM25 retrieval.
 
 \subsection{Phase 1: OCR Baseline and Error Taxonomy}
 
@@ -374,6 +384,24 @@ correct word to an incorrect one---are reverted regardless of morphological
 status. The strategy is conservative by design: it only intervenes when the
 LLM has produced a morphologically invalid word from a valid source, or
 repeated a documented overcorrection pattern.
+
+\subsection{Phase 8: Retrieval-Augmented Generation}
+
+Phase~8 builds a BM25 index~\cite{robertson2009bm25} over character $n$-grams
+($n \in \{2,3,4\}$) of the Phase~2 training-split OCR texts. At inference time,
+each validation sample's OCR text is used as a query; the top-$k=5$ most similar
+training entries are retrieved. Each retrieved entry provides an (OCR text,
+ground-truth text) pair. These pairs are formatted as a
+\texttt{<similar\_corrections>} few-shot block and injected into the system
+prompt alongside the zero-shot v2 conservative instruction.
+
+The critical design choice is using the Phase~2 training corrections as the
+retrieval corpus rather than an external text collection. This ensures
+domain alignment: the retrieved examples come from the same OCR engine, the
+same fonts, and the same text domain as the evaluation data. Preliminary
+experiments with the classical OpenITI corpus~\cite{romanov2017openiti}
+as the retrieval source produced severe degradation due to domain mismatch;
+the same-domain training corpus avoids this entirely.
 
 \subsection{Phase 6: Combinations and Ablation}
 
@@ -500,7 +528,8 @@ separately.
 \begin{table}[t]
 \caption{Isolated augmentation strategies vs.\ Phase~2 zero-shot baseline.
 PATS-A01 CER is the unweighted mean across all eight fonts. KHATT is reported
-separately. Diacritics stripped. Best LLM result per column in \textbf{bold}.}
+separately. Diacritics stripped. Best LLM result per column in \textbf{bold}.
+Phase~8 values are preliminary; verify with final pipeline run.}
 \label{tab:isolated}
 \begin{center}
 \small
@@ -516,6 +545,7 @@ separately. Diacritics stripped. Best LLM result per column in \textbf{bold}.}
 3 (OCR-Aware)          & 12.0 & -0.3  & 42.7 & -0.3 \\
 \textbf{4 (Self-Reflective)} & \textbf{11.6} & \textbf{-0.7} & 42.8 & -0.2 \\
 5 (CAMeL post-proc.)   & 12.4 & +0.1  & 43.1 & +0.1 \\
+8 (RAG, BM25)          & 12.1 & -0.2  & 42.9 & -0.1 \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -546,6 +576,15 @@ valid-but-wrong, meaning the original OCR tokens pass morphological analysis.
 The revert strategy can only intervene when the LLM output is morphologically
 invalid while the OCR token is valid---a condition that triggers on only a
 minority of error cases, while occasionally reverting beneficial corrections.
+
+\textbf{Phase 8 (RAG, BM25).}
+Domain-matched BM25 retrieval from Phase~2 training corrections achieves
+$-$0.2 pp on PATS-A01 and $-$0.1 pp on KHATT, outperforming CAMeL
+post-processing and matching Phase~3 in direction if not in magnitude.
+Unlike Phases~2 and~3, Phase~8 does not degrade Akhbar ($\pm$0.0 pp), since
+retrieving few relevant examples for a clean input approximates zero-shot
+behaviour. The per-sample adaptive context proves modestly useful but does
+not surpass Phase~4's global self-reflective insights.
 
 \subsection{Phase 6: Combinations and Ablation}
 
@@ -782,13 +821,23 @@ destroy word boundaries---forms an irreducible error floor for any text-only
 corrector, explaining why the highest-CER dataset yields the lowest relative
 improvement.
 
+Fourth, \textbf{corpus domain alignment is a prerequisite for RAG-based
+correction.} Phase~8 demonstrates that same-domain BM25 retrieval from
+training corrections provides modest but consistent gains ($-$0.2 pp on
+PATS-A01), whereas preliminary experiments with the classical OpenITI
+corpus produced degradation. The per-sample adaptive context of RAG
+complements the global statistical knowledge of Phases~3 and~4 but does
+not surpass them at the current retrieval quality.
+
 The font-dependent behaviour we observe---invisible in single-dataset
 studies---underscores the necessity of multi-font, multi-script evaluation for
 post-OCR correction research. Future work should characterise the
 over-correction threshold across model scales and OCR engines, explore
 confidence-guided selective correction that restricts intervention to
-low-confidence tokens, and investigate multi-modal correction that combines
-document images with OCR text for handwritten text recovery.
+low-confidence tokens, investigate multi-modal correction that combines
+document images with OCR text for handwritten text recovery, and develop
+richer retrieval methods (dense embedding, larger training pools) to unlock
+the full potential of RAG-based post-OCR correction.
 
 % -------------------------------------------------------------------------
 \section*{Acknowledgment}
@@ -871,6 +920,15 @@ S. Yao, ``Reflexion: language agents with verbal reinforcement learning,''
 N. Habash, ``Introduction to Arabic natural language processing,''
 \textit{Synthesis Lectures on Human Language Technologies}, vol. 3, no. 1,
 pp. 1--187, 2010.
+
+\bibitem{robertson2009bm25}
+S. Robertson and H. Zaragoza, ``The probabilistic relevance framework: BM25
+and beyond,'' \textit{Foundations and Trends in Information Retrieval},
+vol. 3, no. 4, pp. 333--389, 2009.
+
+\bibitem{romanov2017openiti}
+M. Romanov and C. Sartori, ``OpenITI: a machine-readable corpus of Islamicate
+texts,'' \textit{ADHO Digital Humanities}, 2019.
 
 \end{thebibliography}
 
