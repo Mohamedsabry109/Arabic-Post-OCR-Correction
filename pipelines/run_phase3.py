@@ -71,6 +71,7 @@ from pipelines._utils import (
     resolve_datasets, load_sample_list, compute_group_aggregates,
     split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
     load_phase2_full_metrics, pick_phase2_variant, _pick_corrected_key,
+    get_train_counterpart, get_training_dataset_names,
 )
 
 logger = logging.getLogger(__name__)
@@ -285,25 +286,31 @@ def build_pooled_matrices(
     loader: ConfusionMatrixLoader,
     all_dataset_names: list[str],
 ) -> dict[str, list[ConfusionPair]]:
-    """Pre-build pooled confusion matrices for PATS-A01 and KHATT dataset types.
+    """Pre-build pooled confusion matrices from TRAINING-split Phase 1 results.
+
+    Always uses training-split keys when constructing paths so that knowledge
+    injected into validation prompts is never derived from validation data.
 
     Args:
         phase1_dir: Root of Phase 1 results (contains per-dataset subdirs).
         loader: ConfusionMatrixLoader instance.
-        all_dataset_names: All dataset keys configured (used to find matrix paths).
+        all_dataset_names: All dataset keys configured (val or train).
 
     Returns:
         Dict with keys "PATS-A01" and "KHATT", each mapping to a sorted list
         of pooled ConfusionPair objects.
     """
+    # Resolve to training-split keys regardless of what the config contains.
+    train_names = get_training_dataset_names(all_dataset_names)
+
     pats_paths = [
         phase1_dir / name / "confusion_matrix.json"
-        for name in all_dataset_names
+        for name in train_names
         if name.startswith("PATS-A01-")
     ]
     khatt_paths = [
         phase1_dir / name / "confusion_matrix.json"
-        for name in all_dataset_names
+        for name in train_names
         if name.startswith("KHATT-")
     ]
 
@@ -311,7 +318,7 @@ def build_pooled_matrices(
     khatt_pooled = loader.load_pooled(khatt_paths) if khatt_paths else []
 
     logger.info(
-        "Pooled matrices: PATS-A01 has %d pairs, KHATT has %d pairs.",
+        "Pooled matrices (training splits): PATS-A01 has %d pairs, KHATT has %d pairs.",
         len(pats_pooled), len(khatt_pooled),
     )
     return {"PATS-A01": pats_pooled, "KHATT": khatt_pooled}
@@ -326,13 +333,16 @@ def resolve_confusion_matrix(
 ) -> tuple[list[ConfusionPair], str]:
     """Return (confusion_pairs, source_label) for a dataset.
 
+    Always reads the TRAINING-split confusion matrix so that validation prompts
+    are never enriched with information derived from validation data.
+
     Resolution order:
-    1. Dataset-specific Phase 1 confusion matrix (if present and data-rich).
-    2. Pooled matrix for the same dataset type (PATS-A01 or KHATT).
+    1. Training-split-specific Phase 1 confusion matrix (if present and data-rich).
+    2. Pooled training matrix for the same dataset type (PATS-A01 or KHATT).
     3. Empty list with source="none" (triggers zero-shot fallback in prompt builder).
 
     Args:
-        dataset_key: e.g. "KHATT-train" or "PATS-A01-Akhbar-train".
+        dataset_key: e.g. "KHATT-validation" or "PATS-A01-Akhbar-val".
         phase1_dir: Root of Phase 1 results.
         pooled: Pre-built pooled matrices from build_pooled_matrices().
         loader: ConfusionMatrixLoader instance.
@@ -341,16 +351,19 @@ def resolve_confusion_matrix(
     Returns:
         Tuple of (pairs_list, source_label_string).
     """
-    matrix_path = phase1_dir / dataset_key / "confusion_matrix.json"
+    # Always use the training-split key so we never read validation Phase 1 data.
+    train_key = get_train_counterpart(dataset_key)
+    matrix_path = phase1_dir / train_key / "confusion_matrix.json"
 
     if loader.has_enough_data(matrix_path, min_substitutions):
         try:
             pairs = loader.load(matrix_path)
-            logger.info("[%s] Using dataset-specific confusion matrix (%d pairs).",
-                        dataset_key, len(pairs))
+            logger.info("[%s] Using training-split confusion matrix '%s' (%d pairs).",
+                        dataset_key, train_key, len(pairs))
             return pairs, "dataset_specific"
         except (FileNotFoundError, ValueError) as exc:
-            logger.warning("[%s] Could not load matrix: %s — falling back to pooled.", dataset_key, exc)
+            logger.warning("[%s] Could not load matrix for '%s': %s -- falling back to pooled.",
+                           dataset_key, train_key, exc)
 
     # Determine dataset type for pooled fallback
     if dataset_key.startswith("PATS-A01-"):
@@ -362,13 +375,13 @@ def resolve_confusion_matrix(
 
     if pool_key and pooled.get(pool_key):
         logger.warning(
-            "[%s] Dataset matrix sparse/missing — using pooled %s matrix (%d pairs).",
-            dataset_key, pool_key, len(pooled[pool_key]),
+            "[%s] Training matrix sparse/missing for '%s' -- using pooled %s matrix (%d pairs).",
+            dataset_key, train_key, pool_key, len(pooled[pool_key]),
         )
         return pooled[pool_key], f"pooled_{pool_key}"
 
     logger.warning(
-        "[%s] No confusion data available — confusion_context will be empty. "
+        "[%s] No training confusion data available (run Phase 1 on training splits first). "
         "Samples will use zero_shot fallback.",
         dataset_key,
     )

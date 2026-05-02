@@ -235,7 +235,7 @@ phase4:
   prompt_version: "p4v2"
   few_shot:
     enabled: true
-    source_phase: "phase2"       # which phase's training corrections to draw from
+    source_phase: "phase2-training"  # training-split Phase 2 corrections (never val data)
     n_unchanged: 3               # CER=0 examples — teach "leave correct text alone"
     n_easy: 3                    # CER < 0.05 — simple, unambiguous corrections
     n_medium: 4                  # 0.05 <= CER < 0.25 — standard corrections

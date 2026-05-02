@@ -9,8 +9,21 @@ Follow every step in the order listed. Do not skip ahead.
 
 | Split | Purpose | Phases |
 |-------|---------|--------|
-| **Training** | Build knowledge sources (confusion matrices, LLM failure patterns, RAG index) | 1, 2, then artifact generation |
-| **Validation** | Produce final evaluation numbers reported in the paper | 1–8 |
+| **Training** | Build all knowledge sources used to enrich validation prompts | Phase 1 (confusion matrices), Phase 2 (LLM corrections → artifacts + RAG index) |
+| **Validation** | Produce final evaluation numbers reported in the paper | Phases 1–8 (evaluation only) |
+
+**Leakage-free design.** Every piece of knowledge injected into a validation prompt must come exclusively from training data:
+
+| Knowledge artifact | Source | Used by |
+|-------------------|--------|---------|
+| Character confusion matrix | Phase 1 **training** splits | Phases 3, 6 |
+| LLM failure word pairs / overcorrections | Phase 2 **training** analysis (`results/phase2-training/analysis/`) | Phases 3, 4, 5, 6 |
+| Self-reflective insights + few-shot examples | Phase 2 **training** corrections | Phase 4 |
+| BM25 RAG index | Phase 2 **training** corrections | Phase 8 |
+
+Phases 3 and 6 read confusion matrices from `results/phase1/{train_key}/confusion_matrix.json`
+(not from the validation Phase 1 run). Ensure Phase 1 was run on training splits before
+running Phases 3 or 6 (see prerequisite notes in B3 and B6).
 
 **Inference rule:** Every phase that requires an LLM follows the same three-step pattern:
 `export` (local) → `infer.py` (Kaggle or Thunder) → `analyze` (local).
@@ -91,7 +104,9 @@ performance insights (fix rates, error weaknesses). Phase 4 export will fail wit
 `results/phase2-training/{train_key}/corrections.jsonl`.
 
 Note: `--source-phase phase2-training` is required because the default is `phase2`
-and the folder has been renamed.
+and the folder has been renamed. The pipeline now automatically derives training dataset
+keys even when `config.yaml` only lists validation datasets — no config switch needed
+to run this step.
 
 ```bash
 python pipelines/run_phase4.py --mode analyze-train --source-phase phase2-training
@@ -234,7 +249,12 @@ python scripts/hf_sync.py pull --paths results/<phase>
 ### B1 — Phase 1: Validation Baseline (Local)
 
 Generates OCR baseline metrics and per-dataset confusion matrices for each validation
-dataset. Phase 3 reads these confusion matrices when building prompts.
+dataset.
+
+> **Phase 3 and Phase 6 do NOT use these confusion matrices.** They read training-split
+> confusion matrices from `results/phase1/{train_key}/confusion_matrix.json`, which were
+> produced when Phase 1 was run on training datasets (listed as Done in Current Status).
+> The validation confusion matrices produced here are used only for B1 reporting.
 
 ```bash
 python pipelines/run_phase1.py
@@ -245,7 +265,7 @@ python pipelines/run_phase1.py
 | File | Description |
 |------|-------------|
 | `results/phase1/{val_key}/metrics.json` | Per-dataset CER/WER baseline |
-| `results/phase1/{val_key}/confusion_matrix.json` | Character confusion pairs (used by Phase 3) |
+| `results/phase1/{val_key}/confusion_matrix.json` | Confusion pairs (Phase 1 analysis only — Phases 3 and 6 use training-split matrices) |
 | `results/phase1/{val_key}/error_taxonomy.json` | Error type breakdown |
 | `results/phase1/baseline_metrics.json` | **Paper number: OCR baseline aggregated** |
 
@@ -297,7 +317,11 @@ required by Phase 5.
 ### B3 — Phase 3: OCR-Aware Prompting (Validation)
 
 **Prerequisites:**
-- B1 done — confusion matrices exist at `results/phase1/{val_key}/confusion_matrix.json`
+- Phase 1 training-split complete — training confusion matrices exist at
+  `results/phase1/{train_key}/confusion_matrix.json`
+  (e.g. `results/phase1/PATS-A01-Akhbar-train/confusion_matrix.json`).
+  These are from the earlier Phase 1 training run (Current Status: Done).
+  Phase 3 never reads validation-split confusion matrices.
 - A1 done — `results/phase2-training/analysis/word_pairs_llm_failures.txt` exists
 
 #### B3.1 — Export (Local)
@@ -336,12 +360,14 @@ python pipelines/run_phase3.py --mode analyze
 
 **Prerequisites:**
 - A1 done — `results/phase2-training/analysis/word_pairs_llm_failures.txt` exists
-- A2 done — `results/phase4/insights/` files exist
+- A2 done — `results/phase4/insights/` files exist (generated from training corrections)
 
 #### B4.1 — Export (Local)
 
 Reads training artifacts and insights. Automatically skips training-split datasets;
 only validation-split datasets are included in the output.
+Few-shot examples are drawn from `results/phase2-training/` (training corrections only —
+`phase4.few_shot.source_phase` is `"phase2-training"` in config).
 
 ```bash
 python pipelines/run_phase4.py --mode export
@@ -405,9 +431,11 @@ CAMeL combo (best_camel). Each LLM combo is a separate Kaggle inference run.
 The CAMeL combo is local-only.
 
 **Prerequisites:**
-- B1 done (confusion matrices for conf_only, conf_self)
-- A1 done (training artifacts for self_only, conf_self)
-- A2 done (insights for self_only, conf_self)
+- Phase 1 training-split complete — training confusion matrices exist at
+  `results/phase1/{train_key}/confusion_matrix.json`
+  (same requirement as Phase 3; combos that use confusion matrix read training-split matrices)
+- A1 done (training artifacts for self_only, conf_self, best_camel)
+- A2 done (insights for self_only, conf_self, best_camel)
 
 ---
 
@@ -681,12 +709,19 @@ Switch config.yaml datasets to validation
   [ ] Uncomment validation datasets block
   [ ] Verify 9 datasets listed (8 PATS fonts + KHATT-validation)
 
+Verify training Phase 1 results are present (required by Phases 3 and 6)
+  [ ] results/phase1/PATS-A01-Akhbar-train/confusion_matrix.json  (and all other train keys)
+  [ ] results/phase1/KHATT-train/confusion_matrix.json
+  If any are missing: temporarily add training datasets back to config, run
+    python pipelines/run_phase1.py
+  then switch config back to validation.
+
 B1 + B2 can run immediately after A0 and config switch.
 A1–A3 run once training corrections.jsonl lands in results/phase2-training/.
-B3 onward requires A1–A3 to be complete.
+B3 onward requires A1–A3 AND training Phase 1 results (see above) to be complete.
 
 Part B — validation (B1 and B2 unblock immediately)
-  [ ] B1: python pipelines/run_phase1.py
+  [ ] B1: python pipelines/run_phase1.py   (validation baseline only; Phases 3/6 use training matrices)
   [ ] B2: export --force → infer (phase2) → pull → analyze
 
 Part A — training artifacts (run once training corrections.jsonl is ready)
@@ -694,9 +729,10 @@ Part A — training artifacts (run once training corrections.jsonl is ready)
             --input results/phase2-training/corrections.jsonl \
             --output-dir results/phase2-training/analysis
   [ ] A2: python pipelines/run_phase4.py --mode analyze-train --source-phase phase2-training
+          (auto-derives training dataset keys even with val-only config — no config switch needed)
   [ ] A3: python pipelines/run_phase8.py --mode build-index
 
-Part B — validation continued (requires A1–A3 complete)
+Part B — validation continued (requires A1–A3 + training Phase 1 confusion matrices)
   [ ] B3: export → infer (phase3) → pull → analyze
   [ ] B4: export → infer (phase4) → pull → analyze
   [ ] B5: python pipelines/run_phase5.py --mode validate   (local only)

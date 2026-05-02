@@ -27,6 +27,43 @@ def load_sample_list(path: Path) -> tuple[set[str], list[str]]:
     return sample_ids, dataset_keys
 
 
+def get_train_counterpart(dataset_key: str) -> str:
+    """Return the training-split key for a validation-split dataset key.
+
+    Mapping:
+      ``PATS-A01-{Font}-val``  ->  ``PATS-A01-{Font}-train``
+      ``KHATT-validation``     ->  ``KHATT-train``
+    Keys that are already training splits are returned unchanged.
+    """
+    if dataset_key.endswith("-val"):
+        return dataset_key[:-4] + "-train"
+    if dataset_key.lower().endswith("-validation"):
+        return dataset_key[: -len("-validation")] + "-train"
+    return dataset_key
+
+
+def get_training_dataset_names(all_dataset_names: list[str]) -> list[str]:
+    """Return training-split dataset keys from *all_dataset_names*.
+
+    If the list already contains training keys (ending in ``-train``), those
+    are returned as-is.  Otherwise every validation key is converted to its
+    training counterpart via :func:`get_train_counterpart` so that pipelines
+    work correctly even when ``config.yaml`` lists only validation datasets.
+    """
+    train_keys = [k for k in all_dataset_names if k.lower().endswith("-train")]
+    if train_keys:
+        return train_keys
+    # Derive from validation keys
+    derived = [get_train_counterpart(k) for k in all_dataset_names
+               if k.lower().endswith("-val") or k.lower().endswith("-validation")]
+    if derived:
+        logger.info(
+            "get_training_dataset_names: config has only val splits; "
+            "derived training keys: %s", derived,
+        )
+    return derived
+
+
 def resolve_datasets(config: dict, datasets_arg: Optional[list[str]]) -> list[str]:
     """Return the ordered list of dataset keys to process.
 

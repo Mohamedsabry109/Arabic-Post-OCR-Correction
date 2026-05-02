@@ -85,6 +85,7 @@ from pipelines._utils import (
     resolve_datasets, load_sample_list, compute_group_aggregates,
     split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
     load_phase2_full_metrics, pick_phase2_variant, _pick_corrected_key,
+    get_training_dataset_names,
 )
 
 logger = logging.getLogger(__name__)
@@ -540,10 +541,14 @@ def run_analyze_train(
         )
         sys.exit(1)
 
-    # Identify train-split datasets
-    train_datasets = [ds for ds in all_dataset_names if is_train_split(ds)]
+    # Identify train-split datasets (derive from val keys if config is val-only).
+    train_datasets = get_training_dataset_names(all_dataset_names)
     if not train_datasets:
-        logger.error("No train-split datasets found in config.")
+        logger.error(
+            "No training datasets could be derived from config. "
+            "Add train-split entries to the datasets list or ensure val-split entries "
+            "follow the '-val' / '-validation' naming convention."
+        )
         sys.exit(1)
 
     logger.info(
@@ -792,22 +797,34 @@ def run_export(
         source_phase_fs = str(few_shot_cfg.get("source_phase", "phase2"))
         source_dir_fs = _PROJECT_ROOT / "results" / source_phase_fs
 
-        # Collect training-split corrections paths (per-dataset or combined)
-        train_datasets = [ds for ds in all_dataset_names if is_train_split(ds)]
+        # Collect training-split corrections paths (per-dataset or combined).
+        # get_training_dataset_names() derives train keys even when config is val-only.
+        train_datasets_fs = get_training_dataset_names(all_dataset_names)
         pats_paths: list[Path] = []
         khatt_paths: list[Path] = []
         combined_path = source_dir_fs / "corrections.jsonl"
 
-        for ds_key in train_datasets:
+        for ds_key in train_datasets_fs:
             per_ds = source_dir_fs / ds_key / "corrections.jsonl"
             if per_ds.exists():
                 (pats_paths if get_dataset_type(ds_key) == "PATS-A01" else khatt_paths).append(per_ds)
 
-        # Fall back to combined file if no per-dataset files found
-        if not pats_paths and not khatt_paths and combined_path.exists():
-            pats_paths = [combined_path]
-            khatt_paths = [combined_path]
-            logger.info("Few-shot: using combined corrections file.")
+        # Fall back to combined corrections file.
+        # Prefer phase2-training/ over phase2/ to avoid using validation corrections.
+        if not pats_paths and not khatt_paths:
+            p2_training_combined = _PROJECT_ROOT / "results" / "phase2-training" / "corrections.jsonl"
+            if p2_training_combined.exists():
+                pats_paths = [p2_training_combined]
+                khatt_paths = [p2_training_combined]
+                logger.info("Few-shot: using phase2-training combined corrections file.")
+            elif combined_path.exists():
+                pats_paths = [combined_path]
+                khatt_paths = [combined_path]
+                logger.warning(
+                    "Few-shot: falling back to %s -- ensure this file contains "
+                    "TRAINING-split corrections only, not validation data.",
+                    combined_path,
+                )
 
         selector = FewShotExampleSelector()
         fs_kwargs = {

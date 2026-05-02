@@ -86,6 +86,7 @@ from pipelines._utils import (
     resolve_datasets, load_sample_list, compute_group_aggregates,
     split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
     load_phase2_full_metrics, pick_phase2_variant, _pick_corrected_key,
+    get_train_counterpart, get_training_dataset_names,
 )
 
 logger = logging.getLogger(__name__)
@@ -328,17 +329,23 @@ def build_confusion_context_for_dataset(
 ) -> tuple[str, str]:
     """Return (confusion_context, source_label) for one dataset.
 
-    Resolution: dataset-specific -> pooled (PATS-A01 or KHATT) -> empty.
+    Always reads the TRAINING-split confusion matrix to avoid using validation
+    data as knowledge for enriching validation prompts.
+
+    Resolution: training-dataset-specific -> pooled training matrix -> empty.
     """
-    matrix_path = phase1_dir / dataset_key / "confusion_matrix.json"
+    train_key = get_train_counterpart(dataset_key)
+    matrix_path = phase1_dir / train_key / "confusion_matrix.json"
 
     if loader_conf.has_enough_data(matrix_path, min_substitutions):
         try:
             pairs = loader_conf.load(matrix_path)
             context = loader_conf.format_for_prompt(pairs, n=top_n, style=format_style)
+            logger.info("[%s] Using training-split confusion matrix '%s'.", dataset_key, train_key)
             return context, "dataset_specific"
         except (FileNotFoundError, ValueError) as exc:
-            logger.warning("[%s] Could not load confusion matrix: %s", dataset_key, exc)
+            logger.warning("[%s] Could not load confusion matrix for '%s': %s",
+                           dataset_key, train_key, exc)
 
     if dataset_key.startswith("PATS-A01-"):
         pool_key = "PATS-A01"
@@ -353,7 +360,8 @@ def build_confusion_context_for_dataset(
         return context, f"pooled_{pool_key}"
 
     logger.warning(
-        "[%s] No confusion data available -- confusion_context empty.", dataset_key
+        "[%s] No training confusion data available (run Phase 1 on training splits first). "
+        "confusion_context empty.", dataset_key
     )
     return "", "none"
 
@@ -363,15 +371,17 @@ def build_pooled_matrices(
     loader_conf: "ConfusionMatrixLoader",
     all_dataset_names: list[str],
 ) -> dict[str, list]:
-    """Pre-build pooled confusion matrices for PATS-A01 and KHATT types."""
+    """Pre-build pooled confusion matrices from TRAINING-split Phase 1 results."""
+    train_names = get_training_dataset_names(all_dataset_names)
+
     pats_paths = [
         phase1_dir / name / "confusion_matrix.json"
-        for name in all_dataset_names
+        for name in train_names
         if name.startswith("PATS-A01-")
     ]
     khatt_paths = [
         phase1_dir / name / "confusion_matrix.json"
-        for name in all_dataset_names
+        for name in train_names
         if name.startswith("KHATT-")
     ]
 
