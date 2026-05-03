@@ -661,6 +661,7 @@ def run_export(
             for sample in samples:
                 retrieved = retriever.retrieve(sample.ocr_text, k=k)
                 retrieved_sentences = retriever.format_for_prompt(retrieved)
+                retrieved_words = retriever.format_words_for_prompt(retrieved)
 
                 has_context = bool(retrieved_sentences.strip())
                 prompt_type = "rag" if has_context else "zero_shot"
@@ -673,7 +674,7 @@ def run_export(
                     "prompt_type":         prompt_type,
                     "prompt_version":      "p9v1",
                     "retrieved_sentences": retrieved_sentences,
-                    "retrieved_words":     "",
+                    "retrieved_words":     retrieved_words,
                     "retrieval_mode":      "error_signature",
                     "retrieval_k":         k,
                     "index_size":          len(entries),

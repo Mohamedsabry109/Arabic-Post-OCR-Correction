@@ -534,6 +534,18 @@ def main() -> None:
                 prompt_ver = builder.self_reflective_prompt_version
                 if not insights_context.strip() and not word_pairs_context.strip() and not overcorrection_context.strip():
                     prompt_type = "zero_shot_fallback"
+            elif prompt_type == "rag":
+                retrieved_sentences = record.get("retrieved_sentences", "")
+                retrieved_words = record.get("retrieved_words", "")
+                messages = builder.build_rag(
+                    record["ocr_text"],
+                    retrieved_sentences=retrieved_sentences,
+                    retrieved_words=retrieved_words,
+                    few_shot_examples=few_shot,
+                )
+                prompt_ver = record.get("prompt_version", "p8v1")
+                if not retrieved_sentences.strip() and not retrieved_words.strip():
+                    prompt_type = "zero_shot_fallback"
             elif prompt_type == "meta_prompt":
                 messages = builder.build_meta_prompt(record["ocr_text"])
                 prompt_ver = record.get("prompt_version", builder.meta_prompt_version)
