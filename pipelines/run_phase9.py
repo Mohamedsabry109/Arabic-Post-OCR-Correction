@@ -1,56 +1,63 @@
 #!/usr/bin/env python3
-"""Phase 8: Retrieval-Augmented Generation (RAG) for OCR Correction.
+"""Phase 9: Error-Signature RAG for OCR Correction.
 
 Isolated experiment: compares against Phase 2 (zero-shot) baseline only.
-For each validation sample, retrieves the most similar training corrections
-and injects them as per-sample adaptive context into the LLM prompt.
+Instead of text-similarity retrieval (Phase 8 BM25), Phase 9 retrieves
+training samples by structural error similarity:
 
-Three-stage pipeline (no local GPU required for BM25 mode):
+  - At index time: for each training (OCR, GT) pair, compute an error
+    signature (confused chars, error types, invalid word count, CER).
+  - At query time: predict the query's error signature from CAMeL invalid
+    words + Phase 1 confusion matrix high-confusion chars, then retrieve
+    the k training samples with the most similar signature.
+  - Inject the top-k (OCR, GT) pairs as few-shot context into the prompt.
 
-  --mode build-index -> Build RAG index from Phase 2 training corrections
-                        -> results/phase8/index/
+Three-stage pipeline (no local GPU required):
 
-  --mode export      -> Retrieve + build inference_input.jsonl (val splits only)
-                        -> results/phase8/inference_input.jsonl
+  --mode build-index -> Build error-signature index from Phase 2 training
+                        corrections
+                        -> results/phase9/index/phase9_index.json
+
+  --mode export      -> Retrieve + build inference_input.jsonl (val splits)
+                        -> results/phase9/inference_input.jsonl
 
   --mode analyze     -> Load corrections.jsonl, compute metrics and reports
-                        -> results/phase8/{dataset}/metrics.json
-                           results/phase8/metrics.json
-                           results/phase8/comparison.json
-                           results/phase8/report.md
+                        -> results/phase9/{dataset}/metrics.json
+                           results/phase9/metrics.json
+                           results/phase9/comparison.json
+                           results/phase9/report.md
 
 Typical workflow
 ----------------
 1. Prerequisite: Phase 2 training-split corrections must exist at
    results/phase2-training/corrections.jsonl (or per-dataset files).
+   Phase 1 results (confusion matrices) must exist at results/phase1-training/.
 
-2. LOCAL:  python pipelines/run_phase8.py --mode build-index
-   (builds BM25 / dense indices from training corrections)
+2. LOCAL:  python pipelines/run_phase9.py --mode build-index
+   (builds error-signature index from training corrections)
 
-3. LOCAL:  python pipelines/run_phase8.py --mode export
+3. LOCAL:  python pipelines/run_phase9.py --mode export
    (retrieves per-sample context, builds inference JSONL)
 
 4. REMOTE: git clone <repo> && python scripts/infer.py \\
-               --input  results/phase8/inference_input.jsonl \\
-               --output results/phase8/corrections.jsonl \\
+               --input  results/phase9/inference_input.jsonl \\
+               --output results/phase9/corrections.jsonl \\
                --model  Qwen/Qwen3-4B-Instruct-2507
    (see notebooks/kaggle_setup.ipynb or notebooks/colab_setup.ipynb)
 
-5. LOCAL:  python pipelines/run_phase8.py --mode analyze
+5. LOCAL:  python pipelines/run_phase9.py --mode analyze
 
 Usage
 -----
-    python pipelines/run_phase8.py --mode build-index
-    python pipelines/run_phase8.py --mode build-index --retrieval-mode bm25
-    python pipelines/run_phase8.py --mode build-index --force
-    python pipelines/run_phase8.py --mode export
-    python pipelines/run_phase8.py --mode export --limit 50
-    python pipelines/run_phase8.py --mode export --datasets KHATT-validation
-    python pipelines/run_phase8.py --mode export --retrieval-mode bm25
-    python pipelines/run_phase8.py --mode export --force
-    python pipelines/run_phase8.py --mode analyze
-    python pipelines/run_phase8.py --mode analyze --datasets PATS-A01-Akhbar-val
-    python pipelines/run_phase8.py --mode analyze --no-error-analysis
+    python pipelines/run_phase9.py --mode build-index
+    python pipelines/run_phase9.py --mode build-index --force
+    python pipelines/run_phase9.py --mode export
+    python pipelines/run_phase9.py --mode export --limit 50
+    python pipelines/run_phase9.py --mode export --datasets KHATT-validation
+    python pipelines/run_phase9.py --mode export --force
+    python pipelines/run_phase9.py --mode analyze
+    python pipelines/run_phase9.py --mode analyze --datasets PATS-A01-Akhbar-val
+    python pipelines/run_phase9.py --mode analyze --no-error-analysis
 """
 
 import argparse
@@ -58,27 +65,27 @@ import json
 import logging
 import subprocess
 import sys
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import yaml
-from tqdm import tqdm
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from src.data.data_loader import DataLoader, DataError, OCRSample
-from src.data.rag_index import RAGIndexBuilder, RAGRetriever
+from src.data.phase9_index import Phase9IndexBuilder, Phase9Retriever
 from src.analysis.metrics import MetricResult, calculate_metrics_dual
 from src.analysis.error_analyzer import ErrorAnalyzer, ErrorType
-from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
 from pipelines._utils import (
     resolve_datasets, load_sample_list, compute_group_aggregates,
     split_runaway_samples, DEFAULT_RUNAWAY_RATIO_THRESHOLD,
     load_phase2_full_metrics, pick_phase2_variant, _pick_corrected_key,
+    get_training_dataset_names, get_train_counterpart,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,7 +98,7 @@ logger = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Phase 8: RAG for Arabic Post-OCR Correction"
+        description="Phase 9: Error-Signature RAG for Arabic Post-OCR Correction"
     )
     parser.add_argument(
         "--mode",
@@ -99,18 +106,10 @@ def parse_args() -> argparse.Namespace:
         required=True,
         choices=["build-index", "export", "analyze"],
         help=(
-            "build-index -> build RAG index from Phase 2 training corrections; "
+            "build-index -> build error-signature index from Phase 2 training corrections; "
             "export      -> retrieve + build inference_input.jsonl; "
             "analyze     -> load corrections.jsonl and compute metrics"
         ),
-    )
-    parser.add_argument(
-        "--retrieval-mode",
-        type=str,
-        default=None,
-        dest="retrieval_mode",
-        choices=["bm25", "dense", "hybrid"],
-        help="Retrieval mode (overrides config). Default: from config or bm25.",
     )
     parser.add_argument(
         "--datasets",
@@ -154,9 +153,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--results-dir",
         type=Path,
-        default=Path("results/phase8"),
+        default=Path("results/phase9"),
         dest="results_dir",
-        help="Phase 8 results root directory.",
+        help="Phase 9 results root directory.",
     )
     parser.add_argument(
         "--phase2-dir",
@@ -164,6 +163,13 @@ def parse_args() -> argparse.Namespace:
         default=Path("results/phase2"),
         dest="phase2_dir",
         help="Phase 2 results directory (baseline for comparison).",
+    )
+    parser.add_argument(
+        "--phase1-dir",
+        type=Path,
+        default=Path("results/phase1-training"),
+        dest="phase1_dir",
+        help="Phase 1 training results directory (for loading confusion matrices).",
     )
     return parser.parse_args()
 
@@ -176,7 +182,7 @@ def parse_args() -> argparse.Namespace:
 def setup_logging(results_dir: Path) -> None:
     """Configure logging to console (UTF-8) and log file."""
     results_dir.mkdir(parents=True, exist_ok=True)
-    log_path = results_dir / "phase8.log"
+    log_path = results_dir / "phase9.log"
 
     fmt = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
 
@@ -229,15 +235,14 @@ def make_meta(
     extra: Optional[dict] = None,
 ) -> dict:
     model_cfg = config.get("model", {})
-    phase8_cfg = config.get("phase8", {})
     meta = {
-        "phase":           "phase8",
+        "phase":           "phase9",
         "dataset":         dataset,
         "model":           model_cfg.get("name", "Qwen/Qwen3-4B-Instruct-2507"),
         "backend":         model_cfg.get("backend", "transformers"),
         "prompt_type":     "rag",
-        "prompt_version":  "p8v1",
-        "retrieval_mode":  phase8_cfg.get("retrieval_mode", "bm25"),
+        "prompt_version":  "p9v1",
+        "retrieval_mode":  "error_signature",
         "generated_at":    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "git_commit":      get_git_commit(),
         "num_samples":     num_samples,
@@ -318,14 +323,14 @@ def _maybe_split_combined_corrections(results_dir: Path, force: bool = False) ->
 
 
 # ---------------------------------------------------------------------------
-# BUILD-INDEX MODE
+# BUILD-INDEX helpers
 # ---------------------------------------------------------------------------
 
 
 def _resolve_training_corrections(config: dict) -> list[Path]:
-    """Find all training-split corrections.jsonl files."""
-    phase8_cfg = config.get("phase8", {})
-    source = phase8_cfg.get("source_corrections") or "phase2-training"
+    """Find all training-split corrections.jsonl files for Phase 9."""
+    phase9_cfg = config.get("phase9", {})
+    source = phase9_cfg.get("source_corrections") or "phase2-training"
     results_root = Path(config.get("output", {}).get("results_dir", "results"))
 
     paths: list[Path] = []
@@ -365,22 +370,93 @@ def _resolve_training_corrections(config: dict) -> list[Path]:
     return paths
 
 
+def _build_high_confusion_chars(
+    phase1_dir: Path,
+    all_dataset_names: list[str],
+    config: dict,
+) -> frozenset[str]:
+    """Load Phase 1 confusion matrices and extract high-confusion source chars.
+
+    Reads confusion_matrix.json from each training dataset's Phase 1 output.
+    Returns the set of characters that appear as the "wrong" (OCR) side in
+    any confusion pair.
+
+    Args:
+        phase1_dir: Root directory of Phase 1 training results.
+        all_dataset_names: All dataset keys from config (mix of train/val is fine).
+        config: Full config dict.
+
+    Returns:
+        frozenset of characters that appear as OCR-side confusions.
+    """
+    train_keys = get_training_dataset_names(all_dataset_names)
+    high_confusion_chars: set[str] = set()
+    matrices_found = 0
+
+    for train_key in train_keys:
+        matrix_path = phase1_dir / train_key / "confusion_matrix.json"
+        if not matrix_path.exists():
+            logger.debug("Confusion matrix not found: %s", matrix_path)
+            continue
+
+        try:
+            with open(matrix_path, encoding="utf-8") as f:
+                matrix_data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Could not load confusion matrix %s: %s", matrix_path, exc)
+            continue
+
+        matrices_found += 1
+        # confusion_matrix.json structure: {"meta": ..., "confusions": {wrong: {correct: {...}}}, "top_20": ...}
+        # Descend into "confusions" key if present; fall back to treating the whole dict as confusions.
+        if isinstance(matrix_data, list):
+            for entry in matrix_data:
+                wrong = entry.get("wrong") or entry.get("ocr") or entry.get("source")
+                if wrong and len(wrong) == 1:
+                    high_confusion_chars.add(wrong)
+        elif isinstance(matrix_data, dict):
+            confusions = matrix_data.get("confusions", matrix_data)
+            if isinstance(confusions, dict):
+                for wrong_char in confusions:
+                    if isinstance(wrong_char, str) and len(wrong_char) == 1:
+                        high_confusion_chars.add(wrong_char)
+
+    if matrices_found == 0:
+        logger.warning(
+            "No Phase 1 confusion matrices found in %s for training keys %s. "
+            "High-confusion chars will be empty — error-signature retrieval will "
+            "rely only on invalid-word counts and error types.",
+            phase1_dir, train_keys,
+        )
+    else:
+        logger.info(
+            "Loaded %d confusion matrices; extracted %d high-confusion chars.",
+            matrices_found, len(high_confusion_chars),
+        )
+
+    return frozenset(high_confusion_chars)
+
+
+# ---------------------------------------------------------------------------
+# BUILD-INDEX MODE
+# ---------------------------------------------------------------------------
+
+
 def run_build_index(
     config: dict,
     results_dir: Path,
-    retrieval_mode: str,
+    phase1_dir: Path,
     force: bool,
 ) -> None:
-    """Build RAG index from Phase 2 training corrections."""
-    phase8_cfg = config.get("phase8", {})
+    """Build error-signature index from Phase 2 training corrections."""
+    phase9_cfg = config.get("phase9", {})
     index_dir = results_dir / "index"
+    index_path = index_dir / "phase9_index.json"
 
-    # Check if index already exists
-    meta_path = index_dir / "index_meta.json"
-    if meta_path.exists() and not force:
+    if index_path.exists() and not force:
         logger.info(
-            "RAG index already exists at %s -- skipping (use --force to rebuild).",
-            index_dir,
+            "Phase 9 index already exists at %s -- skipping (use --force to rebuild).",
+            index_path,
         )
         return
 
@@ -388,7 +464,7 @@ def run_build_index(
     corrections_paths = _resolve_training_corrections(config)
     if not corrections_paths:
         logger.error(
-            "No training corrections found. Cannot build RAG index.\n"
+            "No training corrections found. Cannot build Phase 9 index.\n"
             "Run Phase 2 on training splits first:\n"
             "  python pipelines/run_phase2.py --mode export --datasets *-train\n"
             "  python scripts/infer.py --input ... --output ...\n"
@@ -396,28 +472,75 @@ def run_build_index(
         )
         sys.exit(1)
 
+    # Build high-confusion chars from Phase 1 confusion matrices
+    all_dataset_names = [entry["name"] for entry in config.get("datasets", [])]
+    high_confusion_chars = _build_high_confusion_chars(phase1_dir, all_dataset_names, config)
+
+    # Initialise MorphAnalyzer (graceful degradation if CAMeL unavailable)
+    analyzer = None
+    camel_cfg = config.get("camel", {})
+    if camel_cfg.get("enabled", True):
+        try:
+            from src.linguistic.morphology import MorphAnalyzer  # noqa: PLC0415
+            morph_cfg = camel_cfg.get("morphology", {})
+            db = morph_cfg.get("db", "calima-msa-r13")
+            cache_size = int(morph_cfg.get("cache_size", 10000))
+            analyzer = MorphAnalyzer(db=db, cache_size=cache_size)
+            if not analyzer.enabled:
+                logger.warning("MorphAnalyzer initialised but disabled — invalid words will not be detected.")
+                analyzer = None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MorphAnalyzer init failed: %s -- continuing without CAMeL.", exc)
+            analyzer = None
+
+    # Read phase9 config params
+    success_only = bool(phase9_cfg.get("success_only", True))
+    max_text_len = int(phase9_cfg.get("max_text_len", 500))
+    min_cer = float(phase9_cfg.get("min_cer", 0.0))
+
     # Build index
-    build_dense = retrieval_mode in ("dense", "hybrid")
-    builder = RAGIndexBuilder(config)
-    builder.build_from_corrections(
-        corrections_paths,
-        min_cer=phase8_cfg.get("min_cer", 0.001),
-        max_text_len=phase8_cfg.get("max_text_len", 300),
-        runaway_ratio=config.get("evaluation", {}).get(
-            "runaway_ratio_threshold", DEFAULT_RUNAWAY_RATIO_THRESHOLD
-        ),
-        build_dense=build_dense,
+    builder = Phase9IndexBuilder()
+    entries = builder.build(
+        corrections_paths=corrections_paths,
+        high_confusion_chars=high_confusion_chars,
+        analyzer=analyzer,
+        success_only=success_only,
+        max_text_len=max_text_len,
+        min_cer=min_cer,
     )
 
     # Save
-    builder.save(index_dir)
+    builder.save(entries, index_dir)
+
+    # Save index metadata
+    type_counter: Counter = Counter()
+    succeeded_count = sum(1 for e in entries if e.llm_succeeded)
+    for e in entries:
+        for et in e.signature.error_types:
+            type_counter[et] += 1
+
+    meta = {
+        "phase": "phase9",
+        "retrieval_mode": "error_signature",
+        "total_entries": len(entries),
+        "llm_succeeded_count": succeeded_count,
+        "success_only": success_only,
+        "max_text_len": max_text_len,
+        "min_cer": min_cer,
+        "high_confusion_chars_count": len(high_confusion_chars),
+        "error_type_distribution": dict(type_counter),
+        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "git_commit": get_git_commit(),
+    }
+    save_json(meta, index_dir / "index_meta.json")
 
     logger.info("=" * 60)
-    logger.info("RAG index built successfully:")
-    logger.info("  Sentence entries: %d", len(builder.sentence_store))
-    logger.info("  Word-error pairs: %d", len(builder.word_store))
-    logger.info("  Dense index:      %s", builder.has_dense)
-    logger.info("  Saved to:         %s", index_dir)
+    logger.info("Phase 9 index built successfully:")
+    logger.info("  Total entries:          %d", len(entries))
+    logger.info("  LLM succeeded:          %d", succeeded_count)
+    logger.info("  High-confusion chars:   %d", len(high_confusion_chars))
+    logger.info("  Error type distribution: %s", dict(type_counter))
+    logger.info("  Saved to:               %s", index_dir)
     logger.info("=" * 60)
 
 
@@ -430,55 +553,91 @@ def run_export(
     config: dict,
     active_datasets: list[str],
     results_dir: Path,
-    retrieval_mode: str,
+    phase1_dir: Path,
     limit: Optional[int],
     force: bool,
     sample_ids: Optional[set[str]] = None,
 ) -> None:
-    """Export OCR texts with retrieved RAG context to inference_input.jsonl."""
-    phase8_cfg = config.get("phase8", {})
+    """Export OCR texts with retrieved error-signature RAG context to inference_input.jsonl."""
+    phase9_cfg = config.get("phase9", {})
     index_dir = results_dir / "index"
     output_path = results_dir / "inference_input.jsonl"
     results_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load RAG index
-    meta_path = index_dir / "index_meta.json"
-    if not meta_path.exists():
+    # Check index exists
+    index_path = index_dir / "phase9_index.json"
+    if not index_path.exists():
         logger.error(
-            "RAG index not found at %s.\n"
+            "Phase 9 index not found at %s.\n"
             "Run build-index first:\n"
-            "  python pipelines/run_phase8.py --mode build-index",
-            index_dir,
+            "  python pipelines/run_phase9.py --mode build-index",
+            index_path,
         )
         sys.exit(1)
 
-    index_builder = RAGIndexBuilder(config)
-    index_builder.load(index_dir)
+    # Load index
+    entries = Phase9IndexBuilder.load(index_dir)
+    if not entries:
+        logger.error("Phase 9 index is empty. Rebuild with --mode build-index.")
+        sys.exit(1)
 
-    # Create retriever
-    alpha = phase8_cfg.get("alpha", 0.6)
-    top_k_candidates = phase8_cfg.get("top_k_candidates", 50)
-    retriever = RAGRetriever(
-        index=index_builder,
-        mode=retrieval_mode,
-        alpha=alpha,
-        top_k_candidates=top_k_candidates,
+    # Load index metadata to recover high_confusion_chars
+    meta_path = index_dir / "index_meta.json"
+    high_confusion_chars: frozenset[str] = frozenset()
+    if meta_path.exists():
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                index_meta = json.load(f)
+            logger.info(
+                "Index metadata: %d entries, %d high-confusion chars.",
+                index_meta.get("total_entries", len(entries)),
+                index_meta.get("high_confusion_chars_count", 0),
+            )
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Rebuild high_confusion_chars from Phase 1 (needed for query prediction)
+    all_dataset_names = [entry["name"] for entry in config.get("datasets", [])]
+    high_confusion_chars = _build_high_confusion_chars(phase1_dir, all_dataset_names, config)
+
+    # Initialise MorphAnalyzer
+    analyzer = None
+    camel_cfg = config.get("camel", {})
+    if camel_cfg.get("enabled", True):
+        try:
+            from src.linguistic.morphology import MorphAnalyzer  # noqa: PLC0415
+            morph_cfg = camel_cfg.get("morphology", {})
+            db = morph_cfg.get("db", "calima-msa-r13")
+            cache_size = int(morph_cfg.get("cache_size", 10000))
+            analyzer = MorphAnalyzer(db=db, cache_size=cache_size)
+            if not analyzer.enabled:
+                analyzer = None
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("MorphAnalyzer init failed: %s -- continuing without CAMeL.", exc)
+            analyzer = None
+
+    # Read retrieval config
+    k = int(phase9_cfg.get("k", 5))
+    w_chars = float(phase9_cfg.get("char_weight", 0.4))
+    w_types = float(phase9_cfg.get("error_type_weight", 0.3))
+    w_difficulty = float(phase9_cfg.get("difficulty_weight", 0.2))
+    w_invalid = float(phase9_cfg.get("invalid_word_weight", 0.1))
+
+    retriever = Phase9Retriever(
+        entries=entries,
+        high_confusion_chars=high_confusion_chars,
+        analyzer=analyzer,
+        w_chars=w_chars,
+        w_types=w_types,
+        w_difficulty=w_difficulty,
+        w_invalid=w_invalid,
     )
-
-    top_k_sentences = phase8_cfg.get("top_k_sentences", 5)
-    top_k_words = phase8_cfg.get("top_k_words", 15)
-    top_k_per_word = phase8_cfg.get("word_top_k_per_input_word", 3)
 
     # Resume logic
     already_exported = _load_exported_datasets(output_path) if not force else set()
 
-    # Load data
     loader_data = DataLoader(config)
     total_written = 0
-
-    # Retrieval diagnostics
-    diag_scores: list[float] = []
-    diag_per_dataset: dict[str, list[float]] = {}
 
     with open(output_path, "a", encoding="utf-8") as f:
         for ds_key in active_datasets:
@@ -497,80 +656,35 @@ def run_export(
                 logger.warning("Skipping %s: %s", ds_key, exc)
                 continue
 
-            ds_scores: list[float] = []
+            logger.info("[%s] Exporting %d samples ...", ds_key, len(samples))
 
-            for sample in tqdm(samples, desc=f"  Retrieving {ds_key}", unit="sample"):
-                # Retrieve similar corrections for this specific sample
-                sent_results = retriever.retrieve_sentences(
-                    sample.ocr_text, top_k=top_k_sentences,
-                )
-                word_results = retriever.retrieve_words(
-                    sample.ocr_text,
-                    top_k=top_k_words,
-                    top_k_per_word=top_k_per_word,
-                )
+            for sample in samples:
+                retrieved = retriever.retrieve(sample.ocr_text, k=k)
+                retrieved_sentences = retriever.format_for_prompt(retrieved)
 
-                # Format for prompt
-                retrieved_sentences = retriever.format_sentences_for_prompt(sent_results)
-                retrieved_words = retriever.format_words_for_prompt(word_results)
-
-                # Track diagnostics
-                if sent_results:
-                    top1_score = sent_results[0].score
-                    ds_scores.append(top1_score)
-                    diag_scores.append(top1_score)
-
-                # Determine prompt_type
-                has_context = bool(retrieved_sentences.strip()) or bool(retrieved_words.strip())
+                has_context = bool(retrieved_sentences.strip())
                 prompt_type = "rag" if has_context else "zero_shot"
 
                 record = {
-                    "sample_id":            sample.sample_id,
-                    "dataset":              ds_key,
-                    "ocr_text":             sample.ocr_text,
-                    "gt_text":              sample.gt_text,
-                    "prompt_type":          prompt_type,
-                    "prompt_version":       "p8v1",
-                    "retrieved_sentences":  retrieved_sentences,
-                    "retrieved_words":      retrieved_words,
-                    "retrieval_mode":       retrieval_mode,
-                    "retrieval_alpha":      alpha,
-                    "top_k_sentences":      top_k_sentences,
-                    "top_k_words":          top_k_words,
-                    "index_size":           len(index_builder.sentence_store),
+                    "sample_id":           sample.sample_id,
+                    "dataset":             ds_key,
+                    "ocr_text":            sample.ocr_text,
+                    "gt_text":             sample.gt_text,
+                    "prompt_type":         prompt_type,
+                    "prompt_version":      "p9v1",
+                    "retrieved_sentences": retrieved_sentences,
+                    "retrieved_words":     "",
+                    "retrieval_mode":      "error_signature",
+                    "retrieval_k":         k,
+                    "index_size":          len(entries),
                 }
                 f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 total_written += 1
 
-            diag_per_dataset[ds_key] = ds_scores
-            avg_score = sum(ds_scores) / len(ds_scores) if ds_scores else 0.0
             logger.info(
-                "Exported %d samples for %s (avg top-1 score=%.3f, "
-                "sentences_ctx=%d chars, words_ctx=%d chars).",
-                len(samples), ds_key, avg_score,
-                len(retrieved_sentences), len(retrieved_words),
+                "Exported %d samples for %s (k=%d, index_size=%d).",
+                len(samples), ds_key, k, len(entries),
             )
-
-    # Save retrieval diagnostics
-    if diag_scores:
-        diagnostics = {
-            "index_size": len(index_builder.sentence_store),
-            "retrieval_mode": retrieval_mode,
-            "alpha": alpha,
-            "top_k_sentences": top_k_sentences,
-            "top_k_words": top_k_words,
-            "avg_top1_score": round(sum(diag_scores) / len(diag_scores), 4),
-            "min_top1_score": round(min(diag_scores), 4),
-            "max_top1_score": round(max(diag_scores), 4),
-            "per_dataset": {
-                ds: {
-                    "num_queries": len(scores),
-                    "avg_top1_score": round(sum(scores) / len(scores), 4) if scores else 0.0,
-                }
-                for ds, scores in diag_per_dataset.items()
-            },
-        }
-        save_json(diagnostics, results_dir / "retrieval_diagnostics.json")
 
     logger.info("=" * 60)
     logger.info("Export complete: %d new samples -> %s", total_written, output_path)
@@ -579,10 +693,10 @@ def run_export(
     logger.info("  1. Push latest code:  git push")
     logger.info("  2. On Kaggle/Colab:")
     logger.info("       python scripts/infer.py \\")
-    logger.info("           --input  results/phase8/inference_input.jsonl \\")
-    logger.info("           --output results/phase8/corrections.jsonl")
+    logger.info("           --input  results/phase9/inference_input.jsonl \\")
+    logger.info("           --output results/phase9/corrections.jsonl")
     logger.info("  3. Run analysis locally:")
-    logger.info("       python pipelines/run_phase8.py --mode analyze")
+    logger.info("       python pipelines/run_phase9.py --mode analyze")
     logger.info("=" * 60)
 
 
@@ -644,10 +758,10 @@ def run_error_change_analysis(
     corrected_samples: list[CorrectedSample],
     dataset_name: str,
 ) -> dict:
-    """Compare per-type error counts before (OCR) and after (Phase 8 corrected)."""
+    """Compare per-type error counts before (OCR) and after (Phase 9 corrected)."""
     type_keys = [et.value for et in ErrorType]
     phase1_counts: dict[str, int] = {k: 0 for k in type_keys}
-    phase8_counts: dict[str, int] = {k: 0 for k in type_keys}
+    phase9_counts: dict[str, int] = {k: 0 for k in type_keys}
     fixed_counts:  dict[str, int] = {k: 0 for k in type_keys}
     intro_counts:  dict[str, int] = {k: 0 for k in type_keys}
 
@@ -656,7 +770,7 @@ def run_error_change_analysis(
 
     analyzer = ErrorAnalyzer()
 
-    for cs in tqdm(corrected_samples, desc="  Error analysis", unit="sample"):
+    for cs in corrected_samples:
         gt = cs.sample.gt_text
         ocr = cs.sample.ocr_text
         corrected = cs.corrected_text
@@ -690,11 +804,11 @@ def run_error_change_analysis(
 
         for ce in err2.char_errors:
             k = ce.error_type.value
-            phase8_counts[k] += 1
+            phase9_counts[k] += 1
             total_corrected_errors += 1
 
         for k in type_keys:
-            delta = phase1_counts[k] - phase8_counts[k]
+            delta = phase1_counts[k] - phase9_counts[k]
             if delta > 0:
                 fixed_counts[k] += delta
             else:
@@ -708,11 +822,11 @@ def run_error_change_analysis(
 
     by_type: dict = {}
     for k in type_keys:
-        if phase1_counts[k] == 0 and phase8_counts[k] == 0:
+        if phase1_counts[k] == 0 and phase9_counts[k] == 0:
             continue
         by_type[k] = {
             "phase1_count":  phase1_counts[k],
-            "phase8_count":  phase8_counts[k],
+            "phase9_count":  phase9_counts[k],
             "fixed":         fixed_counts[k],
             "introduced":    intro_counts[k],
             "fix_rate":      round(fixed_counts[k] / max(phase1_counts[k], 1), 4),
@@ -744,7 +858,7 @@ def _nd_comparison_block(p2_nd: dict, corrected_nd: MetricResult) -> dict:
     wer_r = (wer_d / p2_wer_nd * 100) if p2_wer_nd > 0 else 0.0
     return {
         "phase2_baseline_no_diacritics": {"cer": round(p2_cer_nd, 6), "wer": round(p2_wer_nd, 6)},
-        "phase8_corrected_no_diacritics": {"cer": round(corrected_nd.cer, 6), "wer": round(corrected_nd.wer, 6)},
+        "phase9_corrected_no_diacritics": {"cer": round(corrected_nd.cer, 6), "wer": round(corrected_nd.wer, 6)},
         "delta_no_diacritics": {
             "cer_absolute": round(cer_d, 6), "wer_absolute": round(wer_d, 6),
             "cer_relative_pct": round(cer_r, 2), "wer_relative_pct": round(wer_r, 2),
@@ -836,7 +950,7 @@ def process_dataset_analyze(
     save_json(metrics_json, out_dir / "metrics.json")
 
     logger.info(
-        "[%s] Phase 8 Primary (%s): OCR CER=%.2f%% -> LLM CER=%.2f%%  |  "
+        "[%s] Phase 9 Primary (%s): OCR CER=%.2f%% -> LLM CER=%.2f%%  |  "
         "no-diac: %.2f%% -> %.2f%%",
         dataset_key, primary_source,
         (ocr_all if not exclude_runaway else ocr_normal).cer * 100,
@@ -858,14 +972,14 @@ def process_dataset_analyze(
 
         comparison = {
             "meta": make_meta(dataset_key, n, config, limit,
-                              extra={"comparison": "phase8_vs_phase2"}),
+                              extra={"comparison": "phase9_vs_phase2"}),
             "phase2_baseline": {
                 "cer": round(p2_cer, 6),
                 "wer": round(p2_wer, 6),
                 "source": str(phase2_dir / dataset_key / "metrics.json"),
                 "variant": p2_src,
             },
-            "phase8_corrected": {
+            "phase9_corrected": {
                 "cer": round(primary.cer, 6),
                 "wer": round(primary.wer, 6),
                 "variant": primary_source,
@@ -888,7 +1002,7 @@ def process_dataset_analyze(
         }
         save_json(comparison, out_dir / "comparison_vs_phase2.json")
         logger.info(
-            "[%s] Phase2->Phase8 CER: %.2f%% -> %.2f%% (%+.1f%%) | "
+            "[%s] Phase2->Phase9 CER: %.2f%% -> %.2f%% (%+.1f%%) | "
             "WER: %.2f%% -> %.2f%% (%+.1f%%)",
             dataset_key,
             p2_cer * 100, primary.cer * 100, cer_rel,
@@ -963,14 +1077,13 @@ def aggregate_results(
     limit: Optional[int],
 ) -> None:
     """Write combined metrics.json across all datasets."""
-    phase8_cfg = config.get("phase8", {})
     output = {
         "meta": {
-            "phase": "phase8",
+            "phase": "phase9",
             "model": config.get("model", {}).get("name", ""),
             "prompt_type": "rag",
-            "prompt_version": "p8v1",
-            "retrieval_mode": phase8_cfg.get("retrieval_mode", "bm25"),
+            "prompt_version": "p9v1",
+            "retrieval_mode": "error_signature",
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "git_commit": get_git_commit(),
             "limit_applied": limit,
@@ -995,16 +1108,16 @@ def aggregate_comparisons(
         return
     output = {
         "meta": {
-            "phase": "phase8",
-            "comparison": "phase8_vs_phase2",
+            "phase": "phase9",
+            "comparison": "phase9_vs_phase2",
             "model": config.get("model", {}).get("name", ""),
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "git_commit": get_git_commit(),
         },
         "datasets": all_comparisons,
         "note": (
-            "Phase 8 is an isolated experiment. Delta measures the contribution of "
-            "RAG retrieval-augmented context over zero-shot (Phase 2). "
+            "Phase 9 is an isolated experiment. Delta measures the contribution of "
+            "error-signature RAG context over zero-shot (Phase 2). "
             "Positive delta = improvement (lower error rate)."
         ),
     }
@@ -1026,22 +1139,21 @@ def generate_report(
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines: list[str] = []
 
-    lines.append("# Phase 8 Report: RAG-Augmented OCR Correction")
+    lines.append("# Phase 9 Report: Error-Signature RAG OCR Correction")
     lines.append(f"\nGenerated: {now}")
     lines.append(f"Model: {model_name}")
-    lines.append("Prompt: RAG (p8v1) -- per-sample adaptive retrieval")
+    lines.append("Prompt: Error-Signature RAG (p9v1) -- per-sample adaptive retrieval by error structure")
     lines.append("")
 
     nd_results = _load_nd_results(all_corrected, results_dir) if results_dir else {}
 
-    # Comparison table vs Phase 2
     lines.append("## Results vs Phase 2 (Zero-Shot Baseline)\n")
-    lines.append("> Isolated comparison. Phase 8 vs Phase 2 only.\n")
+    lines.append("> Isolated comparison. Phase 9 vs Phase 2 only.\n")
     if all_comparisons:
         lines.append("### With Diacritics\n")
         lines.append(
-            "| Dataset | Phase 2 CER | Phase 8 CER | Delta CER | "
-            "Phase 2 WER | Phase 8 WER | Delta WER |"
+            "| Dataset | Phase 2 CER | Phase 9 CER | Delta CER | "
+            "Phase 2 WER | Phase 9 WER | Delta WER |"
         )
         lines.append(
             "|---------|-------------|-------------|-----------|"
@@ -1049,23 +1161,23 @@ def generate_report(
         )
         for ds, cmp in all_comparisons.items():
             p2 = cmp.get("phase2_baseline", {})
-            p8 = cmp.get("phase8_corrected", {})
+            p9 = cmp.get("phase9_corrected", {})
             d = cmp.get("delta", {})
             lines.append(
                 f"| {ds} "
                 f"| {p2.get('cer', 0)*100:.2f}% "
-                f"| {p8.get('cer', 0)*100:.2f}% "
+                f"| {p9.get('cer', 0)*100:.2f}% "
                 f"| {d.get('cer_relative_pct', 0):+.1f}% "
                 f"| {p2.get('wer', 0)*100:.2f}% "
-                f"| {p8.get('wer', 0)*100:.2f}% "
+                f"| {p9.get('wer', 0)*100:.2f}% "
                 f"| {d.get('wer_relative_pct', 0):+.1f}% |"
             )
         lines.append("")
 
         lines.append("### No Diacritics\n")
         lines.append(
-            "| Dataset | Phase 2 CER | Phase 8 CER | Delta CER | "
-            "Phase 2 WER | Phase 8 WER | Delta WER |"
+            "| Dataset | Phase 2 CER | Phase 9 CER | Delta CER | "
+            "Phase 2 WER | Phase 9 WER | Delta WER |"
         )
         lines.append(
             "|---------|-------------|-------------|-----------|"
@@ -1073,23 +1185,22 @@ def generate_report(
         )
         for ds, cmp in all_comparisons.items():
             p2_nd = cmp.get("phase2_baseline_no_diacritics", {})
-            p8_nd = cmp.get("phase8_corrected_no_diacritics", {})
+            p9_nd = cmp.get("phase9_corrected_no_diacritics", {})
             d_nd = cmp.get("delta_no_diacritics", {})
             lines.append(
                 f"| {ds} "
                 f"| {p2_nd.get('cer', 0)*100:.2f}% "
-                f"| {p8_nd.get('cer', 0)*100:.2f}% "
+                f"| {p9_nd.get('cer', 0)*100:.2f}% "
                 f"| {d_nd.get('cer_relative_pct', 0):+.1f}% "
                 f"| {p2_nd.get('wer', 0)*100:.2f}% "
-                f"| {p8_nd.get('wer', 0)*100:.2f}% "
+                f"| {p9_nd.get('wer', 0)*100:.2f}% "
                 f"| {d_nd.get('wer_relative_pct', 0):+.1f}% |"
             )
     else:
         lines.append("*Phase 2 baseline not available -- run Phase 2 first.*")
     lines.append("")
 
-    # Absolute metrics
-    lines.append("## Phase 8 Post-Correction Metrics\n")
+    lines.append("## Phase 9 Post-Correction Metrics\n")
     lines.append("### With Diacritics\n")
     lines.append(
         "| Dataset | CER | WER | CER Median | WER Median | CER p95 | Samples |"
@@ -1118,13 +1229,12 @@ def generate_report(
             lines.append(f"| {ds} | {nd_cer} | {nd_wer} |")
         lines.append("")
 
-    # Key findings
     lines.append("## Key Findings\n")
     if all_corrected:
         best = min(all_corrected.items(), key=lambda x: x[1].cer)
         worst = max(all_corrected.items(), key=lambda x: x[1].cer)
-        lines.append(f"- Best Phase 8 CER: **{best[0]}** at {best[1].cer*100:.2f}%")
-        lines.append(f"- Worst Phase 8 CER: **{worst[0]}** at {worst[1].cer*100:.2f}%")
+        lines.append(f"- Best Phase 9 CER: **{best[0]}** at {best[1].cer*100:.2f}%")
+        lines.append(f"- Worst Phase 9 CER: **{worst[0]}** at {worst[1].cer*100:.2f}%")
     if all_comparisons:
         improving = sum(
             1 for cmp in all_comparisons.values()
@@ -1135,10 +1245,10 @@ def generate_report(
         )
     lines.append("")
     lines.append(
-        "> Phase 8 is an isolated experiment comparing RAG-augmented prompting "
+        "> Phase 9 is an isolated experiment comparing error-signature RAG prompting "
         "vs zero-shot.\n"
-        "> Each sample receives per-input adaptive context retrieved from "
-        "similar training corrections."
+        "> Each sample receives per-input context retrieved by structural error similarity "
+        "from training corrections."
     )
 
     report_path = results_dir / "report.md"
@@ -1162,11 +1272,11 @@ def print_summary(
 
     sep = "=" * 90
     print("\n" + sep)
-    print("PHASE 8 SUMMARY -- RAG-Augmented OCR Correction")
+    print("PHASE 9 SUMMARY -- Error-Signature RAG OCR Correction")
 
     print(sep)
     print("  [WITH DIACRITICS]")
-    print(f"  {'Dataset':<30} {'P2 CER':>8} {'P8 CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'P8 WER':>8} {'D(WER)':>8} {'N':>6}")
+    print(f"  {'Dataset':<30} {'P2 CER':>8} {'P9 CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'P9 WER':>8} {'D(WER)':>8} {'N':>6}")
     print("  " + "-" * 82)
     for ds, r in all_corrected.items():
         cmp = all_comparisons.get(ds, {})
@@ -1185,7 +1295,7 @@ def print_summary(
 
     print()
     print("  [NO DIACRITICS]")
-    print(f"  {'Dataset':<30} {'P2 CER':>8} {'P8 CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'P8 WER':>8} {'D(WER)':>8} {'N':>6}")
+    print(f"  {'Dataset':<30} {'P2 CER':>8} {'P9 CER':>8} {'D(CER)':>8} {'P2 WER':>8} {'P9 WER':>8} {'D(WER)':>8} {'N':>6}")
     print("  " + "-" * 82)
     for ds, r in all_corrected.items():
         cmp = all_comparisons.get(ds, {})
@@ -1194,19 +1304,19 @@ def print_summary(
         nd_curr = nd_results.get(ds, {})
         p2_cer_nd = p2_nd.get("cer", None)
         p2_wer_nd = p2_nd.get("wer", None)
-        p8_cer_nd = nd_curr.get("cer", None)
-        p8_wer_nd = nd_curr.get("wer", None)
+        p9_cer_nd = nd_curr.get("cer", None)
+        p9_wer_nd = nd_curr.get("wer", None)
         d_cer_nd = delta_nd.get("cer_relative_pct", None)
         d_wer_nd = delta_nd.get("wer_relative_pct", None)
         p2_cer_str = f"{p2_cer_nd*100:.2f}%" if p2_cer_nd is not None else "N/A"
         p2_wer_str = f"{p2_wer_nd*100:.2f}%" if p2_wer_nd is not None else "N/A"
-        p8_cer_str = f"{p8_cer_nd*100:.2f}%" if p8_cer_nd is not None else "N/A"
-        p8_wer_str = f"{p8_wer_nd*100:.2f}%" if p8_wer_nd is not None else "N/A"
+        p9_cer_str = f"{p9_cer_nd*100:.2f}%" if p9_cer_nd is not None else "N/A"
+        p9_wer_str = f"{p9_wer_nd*100:.2f}%" if p9_wer_nd is not None else "N/A"
         d_cer_str = f"{d_cer_nd:+.1f}%" if d_cer_nd is not None else "N/A"
         d_wer_str = f"{d_wer_nd:+.1f}%" if d_wer_nd is not None else "N/A"
         print(
-            f"  {ds:<30} {p2_cer_str:>8} {p8_cer_str:>8} {d_cer_str:>8} "
-            f"{p2_wer_str:>8} {p8_wer_str:>8} {d_wer_str:>8} {r.num_samples:>6}"
+            f"  {ds:<30} {p2_cer_str:>8} {p9_cer_str:>8} {d_cer_str:>8} "
+            f"{p2_wer_str:>8} {p9_wer_str:>8} {d_wer_str:>8} {r.num_samples:>6}"
         )
 
     print(sep)
@@ -1222,28 +1332,21 @@ def main() -> None:
     results_dir = args.results_dir
     setup_logging(results_dir)
 
-    logger.info("Phase 8: RAG-Augmented OCR Correction  (mode=%s)", args.mode)
+    logger.info("Phase 9: Error-Signature RAG OCR Correction  (mode=%s)", args.mode)
     logger.info("Config: %s", args.config)
     logger.info("Results dir: %s", results_dir)
 
     config = load_config(args.config)
-    phase8_cfg = config.get("phase8", {})
+    phase9_cfg = config.get("phase9", {})
 
     limit = args.limit or config.get("processing", {}).get("limit_per_dataset")
     analyze_errors = not args.no_error_analysis
-
-    # Retrieval mode: CLI > config > default
-    retrieval_mode = (
-        args.retrieval_mode
-        or phase8_cfg.get("retrieval_mode", "bm25")
-    )
-    logger.info("Retrieval mode: %s", retrieval_mode)
 
     # ------------------------------------------------------------------
     # BUILD-INDEX mode
     # ------------------------------------------------------------------
     if args.mode == "build-index":
-        run_build_index(config, results_dir, retrieval_mode, args.force)
+        run_build_index(config, results_dir, args.phase1_dir, args.force)
         return
 
     # ------------------------------------------------------------------
@@ -1265,7 +1368,7 @@ def main() -> None:
             config=config,
             active_datasets=active_datasets,
             results_dir=results_dir,
-            retrieval_mode=retrieval_mode,
+            phase1_dir=args.phase1_dir,
             limit=limit,
             force=args.force,
             sample_ids=sample_ids,
@@ -1365,7 +1468,7 @@ def main() -> None:
         # Print summary
         print_summary(all_corrected, all_comparisons, results_dir)
 
-        logger.info("Phase 8 analysis complete. Results in %s", results_dir)
+        logger.info("Phase 9 analysis complete. Results in %s", results_dir)
 
 
 if __name__ == "__main__":

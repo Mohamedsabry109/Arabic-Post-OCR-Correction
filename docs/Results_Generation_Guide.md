@@ -9,21 +9,17 @@ Follow every step in the order listed. Do not skip ahead.
 
 | Split | Purpose | Phases |
 |-------|---------|--------|
-| **Training** | Build all knowledge sources used to enrich validation prompts | Phase 1 (confusion matrices), Phase 2 (LLM corrections → artifacts + RAG index) |
+| **Training** | Build all knowledge sources used to enrich validation prompts | Phase 1 (confusion matrices → `results/phase1-training/`), Phase 2 (LLM corrections → `results/phase2-training/`) |
 | **Validation** | Produce final evaluation numbers reported in the paper | Phases 1–8 (evaluation only) |
 
 **Leakage-free design.** Every piece of knowledge injected into a validation prompt must come exclusively from training data:
 
 | Knowledge artifact | Source | Used by |
 |-------------------|--------|---------|
-| Character confusion matrix | Phase 1 **training** splits | Phases 3, 6 |
-| LLM failure word pairs / overcorrections | Phase 2 **training** analysis (`results/phase2-training/analysis/`) | Phases 3, 4, 5, 6 |
-| Self-reflective insights + few-shot examples | Phase 2 **training** corrections | Phase 4 |
-| BM25 RAG index | Phase 2 **training** corrections | Phase 8 |
-
-Phases 3 and 6 read confusion matrices from `results/phase1/{train_key}/confusion_matrix.json`
-(not from the validation Phase 1 run). Ensure Phase 1 was run on training splits before
-running Phases 3 or 6 (see prerequisite notes in B3 and B6).
+| Character confusion matrix | `results/phase1-training/{train_key}/confusion_matrix.json` | Phases 3, 6 |
+| LLM failure word pairs / overcorrections | `results/phase2-training/analysis/word_pairs_llm_failures.txt` | Phases 3, 4, 5, 6 |
+| Self-reflective insights + few-shot examples | `results/phase2-training/` corrections | Phase 4 |
+| BM25 RAG index | `results/phase2-training/` corrections | Phase 8 |
 
 **Inference rule:** Every phase that requires an LLM follows the same three-step pattern:
 `export` (local) → `infer.py` (Kaggle or Thunder) → `analyze` (local).
@@ -35,9 +31,9 @@ Phase 5 and the Phase 6 `best_camel` combo are local-only (no inference step).
 
 | Step | Status |
 |------|--------|
-| Phase 1 — training split | ✓ Done |
-| Phase 2 — training split (Kaggle inference) | ✓ Done |
-| Rename Phase 2 folder | ✗ Pending (Part A) |
+| Phase 1 — training split → `results/phase1/` (to rename → `results/phase1-training/`) | ✓ Done |
+| Phase 2 — training split → `results/phase2/` (to rename → `results/phase2-training/`) | ✓ Done |
+| Rename Phase 1 and Phase 2 training folders | ✗ Pending (Part A) |
 | Training artifact generation | ✗ Pending (Part A) |
 | Phase 4 analyze-train | ✗ Pending (Part A) |
 | Phase 8 RAG index build | ✗ Pending (Part A) |
@@ -49,19 +45,21 @@ Phase 5 and the Phase 6 `best_camel` combo are local-only (no inference step).
 
 ### A0 — Rename Training Output Folders
 
-Rename the training Phase 2 results folder so that:
-- `results/phase2-training/` holds all training corrections (what A1–A3 and config paths expect)
-- `results/phase2/` is free for validation corrections
+Both Phase 1 and Phase 2 were run with the training config and wrote to the default
+`results/phase1/` and `results/phase2/` directories. Rename them so the final layout is:
+
+- `results/phase1-training/` — training Phase 1 results (confusion matrices for Phases 3 and 6)
+- `results/phase1/` — free for validation Phase 1 (step B1)
+- `results/phase2-training/` — training Phase 2 corrections (for A1–A3 and all artifact paths)
+- `results/phase2/` — free for validation Phase 2 (step B2)
 
 ```bash
+mv results/phase1 results/phase1-training
 mv results/phase2 results/phase2-training
 ```
 
-> **Phase 1** does not need renaming. Training and validation per-dataset subdirectories
-> coexist naturally (`PATS-A01-Akhbar-train/` vs `PATS-A01-Akhbar-val/` are separate
-> folders inside `results/phase1/`). The only caveat: `results/phase1/baseline_metrics.json`
-> will be overwritten when Phase 1 runs on validation (step B1). Copy it somewhere safe
-> before running B1 if you need the training aggregate numbers separately.
+> `results/phase1-training/baseline_metrics.json` holds the training aggregate.
+> It will not be overwritten by the validation B1 run (which writes to `results/phase1/`).
 
 **After the rename, switch config to validation datasets (see Part B config switch below)
 before running B1 and B2. You can then run A1–A3 in parallel once the training
@@ -71,16 +69,13 @@ before running B1 and B2. You can then run A1–A3 in parallel once the training
 
 ### A1 — Generate Training Artifacts
 
-**Prerequisite:** `results/phase2-training/corrections.jsonl` exists (paste it here once
-the Kaggle training inference is complete).
+**Prerequisite:** `results/phase2-training/corrections.jsonl` exists.
 
 `scripts/analyze_training.py` reads the combined Phase 2 training corrections and
 produces the knowledge files that Phases 3, 4, 5, and 6 embed into their prompts.
 
 ```bash
-python scripts/analyze_training.py \
-  --input      results/phase2-training/corrections.jsonl \
-  --output-dir results/phase2-training/analysis
+python scripts/analyze_training.py --input results/phase2-training/corrections.jsonl --output-dir results/phase2-training/analysis
 ```
 
 **Outputs produced:**
@@ -100,13 +95,10 @@ python scripts/analyze_training.py \
 Reads Phase 2 training corrections (per-dataset files) and extracts per-type LLM
 performance insights (fix rates, error weaknesses). Phase 4 export will fail without these.
 
-**Prerequisite:** A1 done. Per-dataset files exist at
-`results/phase2-training/{train_key}/corrections.jsonl`.
+**Prerequisite:** A1 done. Per-dataset files at `results/phase2-training/{train_key}/corrections.jsonl`.
 
-Note: `--source-phase phase2-training` is required because the default is `phase2`
-and the folder has been renamed. The pipeline now automatically derives training dataset
-keys even when `config.yaml` only lists validation datasets — no config switch needed
-to run this step.
+The pipeline automatically derives training dataset keys even when `config.yaml` lists
+only validation datasets — no config switch needed to run this step.
 
 ```bash
 python pipelines/run_phase4.py --mode analyze-train --source-phase phase2-training
@@ -123,11 +115,10 @@ python pipelines/run_phase4.py --mode analyze-train --source-phase phase2-traini
 
 ### A3 — Build Phase 8 RAG Index
 
-Builds the BM25 retrieval index from Phase 2 training corrections. Phase 8 already
-defaults to `phase2-training` as its source — no extra flags needed after the rename.
+Builds the BM25 retrieval index from Phase 2 training corrections. Phase 8 defaults
+to `phase2-training` as its source — no extra flags needed after the rename.
 
-**Prerequisite:** Per-dataset training corrections exist at
-`results/phase2-training/{train_key}/corrections.jsonl`.
+**Prerequisite:** Per-dataset training corrections at `results/phase2-training/{train_key}/corrections.jsonl`.
 
 ```bash
 python pipelines/run_phase8.py --mode build-index
@@ -141,7 +132,7 @@ python pipelines/run_phase8.py --mode build-index
 
 ### Config Switch
 
-Do this immediately after the A0 rename, before running B1.
+Do this immediately after A0, before running B1.
 Edit `configs/config.yaml`: comment out the active training `datasets:` block and
 uncomment the validation block. This is the **only config change needed** — all
 artifact paths already point to training results.
@@ -193,19 +184,11 @@ PROJECT_DIR = "/kaggle/working/project"
 INPUT_FILE  = "/kaggle/input/<your-kaggle-dataset>/inference_input.jsonl"
 HF_PATH     = "results/<phase>/corrections.jsonl"   # ← change per phase
 
-!python {PROJECT_DIR}/scripts/infer.py \
-    --input  {INPUT_FILE} \
-    --output /kaggle/working/corrections.jsonl \
-    --model  Qwen/Qwen3-4B-Instruct-2507 \
-    --config {PROJECT_DIR}/configs/config.yaml \
-    --hf-repo Mohamed109/ocr-results \
-    --hf-path {HF_PATH} \
-    --sync-every 10
+!python {PROJECT_DIR}/scripts/infer.py --input {INPUT_FILE} --output /kaggle/working/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507 --config {PROJECT_DIR}/configs/config.yaml --hf-repo Mohamed109/ocr-results --hf-path {HF_PATH} --sync-every 10
 ```
 
 After Kaggle finishes, pull corrections to local:
 ```bash
-# On local machine
 python scripts/hf_sync.py pull --paths results/<phase>
 ```
 
@@ -226,13 +209,7 @@ python scripts/hf_sync.py push --paths results/<phase>
 **Step 2 — on Thunder: pull, infer, push:**
 ```bash
 python scripts/hf_sync.py pull --paths results/<phase>
-
-python scripts/infer.py \
-    --input  results/<phase>/inference_input.jsonl \
-    --output results/<phase>/corrections.jsonl \
-    --model  Qwen/Qwen3-4B-Instruct-2507 \
-    --config configs/config.yaml
-
+python scripts/infer.py --input results/<phase>/inference_input.jsonl --output results/<phase>/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507 --config configs/config.yaml
 python scripts/hf_sync.py push --paths results/<phase>
 ```
 
@@ -248,13 +225,12 @@ python scripts/hf_sync.py pull --paths results/<phase>
 
 ### B1 — Phase 1: Validation Baseline (Local)
 
-Generates OCR baseline metrics and per-dataset confusion matrices for each validation
-dataset.
+Generates OCR baseline metrics and per-dataset confusion matrices for validation datasets.
+Outputs to `results/phase1/` (default).
 
-> **Phase 3 and Phase 6 do NOT use these confusion matrices.** They read training-split
-> confusion matrices from `results/phase1/{train_key}/confusion_matrix.json`, which were
-> produced when Phase 1 was run on training datasets (listed as Done in Current Status).
-> The validation confusion matrices produced here are used only for B1 reporting.
+> **Phases 3 and 6 do NOT read from `results/phase1/`.** They read training-split
+> confusion matrices from `results/phase1-training/` (produced in A0). The validation
+> confusion matrices here are for Phase 1 reporting only.
 
 ```bash
 python pipelines/run_phase1.py
@@ -265,7 +241,7 @@ python pipelines/run_phase1.py
 | File | Description |
 |------|-------------|
 | `results/phase1/{val_key}/metrics.json` | Per-dataset CER/WER baseline |
-| `results/phase1/{val_key}/confusion_matrix.json` | Confusion pairs (Phase 1 analysis only — Phases 3 and 6 use training-split matrices) |
+| `results/phase1/{val_key}/confusion_matrix.json` | Confusion pairs (B1 analysis only) |
 | `results/phase1/{val_key}/error_taxonomy.json` | Error type breakdown |
 | `results/phase1/baseline_metrics.json` | **Paper number: OCR baseline aggregated** |
 
@@ -275,10 +251,6 @@ python pipelines/run_phase1.py
 
 #### B2.1 — Export (Local)
 
-Generates inference input for validation datasets. Use `--force` so the file is
-regenerated with only validation samples (it currently contains training entries
-from the training run).
-
 ```bash
 python pipelines/run_phase2.py --mode export --force
 ```
@@ -287,9 +259,7 @@ python pipelines/run_phase2.py --mode export --force
 
 #### B2.2 — Inference
 
-**Kaggle:** upload `results/phase2/inference_input.jsonl` as a Kaggle dataset, then run
-the Kaggle template with `HF_PATH = "results/phase2/corrections.jsonl"`.
-Pull locally after: `python scripts/hf_sync.py pull --paths results/phase2`
+**Kaggle:** upload `results/phase2/inference_input.jsonl` as a Kaggle dataset, run the Kaggle template with `HF_PATH = "results/phase2/corrections.jsonl"`, then pull: `python scripts/hf_sync.py pull --paths results/phase2`
 
 **Thunder:** use `<phase> = phase2` in the Thunder template above.
 
@@ -299,9 +269,8 @@ Pull locally after: `python scripts/hf_sync.py pull --paths results/phase2`
 python pipelines/run_phase2.py --mode analyze
 ```
 
-This step auto-splits the combined file into per-dataset files
-(`results/phase2/{val_key}/corrections.jsonl`). Those per-dataset files are
-required by Phase 5.
+Auto-splits the combined file into per-dataset files
+(`results/phase2/{val_key}/corrections.jsonl`) required by Phase 5.
 
 **Outputs (per val dataset):**
 
@@ -317,26 +286,21 @@ required by Phase 5.
 ### B3 — Phase 3: OCR-Aware Prompting (Validation)
 
 **Prerequisites:**
-- Phase 1 training-split complete — training confusion matrices exist at
-  `results/phase1/{train_key}/confusion_matrix.json`
-  (e.g. `results/phase1/PATS-A01-Akhbar-train/confusion_matrix.json`).
-  These are from the earlier Phase 1 training run (Current Status: Done).
-  Phase 3 never reads validation-split confusion matrices.
+- A0 done — `results/phase1-training/{train_key}/confusion_matrix.json` exists
+  (e.g. `results/phase1-training/PATS-A01-Akhbar-train/confusion_matrix.json`).
 - A1 done — `results/phase2-training/analysis/word_pairs_llm_failures.txt` exists
 
 #### B3.1 — Export (Local)
 
 ```bash
-python pipelines/run_phase3.py --mode export
+python pipelines/run_phase3.py --mode export --phase1-dir results/phase1-training
 ```
 
 **Output:** `results/phase3/inference_input.jsonl`
 
 #### B3.2 — Inference
 
-**Kaggle:** upload `results/phase3/inference_input.jsonl` as a Kaggle dataset, then run
-the Kaggle template with `HF_PATH = "results/phase3/corrections.jsonl"`.
-Pull locally after: `python scripts/hf_sync.py pull --paths results/phase3`
+**Kaggle:** upload `results/phase3/inference_input.jsonl` as a Kaggle dataset, run the Kaggle template with `HF_PATH = "results/phase3/corrections.jsonl"`, then pull: `python scripts/hf_sync.py pull --paths results/phase3`
 
 **Thunder:** use `<phase> = phase3` in the Thunder template above.
 
@@ -364,10 +328,8 @@ python pipelines/run_phase3.py --mode analyze
 
 #### B4.1 — Export (Local)
 
-Reads training artifacts and insights. Automatically skips training-split datasets;
-only validation-split datasets are included in the output.
-Few-shot examples are drawn from `results/phase2-training/` (training corrections only —
-`phase4.few_shot.source_phase` is `"phase2-training"` in config).
+Reads training artifacts and insights. Only validation-split datasets are exported.
+Few-shot examples are drawn from `results/phase2-training/` (`phase4.few_shot.source_phase = "phase2-training"` in config).
 
 ```bash
 python pipelines/run_phase4.py --mode export
@@ -377,9 +339,7 @@ python pipelines/run_phase4.py --mode export
 
 #### B4.2 — Inference
 
-**Kaggle:** upload `results/phase4/inference_input.jsonl` as a Kaggle dataset, then run
-the Kaggle template with `HF_PATH = "results/phase4/corrections.jsonl"`.
-Pull locally after: `python scripts/hf_sync.py pull --paths results/phase4`
+**Kaggle:** upload `results/phase4/inference_input.jsonl` as a Kaggle dataset, run the Kaggle template with `HF_PATH = "results/phase4/corrections.jsonl"`, then pull: `python scripts/hf_sync.py pull --paths results/phase4`
 
 **Thunder:** use `<phase> = phase4` in the Thunder template above.
 
@@ -401,13 +361,9 @@ python pipelines/run_phase4.py --mode analyze
 
 ### B5 — Phase 5: CAMeL Morphological Validation (Local Only)
 
-Applies CAMeL morphological validation on top of Phase 2 validation corrections.
-No Kaggle step — runs entirely on local machine.
-
 **Prerequisites:**
-- B2.5 done — per-dataset corrections split at `results/phase2/{val_key}/corrections.jsonl`
+- B2.5 done — per-dataset corrections at `results/phase2/{val_key}/corrections.jsonl`
 - A1 done — `results/phase2-training/analysis/word_pairs_llm_failures.txt` exists
-  (for known-overcorrection revert)
 - CAMeL Tools installed: `pip install camel-tools && camel_data -i morphology-db-msa-r13`
 
 ```bash
@@ -424,70 +380,33 @@ python pipelines/run_phase5.py --mode validate
 
 ---
 
-### B6 — Phase 6: Combinations & Ablation
+### B6 — Phase 6: True Combination & Ablation
 
-Phase 6 tests three LLM prompt combos (conf_only, self_only, conf_self) and one
-CAMeL combo (best_camel). Each LLM combo is a separate Kaggle inference run.
-The CAMeL combo is local-only.
+Phase 6 runs **one new inference** — `conf_self`, the true combination of all Phase 3 and Phase 4 signals — then uses Phase 3 and Phase 4 results directly as the ablation baselines.
+Phase 3 = confusion-only baseline. Phase 4 = self-reflective-only baseline. No new inference needed for those.
 
 **Prerequisites:**
-- Phase 1 training-split complete — training confusion matrices exist at
-  `results/phase1/{train_key}/confusion_matrix.json`
-  (same requirement as Phase 3; combos that use confusion matrix read training-split matrices)
-- A1 done (training artifacts for self_only, conf_self, best_camel)
-- A2 done (insights for self_only, conf_self, best_camel)
+- B3.5 done — `results/phase3/{val_key}/metrics.json` exists (ablation conf_only baseline)
+- B4.5 done — `results/phase4/{val_key}/metrics.json` exists (ablation self_only baseline)
+- A0 done — `results/phase1-training/{train_key}/confusion_matrix.json` exists
+- A1 done — `results/phase2-training/analysis/word_pairs_llm_failures.txt` exists
+- A2 done — `results/phase4/insights/` files exist
 
 ---
 
-#### B6a — conf_only (Phase 3 prompt alone)
+#### B6a — conf_self (True combination: Phase 3 full + Phase 4 full)
+
+Injects ALL Phase 3 signals (confusion pairs + word-level failure examples) AND ALL Phase 4 signals (insights + word pairs + overcorrection warnings + few-shot examples) into one prompt.
 
 **Export:**
 ```bash
-python pipelines/run_phase6.py --combo conf_only --mode export
-```
-Output: `results/phase6/conf_only/inference_input.jsonl`
-
-**Inference:**
-Kaggle: upload `results/phase6/conf_only/inference_input.jsonl`, run template with `HF_PATH = "results/phase6/conf_only/corrections.jsonl"`, pull: `python scripts/hf_sync.py pull --paths results/phase6/conf_only`
-Thunder: `<phase> = phase6/conf_only` in the Thunder template above.
-
-**Analyze:**
-```bash
-python pipelines/run_phase6.py --combo conf_only --mode analyze
-```
-
----
-
-#### B6b — self_only (Phase 4 prompt alone)
-
-**Export:**
-```bash
-python pipelines/run_phase6.py --combo self_only --mode export
-```
-Output: `results/phase6/self_only/inference_input.jsonl`
-
-**Inference:**
-Kaggle: upload `results/phase6/self_only/inference_input.jsonl`, run template with `HF_PATH = "results/phase6/self_only/corrections.jsonl"`, pull: `python scripts/hf_sync.py pull --paths results/phase6/self_only`
-Thunder: `<phase> = phase6/self_only` in the Thunder template above.
-
-**Analyze:**
-```bash
-python pipelines/run_phase6.py --combo self_only --mode analyze
-```
-
----
-
-#### B6c — conf_self (Phase 3 + Phase 4 combined)
-
-**Export:**
-```bash
-python pipelines/run_phase6.py --combo conf_self --mode export
+python pipelines/run_phase6.py --combo conf_self --mode export --phase1-dir results/phase1-training
 ```
 Output: `results/phase6/conf_self/inference_input.jsonl`
 
 **Inference:**
 Kaggle: upload `results/phase6/conf_self/inference_input.jsonl`, run template with `HF_PATH = "results/phase6/conf_self/corrections.jsonl"`, pull: `python scripts/hf_sync.py pull --paths results/phase6/conf_self`
-Thunder: `<phase> = phase6/conf_self` in the Thunder template above.
+Thunder: use `<phase> = phase6/conf_self` in the Thunder template above.
 
 **Analyze:**
 ```bash
@@ -496,20 +415,20 @@ python pipelines/run_phase6.py --combo conf_self --mode analyze
 
 ---
 
-#### B6d — Pick Best Combo and Set Config
+#### B6b — Pick Best Combo and Set Config
 
-Review `results/phase6/conf_only/metrics.json`, `self_only/metrics.json`,
-`conf_self/metrics.json`. Identify the combo with the lowest aggregated CER.
+Review `results/phase3/metrics.json` (conf_only), `results/phase4/metrics.json` (self_only),
+and `results/phase6/conf_self/metrics.json`. Identify the lowest aggregated CER.
 
 Edit `configs/config.yaml`:
 ```yaml
 phase6:
-  best_combo: "conf_self"   # replace with whichever won
+  best_combo: "conf_self"   # or "phase3" or "phase4" — whichever won
 ```
 
 ---
 
-#### B6e — best_camel (Best combo + CAMeL, Local Only)
+#### B6c — best_camel (Best combo + CAMeL, Local Only)
 
 ```bash
 python pipelines/run_phase6.py --combo best_camel --mode validate
@@ -519,32 +438,26 @@ python pipelines/run_phase6.py --combo best_camel --mode validate
 
 ---
 
-#### B6f — Summarize All Combos
+#### B6d — Summarize (Ablation + Synergy)
 
 ```bash
 python pipelines/run_phase6.py --mode summarize
 ```
 
-**Output:** `results/phase6/metrics.json` — **Paper numbers: all 4 combos compared**
+**Output:** `results/phase6/metrics.json` — **Paper numbers: ablation + synergy across all combos**
 
-Includes ablation analysis (contribution of each component) and synergy analysis
-(whether combining phases is super-additive).
+Ablation uses Phase 3 as conf_only and Phase 4 as self_only. Synergy measures whether conf_self beats the sum of individual improvements.
 
 ---
 
 ### B7 — Phase 7: DSPy Prompt Optimization
 
-DSPy automatically discovers optimal prompts using training examples. Phase 7 uses
-`scripts/dspy_optimize.py` on Kaggle (not `infer.py`) — the optimizer runs first,
-then the compiled program is applied to validation data.
+DSPy automatically discovers optimal prompts using training examples. Uses
+`scripts/dspy_optimize.py` on Kaggle (not `infer.py`).
 
-**Prerequisite:** Phase 2 training corrections must exist at
-`results/phase2-training/{train_key}/corrections.jsonl` (they do — training is done).
+**Prerequisite:** Phase 2 training corrections at `results/phase2-training/{train_key}/corrections.jsonl`.
 
 #### B7.1 — Export (Local)
-
-Samples training and dev sets for the DSPy optimizer, and exports the full validation
-set for post-optimization inference.
 
 ```bash
 python pipelines/run_phase7.py --mode export
@@ -560,13 +473,9 @@ python pipelines/run_phase7.py --mode export
 
 #### B7.2 — Optimize + Infer
 
-Phase 7 uses `scripts/dspy_optimize.py` (not `scripts/infer.py`) on both environments. It runs DSPy optimization first then applies the compiled program to the
-full validation set.
-
 **Kaggle**
 
-Upload all three files from `results/phase7/` (`dspy_trainset.jsonl`, `dspy_devset.jsonl`,
-`inference_input.jsonl`) as a Kaggle dataset, then:
+Upload all three files from `results/phase7/` as a Kaggle dataset, then:
 
 ```python
 import os
@@ -576,15 +485,7 @@ os.environ["HF_TOKEN"] = UserSecretsClient().get_secret("HF_WRITE")
 PROJECT_DIR  = "/kaggle/working/project"
 KAGGLE_INPUT = "/kaggle/input/<your-dataset>"
 
-!python {PROJECT_DIR}/scripts/dspy_optimize.py \
-    --trainset {KAGGLE_INPUT}/dspy_trainset.jsonl \
-    --devset   {KAGGLE_INPUT}/dspy_devset.jsonl \
-    --input    {KAGGLE_INPUT}/inference_input.jsonl \
-    --output   /kaggle/working/corrections.jsonl \
-    --model    Qwen/Qwen3-4B-Instruct-2507 \
-    --config   {PROJECT_DIR}/configs/config.yaml \
-    --hf-repo  Mohamed109/ocr-results \
-    --hf-path  results/phase7/corrections.jsonl
+!python {PROJECT_DIR}/scripts/dspy_optimize.py --trainset {KAGGLE_INPUT}/dspy_trainset.jsonl --devset {KAGGLE_INPUT}/dspy_devset.jsonl --input {KAGGLE_INPUT}/inference_input.jsonl --output /kaggle/working/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507 --config {PROJECT_DIR}/configs/config.yaml --hf-repo Mohamed109/ocr-results --hf-path results/phase7/corrections.jsonl
 ```
 
 Pull locally after: `python scripts/hf_sync.py pull --paths results/phase7`
@@ -592,27 +493,18 @@ Pull locally after: `python scripts/hf_sync.py pull --paths results/phase7`
 **Thunder**
 
 ```bash
-# Local: push all phase7 files
 python scripts/hf_sync.py push --paths results/phase7
-
-# Thunder: pull, optimize+infer, push
+```
+On Thunder:
+```bash
 python scripts/hf_sync.py pull --paths results/phase7
-
-python scripts/dspy_optimize.py \
-    --trainset results/phase7/dspy_trainset.jsonl \
-    --devset   results/phase7/dspy_devset.jsonl \
-    --input    results/phase7/inference_input.jsonl \
-    --output   results/phase7/corrections.jsonl \
-    --model    Qwen/Qwen3-4B-Instruct-2507 \
-    --config   configs/config.yaml
-
+python scripts/dspy_optimize.py --trainset results/phase7/dspy_trainset.jsonl --devset results/phase7/dspy_devset.jsonl --input results/phase7/inference_input.jsonl --output results/phase7/corrections.jsonl --model Qwen/Qwen3-4B-Instruct-2507 --config configs/config.yaml
 python scripts/hf_sync.py push --paths results/phase7
-
-# Local: pull results
+```
+Pull back locally:
+```bash
 python scripts/hf_sync.py pull --paths results/phase7
 ```
-
-> Check `python scripts/dspy_optimize.py --help` for any additional flags.
 
 #### B7.5 — Analyze (Local)
 
@@ -639,9 +531,6 @@ python pipelines/run_phase7.py --mode analyze
 
 #### B8.1 — Export (Local)
 
-Retrieves similar training corrections for each validation sample and embeds them
-in the inference input.
-
 ```bash
 python pipelines/run_phase8.py --mode export
 ```
@@ -650,9 +539,7 @@ python pipelines/run_phase8.py --mode export
 
 #### B8.2 — Inference
 
-**Kaggle:** upload `results/phase8/inference_input.jsonl` as a Kaggle dataset, then run
-the Kaggle template with `HF_PATH = "results/phase8/corrections.jsonl"`.
-Pull locally after: `python scripts/hf_sync.py pull --paths results/phase8`
+**Kaggle:** upload `results/phase8/inference_input.jsonl` as a Kaggle dataset, run the Kaggle template with `HF_PATH = "results/phase8/corrections.jsonl"`, then pull: `python scripts/hf_sync.py pull --paths results/phase8`
 
 **Thunder:** use `<phase> = phase8` in the Thunder template above.
 
@@ -672,6 +559,53 @@ python pipelines/run_phase8.py --mode analyze
 
 ---
 
+### B9 — Phase 9: Error-Signature RAG
+
+Retrieves training samples by error structural similarity (CAMeL invalid words + confusion-matrix character profiles) rather than text similarity. Only one new inference run needed — index is built locally.
+
+**Prerequisites:**
+- A4 done — `results/phase9/index/phase9_index.json` exists
+- A0 done — `results/phase1-training/{train_key}/confusion_matrix.json` exists (used to derive high-confusion chars)
+- B2.5 done — Phase 2 val corrections exist (baseline)
+
+#### B9.0 — Build Index (Local)
+
+```bash
+python pipelines/run_phase9.py --mode build-index
+```
+
+**Output:** `results/phase9/index/phase9_index.json` + `index_meta.json`
+
+#### B9.1 — Export (Local)
+
+```bash
+python pipelines/run_phase9.py --mode export
+```
+
+**Output:** `results/phase9/inference_input.jsonl`
+
+#### B9.2 — Inference
+
+**Kaggle:** upload `results/phase9/inference_input.jsonl` as a Kaggle dataset, run the Kaggle template with `HF_PATH = "results/phase9/corrections.jsonl"`, then pull: `python scripts/hf_sync.py pull --paths results/phase9`
+
+**Thunder:** use `<phase> = phase9` in the Thunder template above.
+
+#### B9.5 — Analyze (Local)
+
+```bash
+python pipelines/run_phase9.py --mode analyze
+```
+
+**Outputs (per val dataset):**
+
+| File | Description |
+|------|-------------|
+| `results/phase9/{val_key}/metrics.json` | Per-dataset CER/WER |
+| `results/phase9/{val_key}/comparison_vs_phase2.json` | Delta vs zero-shot |
+| `results/phase9/metrics.json` | **Paper number: Error-Signature RAG aggregated** |
+
+---
+
 ## Part C — Paper Results Reference
 
 All primary paper numbers are in the aggregated `metrics.json` at the phase root.
@@ -686,14 +620,15 @@ Look for `group_aggregates_no_diacritics` for the primary reported metric.
 | Phase 5 (val) | CAMeL Validation | `results/phase5/metrics.json` |
 | Phase 6 (val) | Combinations + Ablation | `results/phase6/metrics.json` |
 | Phase 7 (val) | DSPy Optimization | `results/phase7/metrics.json` |
-| Phase 8 (val) | RAG | `results/phase8/metrics.json` |
+| Phase 8 (val) | RAG (BM25) | `results/phase8/metrics.json` |
+| Phase 9 (val) | RAG (Error-Signature) | `results/phase9/metrics.json` |
 
 **Training split results** (used for knowledge characterization, not the main comparison):
 
 | Phase | File |
 |-------|------|
-| Phase 1 (train) | `results/phase1/baseline_metrics.json` (already computed) |
-| Phase 2 (train) | `results/phase2/metrics.json` (already computed) |
+| Phase 1 (train) | `results/phase1-training/baseline_metrics.json` |
+| Phase 2 (train) | `results/phase2-training/metrics.json` |
 | Training analysis | `results/phase2-training/analysis/summary.md` |
 
 ---
@@ -701,47 +636,58 @@ Look for `group_aggregates_no_diacritics` for the primary reported metric.
 ## Execution Checklist
 
 ```
-A0: mv results/phase2 results/phase2-training
-    (backup results/phase1/baseline_metrics.json if you need training aggregate separately)
+Part A — rename and generate training artifacts
 
-Switch config.yaml datasets to validation
+  [ ] A0a: mv results/phase1 results/phase1-training
+  [ ] A0b: mv results/phase2 results/phase2-training
+
+  Switch config.yaml datasets to validation:
   [ ] Comment out training datasets block
   [ ] Uncomment validation datasets block
-  [ ] Verify 9 datasets listed (8 PATS fonts + KHATT-validation)
+  [ ] Verify 9 entries: 8 PATS fonts (-val) + KHATT-validation
 
-Verify training Phase 1 results are present (required by Phases 3 and 6)
-  [ ] results/phase1/PATS-A01-Akhbar-train/confusion_matrix.json  (and all other train keys)
-  [ ] results/phase1/KHATT-train/confusion_matrix.json
-  If any are missing: temporarily add training datasets back to config, run
-    python pipelines/run_phase1.py
-  then switch config back to validation.
-
-B1 + B2 can run immediately after A0 and config switch.
-A1–A3 run once training corrections.jsonl lands in results/phase2-training/.
-B3 onward requires A1–A3 AND training Phase 1 results (see above) to be complete.
-
-Part B — validation (B1 and B2 unblock immediately)
-  [ ] B1: python pipelines/run_phase1.py   (validation baseline only; Phases 3/6 use training matrices)
-  [ ] B2: export --force → infer (phase2) → pull → analyze
-
-Part A — training artifacts (run once training corrections.jsonl is ready)
-  [ ] A1: python scripts/analyze_training.py \
-            --input results/phase2-training/corrections.jsonl \
-            --output-dir results/phase2-training/analysis
+  (once results/phase2-training/corrections.jsonl is ready)
+  [ ] A1: python scripts/analyze_training.py --input results/phase2-training/corrections.jsonl --output-dir results/phase2-training/analysis
   [ ] A2: python pipelines/run_phase4.py --mode analyze-train --source-phase phase2-training
-          (auto-derives training dataset keys even with val-only config — no config switch needed)
   [ ] A3: python pipelines/run_phase8.py --mode build-index
+  [ ] A4: python pipelines/run_phase9.py --mode build-index
 
-Part B — validation continued (requires A1–A3 + training Phase 1 confusion matrices)
-  [ ] B3: export → infer (phase3) → pull → analyze
-  [ ] B4: export → infer (phase4) → pull → analyze
-  [ ] B5: python pipelines/run_phase5.py --mode validate   (local only)
-  [ ] B6a: conf_only  export → infer (phase6/conf_only)  → pull → analyze
-  [ ] B6b: self_only  export → infer (phase6/self_only)  → pull → analyze
-  [ ] B6c: conf_self  export → infer (phase6/conf_self)  → pull → analyze
-  [ ] B6d: set phase6.best_combo in config.yaml
-  [ ] B6e: python pipelines/run_phase6.py --combo best_camel --mode validate  (local only)
-  [ ] B6f: python pipelines/run_phase6.py --mode summarize
-  [ ] B7: export → dspy_optimize.py (phase7) → pull → analyze
-  [ ] B8: export → infer (phase8) → pull → analyze
+Part B — validation (B1 + B2 run immediately after A0 + config switch)
+
+  [ ] B1: python pipelines/run_phase1.py
+  [ ] B2.1: python pipelines/run_phase2.py --mode export --force
+  [ ] B2.2: infer (phase2) → pull
+  [ ] B2.5: python pipelines/run_phase2.py --mode analyze
+
+  (requires A1–A3 complete)
+  [ ] B3.1: python pipelines/run_phase3.py --mode export --phase1-dir results/phase1-training
+  [ ] B3.2: infer (phase3) → pull
+  [ ] B3.5: python pipelines/run_phase3.py --mode analyze
+
+  [ ] B4.1: python pipelines/run_phase4.py --mode export
+  [ ] B4.2: infer (phase4) → pull
+  [ ] B4.5: python pipelines/run_phase4.py --mode analyze
+
+  [ ] B5:   python pipelines/run_phase5.py --mode validate
+
+  (requires B3.5 + B4.5 + A0–A2 done)
+  [ ] B6a export: python pipelines/run_phase6.py --combo conf_self --mode export --phase1-dir results/phase1-training
+  [ ] B6a infer:  infer (phase6/conf_self) → pull
+  [ ] B6a analyze: python pipelines/run_phase6.py --combo conf_self --mode analyze
+  [ ] B6b: set phase6.best_combo in config.yaml (phase3 | phase4 | conf_self)
+  [ ] B6c: python pipelines/run_phase6.py --combo best_camel --mode validate
+  [ ] B6d: python pipelines/run_phase6.py --mode summarize
+
+  [ ] B7.1: python pipelines/run_phase7.py --mode export
+  [ ] B7.2: dspy_optimize.py (phase7) → pull
+  [ ] B7.5: python pipelines/run_phase7.py --mode analyze
+
+  [ ] B8.1: python pipelines/run_phase8.py --mode export
+  [ ] B8.2: infer (phase8) → pull
+  [ ] B8.5: python pipelines/run_phase8.py --mode analyze
+
+  [ ] B9.0: python pipelines/run_phase9.py --mode build-index
+  [ ] B9.1: python pipelines/run_phase9.py --mode export
+  [ ] B9.2: infer (phase9) → pull
+  [ ] B9.5: python pipelines/run_phase9.py --mode analyze
 ```

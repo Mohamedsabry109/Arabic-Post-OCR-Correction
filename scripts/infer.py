@@ -436,6 +436,7 @@ def main() -> None:
                 word_pairs_context=rec.get("word_pairs_context") or "",
                 overcorrection_context=rec.get("overcorrection_context") or "",
                 few_shot_examples=few_shot,
+                word_examples=rec.get("word_examples") or "",
             )
         if pt == "self_reflective":
             return builder.build_self_reflective(
@@ -511,6 +512,7 @@ def main() -> None:
                     word_pairs_context=record.get("word_pairs_context") or "",
                     overcorrection_context=record.get("overcorrection_context") or "",
                     few_shot_examples=few_shot,
+                    word_examples=record.get("word_examples") or "",
                 )
                 prompt_ver = builder.combined_prompt_version
                 _any_ctx = any([

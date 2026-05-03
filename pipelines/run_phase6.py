@@ -73,6 +73,9 @@ from src.data.knowledge_base import (
     ConfusionMatrixLoader, ConfusionPair,
     LLMInsightsLoader,
     WordErrorPairsLoader,
+    FewShotExampleSelector,
+    load_unfixed_word_pairs,
+    format_word_examples_for_prompt,
 )
 from src.core.prompt_builder import PromptBuilder
 from src.core.llm_corrector import CorrectedSample
@@ -97,24 +100,20 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # (use_confusion, use_self)
-# use_confusion = True injects Phase 3 confusion matrix (filtered by LLM failures)
+# use_confusion = True injects Phase 3 confusion matrix (full, including word-level failures)
 # use_self = True injects Phase 4 self-reflective signals (insights + word pairs + overcorrections)
 COMBO_COMPONENTS: dict[str, tuple[bool, bool]] = {
-    "conf_only":   (True,  False),   # Phase 3 alone
-    "self_only":   (False, True),    # Phase 4 alone
-    "conf_self":   (True,  True),    # Phase 3 + 4 (full prompt)
+    "conf_self": (True, True),   # True combination: Phase 3 full + Phase 4 full
 }
 
-CAMEL_COMBOS = {"best_camel"}   # Best inference combo + Phase 5 CAMeL post-processing
+CAMEL_COMBOS = {"best_camel"}
 
-INFERENCE_COMBOS = list(COMBO_COMPONENTS.keys())
+INFERENCE_COMBOS = list(COMBO_COMPONENTS.keys())   # ["conf_self"]
 ALL_COMBOS = INFERENCE_COMBOS + sorted(CAMEL_COMBOS)
 
 COMBO_DESCRIPTIONS: dict[str, str] = {
-    "conf_only":    "Phase 3: OCR-Aware Confusion Matrix",
-    "self_only":    "Phase 4: Self-Reflective (insights + word pairs + overcorrections)",
-    "conf_self":    "Phase 3 + 4: Confusion + Self-Reflective",
-    "best_camel":   "Best Inference Combo + Phase 5 CAMeL Validation",
+    "conf_self":  "True Combination: Phase 3 (full) + Phase 4 (full)",
+    "best_camel": "Best Combo + Phase 5 CAMeL Validation",
 }
 
 
@@ -193,9 +192,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--phase1-dir",
         type=Path,
-        default=Path("results/phase1"),
+        default=Path("results/phase1-training"),
         dest="phase1_dir",
-        help="Phase 1 results directory (source of confusion matrices).",
+        help=(
+            "Phase 1 TRAINING results directory (source of confusion matrices). "
+            "Default: results/phase1-training. "
+            "Produce with: python pipelines/run_phase1.py --results-dir results/phase1-training "
+            "(using training-split config)."
+        ),
     )
     parser.add_argument(
         "--config",
@@ -869,8 +873,8 @@ def run_export(
     overcorrection_context = ""
     if use_self:
         from src.data.knowledge_base import (
-            load_unfixed_word_pairs, load_introduced_word_pairs,
-            format_word_examples_for_prompt, format_overcorrection_warnings,
+            load_introduced_word_pairs,
+            format_overcorrection_warnings,
         )
 
         phase4_cfg = config.get("phase4", {})
@@ -952,6 +956,96 @@ def run_export(
             )
             return
 
+    # --- Word-level failure examples (Phase 3 signal for confusion_patterns section) ---
+    word_examples_text = ""
+    if use_conf:
+        phase4_cfg_for_words = config.get("phase4", {})
+        training_dir_w = _PROJECT_ROOT / phase4_cfg_for_words.get(
+            "training_artifacts_dir", "results/phase2-training/analysis"
+        )
+        failures_path_w = training_dir_w / "word_pairs_llm_failures.txt"
+        if failures_path_w.exists():
+            unfixed_w = load_unfixed_word_pairs(failures_path_w)
+            if unfixed_w:
+                word_examples_n = int(phase3_cfg.get("word_level_examples_n", 10))
+                word_examples_text = format_word_examples_for_prompt(unfixed_w, n=word_examples_n)
+                logger.info(
+                    "Loaded %d unfixed word pairs for confusion section -> %d chars.",
+                    len(unfixed_w), len(word_examples_text),
+                )
+        else:
+            logger.warning("word_pairs_llm_failures.txt not found at %s — word_examples empty.", failures_path_w)
+
+    # --- Few-shot examples (Phase 4 signal) ---
+    few_shot_by_type: dict[str, str] = {}
+    if use_self:
+        phase4_cfg_fs = config.get("phase4", {})
+        few_shot_cfg = phase4_cfg_fs.get("few_shot", {})
+        few_shot_enabled = bool(few_shot_cfg.get("enabled", True))
+
+        if few_shot_enabled:
+            source_phase_fs = str(few_shot_cfg.get("source_phase", "phase2-training"))
+            source_dir_fs = _PROJECT_ROOT / "results" / source_phase_fs
+
+            train_datasets_fs = get_training_dataset_names(all_dataset_names)
+            pats_paths_fs: list[Path] = []
+            khatt_paths_fs: list[Path] = []
+            combined_path_fs = source_dir_fs / "corrections.jsonl"
+
+            for ds_key_fs in train_datasets_fs:
+                per_ds_fs = source_dir_fs / ds_key_fs / "corrections.jsonl"
+                if per_ds_fs.exists():
+                    if ds_key_fs.startswith("PATS-A01-"):
+                        pats_paths_fs.append(per_ds_fs)
+                    else:
+                        khatt_paths_fs.append(per_ds_fs)
+
+            if not pats_paths_fs and not khatt_paths_fs:
+                p2_training_combined = _PROJECT_ROOT / "results" / "phase2-training" / "corrections.jsonl"
+                if p2_training_combined.exists():
+                    pats_paths_fs = [p2_training_combined]
+                    khatt_paths_fs = [p2_training_combined]
+                    logger.info("Few-shot: using phase2-training combined corrections file.")
+                elif combined_path_fs.exists():
+                    pats_paths_fs = [combined_path_fs]
+                    khatt_paths_fs = [combined_path_fs]
+                    logger.warning(
+                        "Few-shot: falling back to %s -- ensure this contains training-split corrections only.",
+                        combined_path_fs,
+                    )
+
+            selector = FewShotExampleSelector()
+            fs_kwargs = {
+                "n_unchanged": int(few_shot_cfg.get("n_unchanged", 2)),
+                "n_easy":      int(few_shot_cfg.get("n_easy",      2)),
+                "n_medium":    int(few_shot_cfg.get("n_medium",    3)),
+                "n_hard":      int(few_shot_cfg.get("n_hard",      2)),
+                "seed":        int(few_shot_cfg.get("seed",        42)),
+                "max_chars":   int(few_shot_cfg.get("max_chars",   FewShotExampleSelector.DEFAULT_MAX_CHARS)),
+            }
+
+            for dtype, paths_fs in [("PATS-A01", pats_paths_fs), ("KHATT", khatt_paths_fs)]:
+                if not paths_fs:
+                    continue
+                try:
+                    pool_fs = selector.load_from_multiple(paths_fs)
+                    selected_fs = selector.select(pool_fs, dataset_type_filter=dtype, **fs_kwargs)
+                    few_shot_by_type[dtype] = selector.format_for_prompt(selected_fs)
+                    logger.info(
+                        "Few-shot [%s]: %d examples selected (%d chars).",
+                        dtype, len(selected_fs), len(few_shot_by_type[dtype]),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Few-shot loading failed for %s: %s", dtype, exc)
+
+            if not few_shot_by_type:
+                logger.warning(
+                    "No few-shot examples loaded (no training corrections found under %s).",
+                    source_dir_fs,
+                )
+        else:
+            logger.info("Few-shot examples disabled (phase4.few_shot.enabled=false).")
+
     loader_data = DataLoader(config)
     already_exported = _load_exported_datasets(output_path) if not force else set()
     total_written = 0
@@ -986,6 +1080,10 @@ def run_export(
             else:
                 insights_context = ""
 
+            # Resolve few-shot examples for this dataset
+            dataset_type = "PATS-A01" if ds_key.startswith("PATS-A01-") else "KHATT"
+            few_shot_text = few_shot_by_type.get(dataset_type, "")
+
             # Determine prompt_type
             any_context = any([confusion_context, insights_context, word_pairs_context])
             prompt_type = "combined" if any_context else "zero_shot"
@@ -1006,9 +1104,11 @@ def run_export(
                     "combo_id":           combo_id,
                     "prompt_version":     PromptBuilder.COMBINED_PROMPT_VERSION,
                     "confusion_context":        confusion_context or None,
+                    "word_examples":            word_examples_text or None,
                     "insights_context":         insights_context or None,
                     "word_pairs_context":       word_pairs_context or None,
                     "overcorrection_context":   overcorrection_context or None,
+                    "few_shot_examples":        few_shot_text or None,
                 }
                 if use_conf:
                     record["confusion_source"] = conf_source
@@ -1017,8 +1117,10 @@ def run_export(
                 total_written += 1
 
             logger.info(
-                "Exported %d samples for %s (conf_src=%s).",
+                "Exported %d samples for %s (conf_src=%s, word_ex=%s, few_shot=%s).",
                 len(samples), ds_key, conf_source,
+                "yes" if word_examples_text else "no",
+                "yes" if few_shot_text else "no",
             )
 
     logger.info("=" * 60)
@@ -1387,13 +1489,26 @@ def run_validate(
         logger.error("Unknown CAMeL combo: %s", combo_id)
         sys.exit(1)
 
-    base_combo_dir = results_dir / base_combo_id
+    if base_combo_id == "phase3":
+        base_combo_dir = _PROJECT_ROOT / "results" / "phase3"
+    elif base_combo_id == "phase4":
+        base_combo_dir = _PROJECT_ROOT / "results" / "phase4"
+    else:
+        base_combo_dir = results_dir / base_combo_id
+
     if not base_combo_dir.exists():
-        logger.error(
-            "Base combo directory not found: %s\n"
-            "Run: python pipelines/run_phase6.py --combo %s --mode analyze first.",
-            base_combo_dir, base_combo_id,
-        )
+        if base_combo_id in ("phase3", "phase4"):
+            logger.error(
+                "Base combo directory not found: %s\n"
+                "Run: python pipelines/run_%s.py --mode analyze first.",
+                base_combo_dir, base_combo_id,
+            )
+        else:
+            logger.error(
+                "Base combo directory not found: %s\n"
+                "Run: python pipelines/run_phase6.py --combo %s --mode analyze first.",
+                base_combo_dir, base_combo_id,
+            )
         sys.exit(1)
 
     combo_dir = results_dir / combo_id
@@ -1758,7 +1873,7 @@ def run_summarize(
     if p2_avg is None:
         logger.warning("Phase 2 metrics not found -- some analyses will be skipped.")
 
-    # --- Load all combo avg metrics ---
+    # --- Load combo avg metrics (only the new Phase 6 combos: conf_self, best_camel) ---
     combo_metrics: dict[str, dict] = {}
     for combo_id in ALL_COMBOS:
         m = _load_combo_avg_metrics(results_dir, combo_id)
@@ -1775,22 +1890,19 @@ def run_summarize(
         logger.warning("No combo results found. Run export -> inference -> analyze first.")
         return
 
-    # --- Load isolated phase avg CERs ---
-    isolated_cers: dict[str, float] = {}
-    for phase_key, phase_dir in [
-        ("phase3", Path("results/phase3")),
-        ("phase4", Path("results/phase4")),
-        ("phase6_camel", Path("results/phase6")),
-    ]:
-        v = _load_isolated_phase_avg_cer(phase_dir)
-        if v is not None:
-            isolated_cers[phase_key] = v
+    # --- Load Phase 3 and Phase 4 avg CERs (ablation baselines) ---
+    phase3_avg_cer = _load_isolated_phase_avg_cer(Path("results/phase3"))
+    phase4_avg_cer = _load_isolated_phase_avg_cer(Path("results/phase4"))
 
-    # Component -> isolated phase mapping for synergy
-    _component_to_phase = {
-        "confusion": "phase3",
-        "self":      "phase4",
-    }
+    if phase3_avg_cer is not None:
+        logger.info("  [phase3] avg_cer=%.4f (ablation baseline: confusion only)", phase3_avg_cer)
+    else:
+        logger.info("  [phase3] not available.")
+
+    if phase4_avg_cer is not None:
+        logger.info("  [phase4] avg_cer=%.4f (ablation baseline: self-reflective only)", phase4_avg_cer)
+    else:
+        logger.info("  [phase4] not available.")
 
     # --- Combinations summary ---
     combinations: dict[str, dict] = {}
@@ -1825,22 +1937,21 @@ def run_summarize(
     save_json(combinations_summary, results_dir / "combinations_summary.json")
 
     # --- Ablation summary ---
-    # With 2 components (confusion + self), ablation is implicit:
-    #   conf_only = conf_self minus self   (ablate self)
-    #   self_only = conf_self minus conf   (ablate confusion)
+    # Phase 3 (confusion only, full) = ablate self-reflective from conf_self
+    # Phase 4 (self-reflective only, full) = ablate confusion from conf_self
     conf_self_cer = combo_metrics.get("conf_self", {}).get("avg_cer")
     best_camel_cer = combo_metrics.get("best_camel", {}).get("avg_cer")
     ablations: dict[str, dict] = {}
 
-    # Ablate self-reflective (keep confusion only)
-    if "conf_only" in combo_metrics and conf_self_cer is not None:
-        m = combo_metrics["conf_only"]
-        delta = m["avg_cer"] - conf_self_cer
+    # Ablate self-reflective: Phase 3 result is the confusion-only baseline
+    if phase3_avg_cer is not None and conf_self_cer is not None:
+        delta = phase3_avg_cer - conf_self_cer
         ablations["ablate_self"] = {
-            "combo": "conf_only",
+            "combo": "phase3",
+            "label": "Phase 3 (OCR-Aware, full)",
             "component_removed": "self",
             "components_remaining": ["confusion"],
-            "avg_cer": m["avg_cer"],
+            "avg_cer": phase3_avg_cer,
             "delta_from_conf_self": round(delta, 6),
             "interpretation": (
                 "Removing self-reflective hurts" if delta > 0
@@ -1849,15 +1960,15 @@ def run_summarize(
             ),
         }
 
-    # Ablate confusion (keep self only)
-    if "self_only" in combo_metrics and conf_self_cer is not None:
-        m = combo_metrics["self_only"]
-        delta = m["avg_cer"] - conf_self_cer
+    # Ablate confusion: Phase 4 result is the self-only baseline
+    if phase4_avg_cer is not None and conf_self_cer is not None:
+        delta = phase4_avg_cer - conf_self_cer
         ablations["ablate_confusion"] = {
-            "combo": "self_only",
+            "combo": "phase4",
+            "label": "Phase 4 (Self-Reflective, full)",
             "component_removed": "confusion",
             "components_remaining": ["self"],
-            "avg_cer": m["avg_cer"],
+            "avg_cer": phase4_avg_cer,
             "delta_from_conf_self": round(delta, 6),
             "interpretation": (
                 "Removing confusion matrix hurts" if delta > 0
@@ -1869,7 +1980,10 @@ def run_summarize(
     # Ablate CAMeL (best_camel vs its base combo)
     if best_camel_cer is not None:
         base_combo_id = config.get("phase6", {}).get("best_combo")
-        base_cer = combo_metrics.get(base_combo_id, {}).get("avg_cer") if base_combo_id else None
+        if base_combo_id in ("phase3", "phase4"):
+            base_cer = phase3_avg_cer if base_combo_id == "phase3" else phase4_avg_cer
+        else:
+            base_cer = combo_metrics.get(base_combo_id, {}).get("avg_cer") if base_combo_id else None
         if base_cer is not None:
             delta = base_cer - best_camel_cer
             ablations["ablate_camel"] = {
@@ -1899,15 +2013,14 @@ def run_summarize(
     save_json(ablation_summary, results_dir / "ablation_summary.json")
 
     # --- Synergy analysis ---
-    # With 2 components: does conf_self beat the sum of conf_only + self_only improvements?
+    # Does conf_self beat the sum of Phase 3 + Phase 4 improvements over Phase 2?
     synergy: dict[str, dict] = {}
     if "conf_self" in combo_metrics and p2_avg is not None:
         delta_combined = p2_avg - combo_metrics["conf_self"]["avg_cer"]
 
-        # Use Phase 6 combo results (conf_only, self_only) rather than isolated phases
-        # because these are the same prompt framework (combined prompt) with one component
-        delta_conf = (p2_avg - combo_metrics["conf_only"]["avg_cer"]) if "conf_only" in combo_metrics else None
-        delta_self = (p2_avg - combo_metrics["self_only"]["avg_cer"]) if "self_only" in combo_metrics else None
+        # Use isolated Phase 3 / Phase 4 results as the single-component baselines
+        delta_conf = (p2_avg - phase3_avg_cer) if phase3_avg_cer is not None else None
+        delta_self = (p2_avg - phase4_avg_cer) if phase4_avg_cer is not None else None
 
         entry: dict = {
             "delta_combined": round(delta_combined, 6),
@@ -1930,7 +2043,10 @@ def run_summarize(
 
     save_json(
         {"meta": {"generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")},
-         "methodology": "synergy = delta_combined - (delta_conf_only + delta_self_only); positive = super-additive.",
+         "methodology": (
+             "synergy = delta_combined - (delta_conf + delta_self); positive = super-additive. "
+             "delta_conf = Phase 2 CER - Phase 3 CER; delta_self = Phase 2 CER - Phase 4 CER."
+         ),
          "pairs": synergy},
         results_dir / "synergy_analysis.json",
     )
@@ -1952,6 +2068,23 @@ def run_summarize(
     if p2_cers_by_id and combo_metrics:
         tester = StatsTester()
         systems_cers: dict[str, dict[str, float]] = {}
+
+        # Include Phase 3 and Phase 4 corrections as additional systems
+        for ph_label, ph_dir in [("phase3", Path("results/phase3")), ("phase4", Path("results/phase4"))]:
+            ph_per_sample: dict[str, float] = {}
+            ph_path = _PROJECT_ROOT / ph_dir
+            if ph_path.exists():
+                for ds_dir in ph_path.iterdir():
+                    if ds_dir.is_dir():
+                        ph_per_sample.update(
+                            _compute_per_sample_cers_from_corrections(ds_dir / "corrections.jsonl")
+                        )
+                if not ph_per_sample:
+                    ph_per_sample.update(
+                        _compute_per_sample_cers_from_corrections(ph_path / "corrections.jsonl")
+                    )
+            if ph_per_sample:
+                systems_cers[ph_label] = ph_per_sample
 
         for cid in combo_metrics:
             combo_dir_path = results_dir / cid

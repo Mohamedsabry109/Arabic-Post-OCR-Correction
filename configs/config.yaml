@@ -300,6 +300,22 @@ phase8:
   max_retries: 2
 
 # ---------------------------------------------------------------------------
+# Phase 9 specific (Error-Signature RAG)
+# ---------------------------------------------------------------------------
+phase9:
+  k: 5                              # retrieved examples per validation sample
+  char_weight: 0.4                  # weight for confused-char Jaccard in similarity
+  error_type_weight: 0.3            # weight for error-type Jaccard
+  difficulty_weight: 0.2            # weight for difficulty (n_invalid_words) proximity
+  invalid_word_weight: 0.1          # weight for invalid-word-count similarity
+  success_only: true                # only index training samples where LLM succeeded
+  min_cer: 0.0                      # minimum OCR CER to include in index
+  max_text_len: 500                 # skip training samples longer than this
+  source_corrections: null          # null = auto-discover from results/phase2-training/
+  analyze_errors: true
+  max_retries: 2
+
+# ---------------------------------------------------------------------------
 # Phase 2 specific
 # ---------------------------------------------------------------------------
 phase2:

@@ -448,6 +448,7 @@ class PromptBuilder:
         word_pairs_context: str = "",
         overcorrection_context: str = "",
         few_shot_examples: str = "",
+        word_examples: str = "",
     ) -> list[dict]:
         """Build a combined correction prompt (Phase 6).
 
@@ -459,7 +460,7 @@ class PromptBuilder:
         Injection order in the final system prompt::
 
             <error_patterns>       (from crafted base)
-            <confusion_patterns>   (Phase 3 confusion matrix — if provided)
+            <confusion_patterns>   (Phase 3 confusion matrix + word-level failures — if provided)
             <self_analysis>        (Phase 4 insights + word pairs + warnings — if provided)
             <examples>
               [static examples from crafted base]
@@ -475,6 +476,10 @@ class PromptBuilder:
             overcorrection_context: Pre-formatted over-correction warnings (Phase 4).
             few_shot_examples: Optional pre-formatted INPUT/OUTPUT examples from
                 ``FewShotExampleSelector.format_for_prompt()``.
+            word_examples: Optional pre-formatted word-level failure examples
+                from training cross-reference.  When non-empty and
+                *confusion_context* is also non-empty, injected inside the
+                ``<confusion_patterns>`` section (same as Phase 3 does).
 
         Returns:
             Two-element messages list in OpenAI chat format.
@@ -493,6 +498,12 @@ class PromptBuilder:
         # Inject knowledge sections before <examples> (in order).
         if confusion_context.strip():
             section = self._COMBINED_CONFUSION.format(confusion_context=confusion_context)
+            if word_examples.strip():
+                section = section.replace(
+                    "</confusion_patterns>",
+                    "\n\nWORD-LEVEL FAILURES — common whole-word misreads from training data "
+                    "(OCR form → correct form):\n" + word_examples + "\n</confusion_patterns>",
+                )
             base = self._inject_knowledge(base, section)
         # Bundle Phase 4 signals into one <self_analysis> section.
         has_insights = bool(insights_context.strip())

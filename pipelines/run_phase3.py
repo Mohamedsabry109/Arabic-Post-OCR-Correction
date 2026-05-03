@@ -170,8 +170,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--phase1-dir",
         type=Path,
-        default=Path("results/phase1"),
-        help="Phase 1 results directory (source of confusion matrices).",
+        default=Path("results/phase1-training"),
+        dest="phase1_dir",
+        help=(
+            "Phase 1 TRAINING results directory (source of confusion matrices). "
+            "Default: results/phase1-training. "
+            "Produce with: python pipelines/run_phase1.py --results-dir results/phase1-training "
+            "(using training-split config)."
+        ),
     )
     parser.add_argument(
         "--phase2-dir",
@@ -292,7 +298,9 @@ def build_pooled_matrices(
     injected into validation prompts is never derived from validation data.
 
     Args:
-        phase1_dir: Root of Phase 1 results (contains per-dataset subdirs).
+        phase1_dir: Root of Phase 1 TRAINING results (``results/phase1-training``).
+            Contains per-training-dataset subdirs, e.g.
+            ``PATS-A01-Akhbar-train/confusion_matrix.json``.
         loader: ConfusionMatrixLoader instance.
         all_dataset_names: All dataset keys configured (val or train).
 
@@ -343,7 +351,7 @@ def resolve_confusion_matrix(
 
     Args:
         dataset_key: e.g. "KHATT-validation" or "PATS-A01-Akhbar-val".
-        phase1_dir: Root of Phase 1 results.
+        phase1_dir: Root of Phase 1 TRAINING results (``results/phase1-training``).
         pooled: Pre-built pooled matrices from build_pooled_matrices().
         loader: ConfusionMatrixLoader instance.
         min_substitutions: Sparsity threshold.
