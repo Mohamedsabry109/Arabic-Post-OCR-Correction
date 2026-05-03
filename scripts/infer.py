@@ -121,7 +121,7 @@ def parse_args() -> argparse.Namespace:
         help="Re-run all samples, ignoring existing output.",
     )
     parser.add_argument(
-        "--max-retries", type=int, default=2,
+        "--max-retries", type=int, default=1,
         help="LLM retry count on empty or failed generation.",
     )
     parser.add_argument(
