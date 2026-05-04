@@ -51,9 +51,9 @@ class OCRSample:
     """A single aligned OCR prediction / ground-truth pair."""
 
     sample_id: str              # e.g. "Akhbar_1" or "AHTD3A0001_Para2_3"
-    dataset: str                # "PATS-A01" or "KHATT"
-    font: Optional[str]         # "Akhbar" | "Andalus" | None (for KHATT)
-    split: Optional[str]        # "train" | "validation" | None (for PATS)
+    dataset: str                # "PATS-A01", "KHATT", or "Kitab"
+    font: Optional[str]         # "Akhbar" | "Andalus" | None (for KHATT/Kitab)
+    split: Optional[str]        # "train" | "validation" | None (for PATS/Kitab)
     ocr_text: str               # cleaned OCR prediction
     gt_text: str                # ground truth text
     ocr_path: Path              # source file path for OCR
@@ -127,6 +127,10 @@ class DataLoader:
         self._dataset_entries: list[dict] = config.get("datasets", _DEFAULT_DATASET_ENTRIES)
         # Index by name for fast lookup in iter_samples.
         self._entry_by_name: dict[str, dict] = {e["name"]: e for e in self._dataset_entries}
+
+        # Kitab benchmark GT root (data/kitab-bench by default).
+        kitab_bench_str = config.get("data", {}).get("kitab_bench", "./data/kitab-bench")
+        self._kitab_bench_root = Path(kitab_bench_str)
 
         # PATS split file (optional — if absent, no split filtering is applied).
         splits_path_str = config.get("data", {}).get("pats_splits_file")
@@ -324,6 +328,80 @@ class DataLoader:
         logger.info("Loaded %d KHATT-%s samples.", len(samples), split)
         return samples
 
+    def load_kitab(
+        self,
+        category: str,
+        limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
+    ) -> list[OCRSample]:
+        """Load Kitab benchmark samples for a specific category.
+
+        OCR files: ``{ocr_root}/kitab-results/{category}/images/{n}.txt``
+        GT files:  ``{kitab_bench_root}/{category}/gt/{n}.txt``
+
+        Pairs are matched by filename stem (numeric index).
+
+        Args:
+            category: Sub-dataset name, e.g. "adab", "evarest", "hindawi".
+            limit: If set, return at most this many samples.
+
+        Returns:
+            List of OCRSample sorted alphabetically by sample_id.
+
+        Raises:
+            DataError: If the OCR or GT directory does not exist.
+        """
+        ocr_dir = self._ocr_root / "kitab-results" / category / "images"
+        gt_dir = self._kitab_bench_root / category / "gt"
+
+        if not ocr_dir.exists():
+            raise DataError(f"Kitab OCR directory not found: {ocr_dir}")
+        if not gt_dir.exists():
+            raise DataError(f"Kitab GT directory not found: {gt_dir}")
+
+        pairs = _pair_by_stem(ocr_dir, gt_dir)
+
+        if sample_ids is not None:
+            pairs = [(o, g) for o, g in pairs if o.stem in sample_ids]
+
+        effective_limit = limit if limit is not None else self._default_limit
+        if effective_limit is not None:
+            pairs = pairs[:effective_limit]
+
+        samples: list[OCRSample] = []
+        skipped = 0
+
+        for ocr_path, gt_path in pairs:
+            ocr_text = _read_ocr_file(ocr_path)
+            gt_text = _read_gt_file(gt_path)
+
+            if ocr_text == "":
+                logger.warning("Empty OCR file skipped: %s", ocr_path.name)
+                skipped += 1
+                continue
+
+            if gt_text == "":
+                logger.warning("Empty GT file skipped: %s", gt_path.name)
+                skipped += 1
+                continue
+
+            samples.append(OCRSample(
+                sample_id=f"{category}_{ocr_path.stem}",
+                dataset="Kitab",
+                font=category,
+                split=None,
+                ocr_text=ocr_text,
+                gt_text=gt_text,
+                ocr_path=ocr_path,
+                gt_path=gt_path,
+            ))
+
+        if skipped:
+            logger.warning("Kitab-%s: skipped %d empty files.", category, skipped)
+
+        logger.info("Loaded %d Kitab-%s samples.", len(samples), category)
+        return samples
+
     def load_all(
         self,
         limit: Optional[int] = None,
@@ -391,6 +469,9 @@ class DataLoader:
         elif dataset.startswith("KHATT-"):
             split = dataset.split("-", 1)[1]
             samples = self.load_khatt(split=split, limit=None if sample_ids else limit, sample_ids=sample_ids)
+        elif dataset.startswith("Kitab-"):
+            category = dataset.split("-", 1)[1]
+            samples = self.load_kitab(category=category, limit=None if sample_ids else limit, sample_ids=sample_ids)
         else:
             raise DataError(f"Unknown dataset key: '{dataset}'")
 
