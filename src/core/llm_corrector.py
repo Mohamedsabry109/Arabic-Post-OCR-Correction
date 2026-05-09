@@ -456,6 +456,14 @@ class TransformersCorrector(BaseLLMCorrector):
         # Return as a single user turn; system context already lost above.
         return [{"role": "user", "content": tail_text}]
 
+    def _template_extra_kwargs(self) -> dict:
+        """Extra kwargs forwarded to apply_chat_template. Override per model family.
+
+        Qwen3 requires enable_thinking=False to suppress <think> scratchpad output.
+        Other model families (Gemma, Llama, …) should return {}.
+        """
+        return {"enable_thinking": False}
+
     def _generate(self, messages: list[dict]) -> tuple[str, int, int]:
         """Tokenise messages, run model.generate(), decode new tokens only.
 
@@ -474,15 +482,11 @@ class TransformersCorrector(BaseLLMCorrector):
         # The OCR text (user message) is never truncated.
         messages = self._fit_to_token_budget(messages)
 
-        # Apply Qwen3 chat template — add_generation_prompt=True appends the
-        # <|im_start|>assistant token so the model continues from that position.
-        # enable_thinking=False disables the <think>...</think> scratchpad for
-        # Qwen3 models, which keeps outputs clean and parseable.
         formatted = self._tokenizer.apply_chat_template(
             messages,
             tokenize=False,
             add_generation_prompt=True,
-            enable_thinking=False,
+            **self._template_extra_kwargs(),
         )
 
         inputs = self._tokenizer(formatted, return_tensors="pt")
@@ -552,6 +556,32 @@ class TransformersCorrector(BaseLLMCorrector):
 
 
 # ---------------------------------------------------------------------------
+# Gemma4Corrector
+# ---------------------------------------------------------------------------
+
+
+class Gemma4Corrector(TransformersCorrector):
+    """LLM corrector for Gemma 4 (and Gemma 3) text models.
+
+    Identical to TransformersCorrector except apply_chat_template is called
+    without enable_thinking (a Qwen3-only parameter).
+
+    Config keys are the same as TransformersCorrector.
+    Default model: google/gemma-3-4b-it
+    """
+
+    def __init__(self, config: dict) -> None:
+        cfg = dict(config)
+        cfg.setdefault("model", {})
+        if not cfg["model"].get("name"):
+            cfg["model"]["name"] = "google/gemma-3-4b-it"
+        super().__init__(cfg)
+
+    def _template_extra_kwargs(self) -> dict:
+        return {}
+
+
+# ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
@@ -580,11 +610,13 @@ def get_corrector(config: dict) -> BaseLLMCorrector:
         return MockCorrector(config)
     elif backend == "transformers":
         return TransformersCorrector(config)
+    elif backend == "gemma":
+        return Gemma4Corrector(config)
     elif backend == "api":
         from src.core.api_corrector import APICorrector
         return APICorrector(config)
     else:
         raise ValueError(
             f"Unknown corrector backend '{backend}'. "
-            "Valid values: 'mock', 'transformers', 'api'."
+            "Valid values: 'mock', 'transformers', 'gemma', 'api'."
         )

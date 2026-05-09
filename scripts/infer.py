@@ -101,11 +101,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--backend", type=str, default=None,
-        choices=["mock", "transformers", "api"],
+        choices=["mock", "transformers", "gemma", "api"],
         help=(
             "Override model backend from config. "
             "Use 'mock' for local smoke tests (no GPU, no model download). "
-            "Use 'transformers' for Kaggle/Colab GPU inference."
+            "Use 'transformers' for Qwen3 GPU inference. "
+            "Use 'gemma' for Gemma 4 (or Gemma 3) GPU inference."
         ),
     )
     parser.add_argument(
