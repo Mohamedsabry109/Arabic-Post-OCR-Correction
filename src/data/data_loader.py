@@ -1,4 +1,4 @@
-"""Data loading and alignment for KHATT and PATS-A01 datasets.
+"""Data loading and alignment for KHATT, PATS-A01, and new datasets.
 
 Loads OCR predictions and ground-truth text, aligns them by filename stem,
 and returns OCRSample objects for downstream analysis.
@@ -13,9 +13,10 @@ from src.data.text_utils import strip_repetitions
 
 logger = logging.getLogger(__name__)
 
-# Maximum length (chars) for any single text field after loading.
-# Guards against runaway OCR outputs consuming excessive memory/time.
+# Maximum length (chars) for line/paragraph-level text fields.
 _MAX_TEXT_LEN = 2000
+# Higher cap for document-level datasets (Yarmouk full pages).
+_MAX_TEXT_LEN_DOC = 8000
 
 # Default dataset entries when config['datasets'] is absent.
 # Mirrors the canonical list in configs/config.yaml.
@@ -38,6 +39,17 @@ _DEFAULT_DATASET_ENTRIES: list[dict] = [
     {"name": "PATS-A01-Traditional-val",   "font": "Traditional", "type": "PATS-A01", "pats_split": "validation"},
     {"name": "KHATT-train",                "type": "KHATT"},
     {"name": "KHATT-validation",           "type": "KHATT"},
+    # Paragraph-level KHATT (requires Qaari OCR in data/ocr-results/qaari-results/khatt-paragraph-data/)
+    {"name": "KHATT-Paragraph-train",      "type": "KHATT-Paragraph"},
+    {"name": "KHATT-Paragraph-validation", "type": "KHATT-Paragraph"},
+    # Document-level Yarmouk (requires Qaari OCR in data/ocr-results/qaari-results/yarmouk-data/{split}/)
+    {"name": "Yarmouk-training",           "type": "Yarmouk"},
+    {"name": "Yarmouk-testing",            "type": "Yarmouk"},
+    # Historical handwritten pages (requires Qaari OCR in data/ocr-results/qaari-results/historical-data/{book}/)
+    {"name": "Historical",                 "type": "Historical"},
+    # Muharaf handwritten letters (requires Qaari OCR in data/ocr-results/qaari-results/muharaf-data/)
+    {"name": "Muharaf-train",              "type": "Muharaf"},
+    {"name": "Muharaf-validation",         "type": "Muharaf"},
 ]
 
 
@@ -144,6 +156,51 @@ class DataLoader:
                 logger.info("Loaded PATS splits from %s", splits_path)
             else:
                 logger.warning("pats_splits_file not found: %s (split filtering disabled)", splits_path)
+
+        # KHATT-Paragraph split file.
+        kp_splits_str = config.get("data", {}).get(
+            "khatt_paragraph_splits_file",
+            "./data/ocr-raw-data/KHATT_Paragraph/khatt_paragraph_splits.json",
+        )
+        self._khatt_paragraph_splits: dict[str, list[str]] = {}
+        kp_splits_path = Path(kp_splits_str)
+        if kp_splits_path.exists():
+            import json as _json2
+            raw_kp = _json2.loads(kp_splits_path.read_text(encoding="utf-8"))
+            self._khatt_paragraph_splits = raw_kp.get("splits", {})
+            logger.info("Loaded KHATT-Paragraph splits from %s", kp_splits_path)
+        else:
+            logger.info("KHATT-Paragraph splits file not found: %s (no split filtering)", kp_splits_path)
+
+        # Muharaf split file.
+        muh_splits_str = config.get("data", {}).get(
+            "muharaf_splits_file",
+            "./data/ocr-raw-data/Muharaf/muharaf_splits.json",
+        )
+        self._muharaf_splits: dict[str, list[str]] = {}
+        muh_splits_path = Path(muh_splits_str)
+        if muh_splits_path.exists():
+            import json as _json3
+            raw_muh = _json3.loads(muh_splits_path.read_text(encoding="utf-8"))
+            self._muharaf_splits = raw_muh.get("splits", {})
+            logger.info("Loaded Muharaf splits from %s", muh_splits_path)
+        else:
+            logger.info("Muharaf splits file not found: %s (no split filtering)", muh_splits_path)
+
+        # Yarmouk split file (single-page doc IDs only).
+        yarmouk_splits_str = config.get("data", {}).get(
+            "yarmouk_splits_file",
+            "./data/ocr-raw-data/Yarmouk/yarmouk_splits.json",
+        )
+        self._yarmouk_splits: dict[str, list[str]] = {}
+        yarmouk_splits_path = Path(yarmouk_splits_str)
+        if yarmouk_splits_path.exists():
+            import json as _json4
+            raw_yar = _json4.loads(yarmouk_splits_path.read_text(encoding="utf-8"))
+            self._yarmouk_splits = raw_yar.get("splits", {})
+            logger.info("Loaded Yarmouk splits from %s", yarmouk_splits_path)
+        else:
+            logger.info("Yarmouk splits file not found: %s (no split filtering)", yarmouk_splits_path)
 
     # ------------------------------------------------------------------
     # Public loaders
@@ -402,6 +459,293 @@ class DataLoader:
         logger.info("Loaded %d Kitab-%s samples.", len(samples), category)
         return samples
 
+    def load_khatt_paragraph(
+        self,
+        split: Optional[str] = None,
+        limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
+    ) -> list[OCRSample]:
+        """Load KHATT-Paragraph samples (paragraph-level handwritten Arabic).
+
+        Image-GT pairs share the same stem:
+            AHTD3A0001_Para1.jpg  ↔  AHTD3A0001_Para1.txt (cp1256)
+
+        OCR dir: ``{ocr_root}/khatt-paragraph-data/``
+        GT dir:  ``{ground_truth}/KHATT_Paragraph/khatt-paragraphs-text/proc_text/``
+
+        Args:
+            split: "train" or "validation".  If None or no split file available,
+                   all samples are returned.
+            limit: Cap number of returned samples.
+
+        Raises:
+            DataError: If the OCR or GT directory does not exist.
+        """
+        ocr_dir = self._ocr_root / "khatt-paragraph-data"
+        gt_dir  = self._gt_root / "KHATT_Paragraph" / "khatt-paragraphs-text" / "proc_text"
+
+        if not ocr_dir.exists():
+            raise DataError(f"KHATT-Paragraph OCR directory not found: {ocr_dir}")
+        if not gt_dir.exists():
+            raise DataError(f"KHATT-Paragraph GT directory not found: {gt_dir}")
+
+        pairs = _pair_by_stem(ocr_dir, gt_dir)
+
+        if split is not None and self._khatt_paragraph_splits:
+            allowed = set(self._khatt_paragraph_splits.get(split, []))
+            if not allowed:
+                raise DataError(f"KHATT-Paragraph split '{split}' is empty or missing")
+            pairs = [(o, g) for o, g in pairs if o.stem in allowed]
+
+        if sample_ids is not None:
+            pairs = [(o, g) for o, g in pairs if o.stem in sample_ids]
+
+        effective_limit = limit if limit is not None else self._default_limit
+        if effective_limit is not None:
+            pairs = pairs[:effective_limit]
+
+        samples: list[OCRSample] = []
+        skipped = 0
+        for ocr_path, gt_path in pairs:
+            ocr_text = _read_ocr_file(ocr_path)
+            gt_text  = _read_gt_file(gt_path, encoding="cp1256")
+            if not ocr_text or not gt_text:
+                skipped += 1
+                continue
+            samples.append(OCRSample(
+                sample_id=ocr_path.stem,
+                dataset="KHATT-Paragraph",
+                font=None,
+                split=split,
+                ocr_text=ocr_text,
+                gt_text=gt_text,
+                ocr_path=ocr_path,
+                gt_path=gt_path,
+            ))
+
+        if skipped:
+            logger.warning("KHATT-Paragraph-%s: skipped %d empty files.", split, skipped)
+        logger.info("Loaded %d KHATT-Paragraph-%s samples.", len(samples), split)
+        return samples
+
+    def load_yarmouk(
+        self,
+        split: str = "training",
+        limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
+    ) -> list[OCRSample]:
+        """Load Yarmouk samples (printed Arabic Wikipedia scans, single-page only).
+
+        Only single-page documents are loaded; multi-page documents are excluded
+        to keep sample lengths manageable for LLM correction.  The allowed doc IDs
+        come from ``yarmouk_splits.json`` (built by
+        ``scripts/generate_yarmouk_splits.py``).
+
+        OCR dir: ``{ocr_root}/yarmouk-data/{split}/``
+        GT dir:  ``{ground_truth}/Yarmouk/gt/{split}/``
+
+        Args:
+            split: "training" or "testing".
+            limit: Cap number of returned samples.
+
+        Raises:
+            DataError: If the OCR or GT directory does not exist.
+        """
+        ocr_dir = self._ocr_root / "yarmouk-data" / split
+        gt_dir  = self._gt_root / "Yarmouk" / "gt" / split
+
+        if not ocr_dir.exists():
+            raise DataError(f"Yarmouk OCR directory not found: {ocr_dir}")
+        if not gt_dir.exists():
+            raise DataError(f"Yarmouk GT directory not found: {gt_dir}\n"
+                            "Run scripts/prepare_yarmouk_gt.py first.")
+
+        pairs = _pair_by_stem(ocr_dir, gt_dir)
+
+        # Filter to single-page doc IDs if splits file is available.
+        split_ids = self._yarmouk_splits.get(split)
+        if split_ids is not None:
+            allowed = set(split_ids)
+            pairs = [(o, g) for o, g in pairs if o.stem in allowed]
+
+        if sample_ids is not None:
+            pairs = [(o, g) for o, g in pairs if o.stem in sample_ids]
+
+        effective_limit = limit if limit is not None else self._default_limit
+        if effective_limit is not None:
+            pairs = pairs[:effective_limit]
+
+        samples: list[OCRSample] = []
+        skipped = 0
+        for ocr_path, gt_path in pairs:
+            ocr_text = _read_ocr_file(ocr_path, max_len=_MAX_TEXT_LEN_DOC)
+            gt_text  = _read_gt_file(gt_path)
+            if not ocr_text or not gt_text:
+                skipped += 1
+                continue
+            samples.append(OCRSample(
+                sample_id=ocr_path.stem,
+                dataset="Yarmouk",
+                font=None,
+                split=split,
+                ocr_text=ocr_text,
+                gt_text=gt_text,
+                ocr_path=ocr_path,
+                gt_path=gt_path,
+            ))
+
+        if skipped:
+            logger.warning("Yarmouk-%s: skipped %d empty files.", split, skipped)
+        logger.info("Loaded %d Yarmouk-%s samples (single-page only).", len(samples), split)
+        return samples
+
+    def load_historical(
+        self,
+        book: Optional[str] = None,
+        limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
+    ) -> list[OCRSample]:
+        """Load Historical Arabic Handwritten Text dataset samples.
+
+        Small dataset (~40 images across 8 books).  GT is extracted from DOCX
+        files by ``scripts/prepare_historical_gt.py``.
+
+        OCR dir: ``{ocr_root}/historical-data/{book}/``  (or flat if book=None)
+        GT dir:  ``{ground_truth}/Historical Arabic Handwritten Text Recognition Dataset/gt/{book}/``
+
+        Args:
+            book: E.g. "Book1".  If None, all books are loaded.
+            limit: Cap number of returned samples.
+
+        Raises:
+            DataError: If the GT root directory does not exist.
+        """
+        _ds_name = "Historical Arabic Handwritten Text Recognition Dataset"
+        gt_root_hist = self._gt_root / _ds_name / "gt"
+        ocr_root_hist = self._ocr_root / "historical-data"
+
+        if not gt_root_hist.exists():
+            raise DataError(
+                f"Historical GT root not found: {gt_root_hist}\n"
+                "Run scripts/prepare_historical_gt.py first."
+            )
+
+        books = [book] if book else [d.name for d in sorted(gt_root_hist.iterdir()) if d.is_dir()]
+
+        all_pairs: list[tuple[Path, Path]] = []
+        for bk in books:
+            ocr_dir = ocr_root_hist / bk
+            gt_dir  = gt_root_hist / bk
+            if not ocr_dir.exists():
+                raise DataError(f"Historical OCR directory not found: {ocr_dir}")
+            if not gt_dir.exists():
+                raise DataError(f"Historical GT directory not found: {gt_dir}")
+            all_pairs.extend(_pair_by_stem(ocr_dir, gt_dir))
+
+        if sample_ids is not None:
+            all_pairs = [(o, g) for o, g in all_pairs if o.stem in sample_ids]
+
+        effective_limit = limit if limit is not None else self._default_limit
+        if effective_limit is not None:
+            all_pairs = all_pairs[:effective_limit]
+
+        samples: list[OCRSample] = []
+        skipped = 0
+        for ocr_path, gt_path in all_pairs:
+            ocr_text = _read_ocr_file(ocr_path)
+            gt_text  = _read_gt_file(gt_path)
+            if not ocr_text or not gt_text:
+                skipped += 1
+                continue
+            bk_name = ocr_path.parent.name
+            samples.append(OCRSample(
+                sample_id=ocr_path.stem,  # e.g. "Book1_00000022_B"
+                dataset="Historical",
+                font=bk_name,
+                split=None,
+                ocr_text=ocr_text,
+                gt_text=gt_text,
+                ocr_path=ocr_path,
+                gt_path=gt_path,
+            ))
+
+        if skipped:
+            logger.warning("Historical: skipped %d empty files.", skipped)
+        logger.info("Loaded %d Historical samples.", len(samples))
+        return samples
+
+    def load_muharaf(
+        self,
+        split: Optional[str] = None,
+        limit: Optional[int] = None,
+        sample_ids: Optional[set[str]] = None,
+    ) -> list[OCRSample]:
+        """Load Muharaf samples (handwritten Arabic letters, page-level).
+
+        GT is extracted from ``_tagged.json`` files by
+        ``scripts/prepare_muharaf_gt.py``.
+
+        OCR dir: ``{ocr_root}/muharaf-data/``
+        GT dir:  ``{ground_truth}/Muharaf/gt/``
+
+        Args:
+            split: "train" (1,100) or "validation" (116).  If None or no
+                   split file available, all samples are returned.
+            limit: Cap number of returned samples.
+
+        Raises:
+            DataError: If the OCR or GT directory does not exist.
+        """
+        ocr_dir = self._ocr_root / "muharaf-data"
+        gt_dir  = self._gt_root / "Muharaf" / "gt"
+
+        if not ocr_dir.exists():
+            raise DataError(f"Muharaf OCR directory not found: {ocr_dir}")
+        if not gt_dir.exists():
+            raise DataError(
+                f"Muharaf GT directory not found: {gt_dir}\n"
+                "Run scripts/prepare_muharaf_gt.py first."
+            )
+
+        pairs = _pair_by_stem(ocr_dir, gt_dir)
+
+        if split is not None and self._muharaf_splits:
+            allowed = set(self._muharaf_splits.get(split, []))
+            if not allowed:
+                raise DataError(f"Muharaf split '{split}' is empty or missing")
+            pairs = [(o, g) for o, g in pairs if o.stem in allowed]
+
+        if sample_ids is not None:
+            pairs = [(o, g) for o, g in pairs if o.stem in sample_ids]
+
+        effective_limit = limit if limit is not None else self._default_limit
+        if effective_limit is not None:
+            pairs = pairs[:effective_limit]
+
+        samples: list[OCRSample] = []
+        skipped = 0
+        for ocr_path, gt_path in pairs:
+            ocr_text = _read_ocr_file(ocr_path)
+            gt_text  = _read_gt_file(gt_path)
+            if not ocr_text or not gt_text:
+                skipped += 1
+                continue
+            samples.append(OCRSample(
+                sample_id=ocr_path.stem,
+                dataset="Muharaf",
+                font=None,
+                split=split,
+                ocr_text=ocr_text,
+                gt_text=gt_text,
+                ocr_path=ocr_path,
+                gt_path=gt_path,
+            ))
+
+        if skipped:
+            logger.warning("Muharaf-%s: skipped %d empty files.", split, skipped)
+        logger.info("Loaded %d Muharaf-%s samples.", len(samples), split)
+        return samples
+
     def load_all(
         self,
         limit: Optional[int] = None,
@@ -466,12 +810,31 @@ class DataLoader:
                 font = tail
                 pats_split = None
             samples = self.load_pats(font=font, split=pats_split, limit=None if sample_ids else limit, sample_ids=sample_ids)
+        elif dataset.startswith("KHATT-Paragraph"):
+            # e.g. "KHATT-Paragraph-train" or "KHATT-Paragraph-validation"
+            parts = dataset.split("-")
+            split_name = parts[-1] if len(parts) > 2 else None
+            if split_name not in ("train", "validation"):
+                split_name = None
+            samples = self.load_khatt_paragraph(split=split_name, limit=None if sample_ids else limit, sample_ids=sample_ids)
         elif dataset.startswith("KHATT-"):
             split = dataset.split("-", 1)[1]
             samples = self.load_khatt(split=split, limit=None if sample_ids else limit, sample_ids=sample_ids)
         elif dataset.startswith("Kitab-"):
             category = dataset.split("-", 1)[1]
             samples = self.load_kitab(category=category, limit=None if sample_ids else limit, sample_ids=sample_ids)
+        elif dataset.startswith("Yarmouk-"):
+            # e.g. "Yarmouk-training" or "Yarmouk-testing"
+            split = dataset.split("-", 1)[1]
+            samples = self.load_yarmouk(split=split, limit=None if sample_ids else limit, sample_ids=sample_ids)
+        elif dataset == "Historical" or dataset.startswith("Historical-"):
+            # e.g. "Historical" (all books) or "Historical-Book1"
+            book = dataset.split("-", 1)[1] if "-" in dataset else None
+            samples = self.load_historical(book=book, limit=None if sample_ids else limit, sample_ids=sample_ids)
+        elif dataset.startswith("Muharaf"):
+            # e.g. "Muharaf-train" or "Muharaf-validation"
+            split_name = dataset.split("-", 1)[1] if "-" in dataset else None
+            samples = self.load_muharaf(split=split_name, limit=None if sample_ids else limit, sample_ids=sample_ids)
         else:
             raise DataError(f"Unknown dataset key: '{dataset}'")
 
@@ -538,12 +901,12 @@ class DataLoader:
 # ---------------------------------------------------------------------------
 
 
-def _read_ocr_file(path: Path) -> str:
+def _read_ocr_file(path: Path, max_len: int = _MAX_TEXT_LEN) -> str:
     """Read an OCR text file, apply strip_repetitions, return cleaned string.
 
     Returns empty string for 0-byte or unreadable files.
     Encoding: UTF-8 with errors='replace' to handle encoding corruption.
-    Length is capped at _MAX_TEXT_LEN after repetition stripping.
+    Length is capped at max_len after repetition stripping.
     """
     try:
         raw = path.read_text(encoding="utf-8", errors="replace").strip()
@@ -554,23 +917,22 @@ def _read_ocr_file(path: Path) -> str:
     if not raw:
         return ""
 
-    # Cap runaway repetitions
     cleaned = strip_repetitions(raw)
 
-    # Hard cap on length to prevent downstream memory issues
-    if len(cleaned) > _MAX_TEXT_LEN:
-        cleaned = cleaned[:_MAX_TEXT_LEN]
+    if len(cleaned) > max_len:
+        cleaned = cleaned[:max_len]
 
     return cleaned
 
 
-def _read_gt_file(path: Path) -> str:
+def _read_gt_file(path: Path, encoding: str = "utf-8") -> str:
     """Read a GT text file.
 
-    Encoding: UTF-8 with errors='replace'.
+    Args:
+        encoding: File encoding — "utf-8" (default) or "cp1256" for PATS/KHATT-Paragraph GT.
     """
     try:
-        return path.read_text(encoding="utf-8", errors="replace").strip()
+        return path.read_text(encoding=encoding, errors="replace").strip()
     except OSError as exc:
         logger.warning("Could not read GT file %s: %s", path, exc)
         return ""
