@@ -197,10 +197,9 @@ class TransformersCorrector(BaseLLMCorrector):
         config['model']['quantize_4bit'] → bool (default False)
     """
 
-    # Guard against OOM on unexpectedly long inputs.
-    # Qwen3-4B supports 32K context; 4096 gives ample headroom for all phases
-    # (including RAG, few-shot, and combined prompts with injected context).
-    MAX_INPUT_TOKENS: int = 8192
+    # Qwen3-4B supports 32K context. 16384 covers hand-picked prompts (~9K tokens)
+    # + largest full-page OCR (~3K tokens) + RAG context (~450 tokens) with margin.
+    MAX_INPUT_TOKENS: int = 16384
 
     def __init__(self, config: dict) -> None:
         """Load model and tokenizer from config.
