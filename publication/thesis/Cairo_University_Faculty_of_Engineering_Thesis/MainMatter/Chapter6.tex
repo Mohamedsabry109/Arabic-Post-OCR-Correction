@@ -501,13 +501,16 @@ making correction beneficial even on lower-error fonts. The training data
 could be constructed from the existing PATS-A01 dataset by pairing OCR
 outputs with ground truth and labelling the direction of correction.
 
-\paragraph{Test with larger and Arabic-specialised models.}
-Evaluating Qwen3-14B or 32B on the same nine datasets would assess whether
+\paragraph{Scale to larger and Arabic-specialised models (Experiment~3).}
+Evaluating Qwen3-27B or Gemma4-27B on the same datasets would assess whether
 the over-correction tendency diminishes with model scale. Arabic-specialised
 models (AraGPT2, ALLaM, Jais) may have stronger priors over Arabic character
 sequences and produce different threshold behaviour. Systematic evaluation
 across model scales and specialisations would produce a ``correction capability
 curve'' as a function of model capacity.
+Experiment~2 (the eight-trial factorial on all thirteen datasets) is designed
+to identify the optimal prompt configuration before any scaling experiment,
+ensuring that the best prompt design is used consistently across model sizes.
 
 \paragraph{Multi-modal correction for handwritten text.}
 The marginal improvement on KHATT suggests that text-only post-OCR correction
@@ -546,13 +549,33 @@ training data would not transfer directly to dialectal text. A dialect-aware
 correction pipeline --- with dialect identification as a preprocessing step
 and dialect-specific self-reflective insights --- would be needed.
 
-\paragraph{Cross-engine comparison.}
+\paragraph{Cross-engine comparison and VLM OCR (Experiment~3).}
 Evaluating the same prompt strategies on output from Tesseract, TrOCR (Arabic),
 or commercial Arabic OCR services would test the generality of the findings.
 If the Phase~3 confusion matrix and Phase~4 self-reflective insights can be
 successfully adapted to a different engine's error profile, this would
 confirm the architectural generality of the approach regardless of the specific
 engine used.
+
+A more radical cross-engine extension --- Experiment~3 --- is to replace the
+Qaari OCR engine entirely with a vision--language model (VLM) operating
+directly on document images without a separate OCR stage. Gemma4 (the
+Gemma~4B and Gemma~27B model family) can be applied in VLM mode to transcribe
+Arabic document images end-to-end. Comparing Gemma4-VLM transcription quality
+against Qaari OCR across the thirteen evaluation datasets would quantify the
+gap between a dedicated open-source OCR engine and a general-purpose VLM on
+the same documents. Post-OCR correction of Gemma4-VLM transcriptions using
+the best Experiment~2 prompt configuration would then determine whether
+correction remains beneficial at higher OCR quality, or whether the improvement
+seen with Qaari ($-$21.1\% relative CER on PATS-A01) shrinks as the underlying
+recognition engine strengthens. Evaluation on the RDI (Research and Development
+International) Arabic OCR benchmark datasets would situate these findings in
+the established benchmarking literature. The central question for Experiment~3
+is whether the over-correction threshold shifts with OCR quality: if the Gemma4
+transcription already achieves very low CER, the threshold analysis from
+Section~\ref{sec:disc_overcorrection} predicts that post-OCR correction would
+enter the harmful regime for most documents, making a confidence-gated or
+fully withheld correction strategy the correct choice.
 
 \paragraph{Adversarial stress testing.}
 Testing the correction pipeline on intentionally degraded images (added noise,

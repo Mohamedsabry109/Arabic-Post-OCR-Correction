@@ -933,3 +933,196 @@ Phase~8  & BM25 RAG: $k$=5 retrieved training corrections & Phase~2 & RQ8 \\
 \bottomrule
 \end{tabularx}
 \end{table}
+
+% ============================================================
+\section{Experiment 2 --- Prompt Design Ablation on Full-Page Datasets}
+\label{sec:exp2}
+% ============================================================
+
+\subsection{Motivation and Overview}
+\label{subsec:exp2_motivation}
+
+Experiment~1 (Phases~1--8) establishes which prompt strategies are effective
+for Arabic post-OCR correction on line-level typewritten and handwritten text.
+A natural follow-up question is whether these findings generalise to
+full-page documents from previously unseen domains: encyclopedic printed
+text (Yarmouk), multi-line handwritten paragraphs (KHATT-Paragraph),
+historical handwritten letters (Muharaf), and manuscript pages (Historical
+Arabic). These four new datasets differ from PATS-A01 and KHATT in several
+ways that may affect correction behaviour:
+
+\begin{itemize}
+  \item \textbf{Full-page scope:} Yarmouk and Historical pages are entire
+        document images, not isolated text lines. The OCR output per sample
+        is much longer (hundreds to thousands of characters), increasing
+        context but also increasing the risk of hallucination or truncation.
+  \item \textbf{Domain shift:} Encyclopedic and archival content introduces
+        vocabulary, named entities, and orthographic conventions that may be
+        under-represented in the model's language prior.
+  \item \textbf{No training-split OCR:} Unlike PATS-A01 and KHATT, no
+        training-split OCR was produced for the four new datasets due to
+        compute constraints. Phase~4 self-reflective insights (which require
+        training-split corrections) therefore cannot be computed in their
+        standard form for these datasets.
+\end{itemize}
+
+The two primary design levers available without training-split data are
+(a)~the prompt instruction framing and (b)~the example set provided to the
+model. Experiment~2 explores these levers systematically.
+
+This experiment addresses RQ9--RQ11 (Section~\ref{sec:intro_rq}).
+
+\subsection{Factorial Design}
+\label{subsec:exp2_design}
+
+Experiment~2 uses a $2 \times 2 \times 2$ fully crossed factorial design,
+yielding eight trials. The three binary factors are:
+
+\begin{description}
+  \item[Factor~A --- Prompt style:]
+    \textbf{Base} (aggressive): instructs the model to correct all visible
+    OCR errors (equivalent to the v1 framing from Experiment~1 pilot).
+    \textbf{Conservative} (v2): tells the model the text may already be
+    correct and to return it unchanged if no clear error is present
+    (the framing used throughout Experiment~1).
+
+  \item[Factor~B --- Example set:]
+    \textbf{Generic}: a set of automatically generated example corrections
+    representing common Arabic OCR error types (dot confusion, hamza,
+    taa marbuta, etc.) without domain-specific content.
+    \textbf{Hand-picked}: a curated set of manually constructed synthetic
+    OCR errors derived from the ground-truth text of the four new datasets.
+    Each hand-picked example uses a realistic Qaari-style error pattern ---
+    including repetition artefacts, character confusions, and word splits ---
+    applied to actual sentences from KHATT-Paragraph, Yarmouk, Muharaf,
+    and Historical ground truth. The hand-picked set covers all four new
+    domains with at least one example per domain.
+
+  \item[Factor~C --- Retrieval strategy:]
+    \textbf{Zero-shot}: no retrieved context; the model receives only the
+    instruction and examples.
+    \textbf{BM25-RAG}: the Phase~8 index (built from Experiment~1
+    PATS-A01 and KHATT training corrections, totalling 18,363 entries) is
+    queried with each validation sample's OCR text using character $n$-gram
+    BM25, and the top-$k=5$ retrieved (OCR, GT) pairs are injected as
+    additional context. This is a cross-domain retrieval setting: the index
+    was built from typewritten and line-level handwritten text but is queried
+    with full-page samples from new domains.
+\end{description}
+
+The eight resulting trial identifiers and their factor settings are listed
+in Table~\ref{tab:exp2_trials}.
+
+\begin{table}[ht]
+\caption{Experiment~2 trial definitions. Each trial is a unique combination
+         of prompt style (A), example set (B), and retrieval strategy (C).}
+\label{tab:exp2_trials}
+\centering
+\renewcommand{\arraystretch}{1.3}
+\begin{tabularx}{\linewidth}{lXXX}
+\toprule
+\textbf{Trial} & \textbf{Prompt (A)} & \textbf{Examples (B)} & \textbf{Retrieval (C)} \\
+\midrule
+T1 & Base       & Generic     & Zero-shot \\
+T2 & Base       & Generic     & BM25-RAG  \\
+T3 & Conservative & Generic   & Zero-shot \\
+T4 & Conservative & Generic   & BM25-RAG  \\
+T5 & Base       & Hand-picked & Zero-shot \\
+T6 & Base       & Hand-picked & BM25-RAG  \\
+T7 & Conservative & Hand-picked & Zero-shot \\
+T8 & Conservative & Hand-picked & BM25-RAG  \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Datasets Evaluated}
+\label{subsec:exp2_datasets}
+
+All thirteen validation and testing splits are evaluated:
+\begin{enumerate}
+  \item The nine Experiment~1 datasets (eight PATS-A01 fonts + KHATT), used
+        as a reference to check whether Experiment~2 trials degrade established
+        performance.
+  \item The four new full-page datasets (KHATT-Paragraph, Yarmouk, Muharaf,
+        Historical), which are the primary focus of this experiment.
+\end{enumerate}
+
+The primary analysis will compare trials across the four new datasets
+(addressing RQ9--RQ11) and compare the best Experiment~2 trial against
+the best Experiment~1 configuration on the established nine datasets.
+
+\subsection{Hand-Picked Example Construction}
+\label{subsec:exp2_examples}
+
+Because no training-split OCR exists for the four new datasets, few-shot
+examples cannot be retrieved from actual correction pairs. Instead,
+domain-matched examples are constructed synthetically:
+
+\begin{enumerate}
+  \item Select representative sentences from the ground-truth text of each
+        new dataset (at least two sentences per dataset).
+  \item Apply realistic Qaari-style errors to each sentence manually,
+        based on the character confusion patterns established in Phase~1
+        (dot confusions, hamza errors, taa marbuta swaps, word repetition
+        artefacts). The resulting ``synthetic OCR text'' paired with the
+        original ground truth forms one hand-picked example.
+  \item Include at least one example exhibiting a Qaari repetition artefact
+        (a substring repeated multiple times in a loop), as this is a
+        distinctive failure mode on long documents.
+\end{enumerate}
+
+The resulting hand-picked set contains examples representative of each new
+domain's vocabulary and orthographic style, exposing the model to the kinds
+of corrections it will be asked to make during inference.
+
+\subsection{Method}
+\label{subsec:exp2_method}
+
+\begin{enumerate}
+  \item For each trial $T_i$, construct prompts for all 13 evaluation datasets
+        using the factor settings in Table~\ref{tab:exp2_trials}.
+        Prompts are assembled by \texttt{PromptBuilder} using existing methods
+        (zero-shot v1 or v2, RAG with the Phase~8 index), with the example
+        block (generic or hand-picked) injected as a \texttt{<examples>}
+        XML section.
+
+  \item Write all prompts to
+        \texttt{results/exp2/T\{i\}/inference\_input.jsonl}.
+        Each record includes the factor settings as metadata fields for
+        post-hoc analysis.
+
+  \item Run inference on Kaggle GPU (\texttt{scripts/infer.py}).
+        All eight trials can share the same Kaggle session if they are
+        exported sequentially; the inference script's resume mechanism
+        prevents re-processing samples already completed.
+
+  \item Compute CER and WER per dataset per trial.
+        Compare each trial against:
+        \begin{itemize}
+          \item The Phase~1 OCR baseline on the same dataset (absolute
+                error reduction).
+          \item Trial~T3 (conservative + generic + zero-shot), which
+                most closely mirrors the Experiment~1 Phase~2 setup on
+                the new datasets.
+        \end{itemize}
+
+  \item Analyse factorial effects using a three-way ANOVA on the per-sample
+        CER values, estimating main effects and pairwise interactions for
+        all three factors.
+
+  \item Report per-trial, per-dataset CER/WER tables and a factorial
+        main-effect summary.
+\end{enumerate}
+
+\subsection{Output Files}
+\begin{itemize}
+  \item \texttt{results/exp2/T\{i\}/inference\_input.jsonl} --- prompts per trial
+  \item \texttt{results/exp2/T\{i\}/corrections.jsonl} --- LLM outputs per trial
+  \item \texttt{results/exp2/T\{i\}/\{dataset\}/metrics.json} --- CER/WER per trial and dataset
+  \item \texttt{results/exp2/summary.json} --- cross-trial ranking
+  \item \texttt{results/exp2/factorial\_analysis.json} --- factor effects and interactions
+\end{itemize}
+
+\noindent
+\textbf{Research questions answered:} RQ9, RQ10, RQ11.
+Results are reported in Chapter~\ref{ch_results}, Section~\ref{sec:res_exp2}.

@@ -854,3 +854,132 @@ while Phase~4 dominates on typewritten text. This suggests that the
 confusion-matrix injection is more transferable across script types than
 the self-reflective insights, which are optimised for the typewritten error
 profile.
+
+%----------------------------------------------------------------------------
+\section{Experiment 2 Results --- Prompt Design Ablation on Full-Page Datasets}
+\label{sec:res_exp2}
+%----------------------------------------------------------------------------
+
+This section reports the results of the eight-trial factorial experiment
+described in Section~\ref{sec:exp2}. Experiment~2 extends evaluation to all
+thirteen datasets and systematically varies prompt conservatism (Factor~A),
+example selection (Factor~B), and retrieval strategy (Factor~C). Results are
+pending inference; placeholder values (\tbd{}) indicate entries to be filled
+once the Kaggle inference runs are completed.
+
+\subsection{OCR Baselines on New Datasets}
+\label{subsec:res_exp2_baselines}
+
+Table~\ref{tab:exp2_ocr_baselines} reports the Phase~1 OCR baseline CER and WER
+for the four new full-page datasets. These values establish the error landscape
+that Experiment~2 trials attempt to correct.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Phase~1 OCR baseline metrics for the four new full-page datasets
+           (testing/validation split, diacritics stripped).}
+  \label{tab:exp2_ocr_baselines}
+  \begin{tabularx}{\textwidth}{lXXX}
+    \toprule
+    \textbf{Dataset} & \textbf{CER (\%)} & \textbf{WER (\%)} & \textbf{Samples} \\
+    \midrule
+    KHATT-Paragraph  & \tbd{} & \tbd{} & 449 \\
+    Yarmouk          & \tbd{} & \tbd{} & 200 \\
+    Muharaf          & \tbd{} & \tbd{} & 116 \\
+    Historical       & \tbd{} & \tbd{} & 40  \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Trial Results on New Datasets}
+\label{subsec:res_exp2_trials}
+
+Table~\ref{tab:exp2_trial_results} reports the CER for all eight trials on
+each of the four new datasets (to be filled once inference is complete).
+
+\begin{table}[htbp]
+  \centering
+  \caption{Experiment~2 trial CER (\%) on the four new full-page datasets
+           (diacritics stripped). T1--T8 as defined in Table~\ref{tab:exp2_trials}.
+           Lower is better. Best trial per dataset in \textbf{bold}.
+           All values \tbd{} pending inference.}
+  \label{tab:exp2_trial_results}
+  \begin{tabularx}{\textwidth}{lXXXX}
+    \toprule
+    \textbf{Trial} & \textbf{KHATT-Para.} & \textbf{Yarmouk}
+      & \textbf{Muharaf} & \textbf{Historical} \\
+    \midrule
+    OCR Baseline & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    \midrule
+    T1 (Base + Generic + ZS)         & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T2 (Base + Generic + RAG)        & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T3 (Cons. + Generic + ZS)        & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T4 (Cons. + Generic + RAG)       & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T5 (Base + Hand-pick + ZS)       & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T6 (Base + Hand-pick + RAG)      & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T7 (Cons. + Hand-pick + ZS)      & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    T8 (Cons. + Hand-pick + RAG)     & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    \midrule
+    \textbf{Best Trial}              & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Trial Results on Established Datasets}
+\label{subsec:res_exp2_established}
+
+Table~\ref{tab:exp2_established} reports the best Experiment~2 trial CER
+alongside the Experiment~1 best result on the nine established datasets,
+verifying that Experiment~2 does not degrade established performance.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Best Experiment~2 trial vs.\ best Experiment~1 result on the nine
+           established datasets (PATS-A01 macro-average and KHATT).
+           All values \tbd{} pending inference.}
+  \label{tab:exp2_established}
+  \begin{tabularx}{\textwidth}{lXXX}
+    \toprule
+    \textbf{Dataset} & \textbf{Exp.~1 Best CER} & \textbf{Exp.~2 Best CER}
+      & \textbf{Best Trial} \\
+    \midrule
+    PATS-A01 Macro-Avg & 11.1 (\texttt{best\_camel}) & \tbd{} & \tbd{} \\
+    KHATT              & 42.4 (\texttt{conf\_self})   & \tbd{} & \tbd{} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\subsection{Factorial Main Effects}
+\label{subsec:res_exp2_factorial}
+
+Table~\ref{tab:exp2_factorial} summarises the estimated main effect of each
+factor on CER across the four new datasets, computed as the mean CER difference
+attributable to each factor level (averaged over all combinations of the other
+two factors). These will be computed from the final inference results.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Experiment~2 estimated main effects on mean CER across the four
+           new datasets. A negative value indicates the factor level reduces
+           CER relative to the other level. All values \tbd{} pending inference.}
+  \label{tab:exp2_factorial}
+  \begin{tabularx}{\textwidth}{llX}
+    \toprule
+    \textbf{Factor} & \textbf{Level} & \textbf{Mean CER effect (pp)} \\
+    \midrule
+    A: Prompt style & Base vs.\ Conservative & \tbd{} \\
+    B: Examples     & Generic vs.\ Hand-picked & \tbd{} \\
+    C: Retrieval    & Zero-shot vs.\ BM25-RAG  & \tbd{} \\
+    \midrule
+    \multicolumn{3}{l}{\textit{Interactions (A$\times$B, A$\times$C, B$\times$C, A$\times$B$\times$C): \tbd{}}} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\noindent
+\textbf{Answers to RQ9--RQ11:} Results are pending. Once inference is complete
+the following questions will be addressed: RQ9~--- whether conservative
+instruction framing improves generalisation to unseen full-page domains;
+RQ10~--- whether hand-picked domain-matched examples outperform generic
+examples on the new dataset types; RQ11~--- whether the cross-domain
+BM25 index from Experiment~1 provides useful context for the new domains.

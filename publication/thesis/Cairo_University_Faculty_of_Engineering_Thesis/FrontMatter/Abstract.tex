@@ -17,7 +17,11 @@ principle: five knowledge augmentation conditions are evaluated across nine
 datasets --- eight typewritten fonts from the PATS-A01 corpus (baseline CER
 ranging from 4.3\% to 24.3\%) and one handwritten corpus (KHATT, 44.6\%
 baseline CER) --- each changing exactly one variable relative to a zero-shot
-baseline. The augmentation conditions are: (1)~failure-filtered character
+baseline. An extended evaluation on four additional full-page document
+datasets --- KHATT-Paragraph (449 multi-line handwritten paragraphs),
+Yarmouk (200 printed encyclopedic pages), Muharaf (116 historical handwritten
+letters), and Historical (40 manuscript pages from eight Arabic books) ---
+further tests generalisation across previously unseen document domains. The augmentation conditions are: (1)~failure-filtered character
 confusion matrix injection, cross-referenced with the model's own zero-shot
 failures to retain only actionable confusion pairs (Phase~3);
 (2)~self-reflective prompting derived from the model's training-split error
@@ -94,11 +98,20 @@ and splits that destroy word boundaries), text-only correction is structurally
 limited regardless of prompt strategy, achieving only 3.6--5.0\% relative
 improvement despite a 44.6\% baseline CER.
 
+An ongoing second experiment applies a 2$\times$2$\times$2 factorial design
+across all 13 validation datasets, systematically varying three factors:
+prompt conservatism (aggressive vs.\ conservative instruction framing),
+example selection (generic vs.\ hand-picked domain-matched examples including
+content from all four new dataset types), and retrieval strategy (zero-shot
+vs.\ BM25-RAG). This experiment addresses the generalisability of the
+established prompt strategies to full-page, multi-domain Arabic documents.
+
 This thesis contributes: (1)~a formal over-correction threshold model with
 empirical estimation; (2)~a novel self-reflective prompting strategy for OCR
 correction achieving the strongest isolated result; (3)~a proof of
 complementarity between confusion-matrix and self-reflective augmentation;
-(4)~a comprehensive nine-dataset evaluation under aligned splits isolating
-font as the sole variable; (5)~a three-stage export--infer--analyse pipeline
-enabling GPU-free local reproducibility; and (6)~an empirical characterisation
-of the structural limits of text-only correction on handwritten text.
+(4)~a comprehensive thirteen-dataset evaluation spanning typewritten, handwritten,
+historical manuscript, and encyclopedic printed domains; (5)~a three-stage
+export--infer--analyse pipeline enabling GPU-free local reproducibility; and
+(6)~an empirical characterisation of the structural limits of text-only
+correction on handwritten text.

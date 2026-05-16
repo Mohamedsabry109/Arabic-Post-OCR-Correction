@@ -68,9 +68,9 @@ Several properties of the script are critical for understanding OCR failure mode
 \textbf{Positional forms.}
 Most letters have four shapes depending on their position within a word:
 isolated, initial, medial, and final.
-The letter \textit{ain} (\textarabic{�}), for instance, appears as
-\textarabic{�} (isolated), \textarabic{��} (initial), \textarabic{���} (medial),
-and \textarabic{��} (final).
+The letter \textit{ain} (\textarabic{ع}), for instance, appears as
+\textarabic{ع} (isolated), \textarabic{عـ} (initial), \textarabic{ـعـ} (medial),
+and \textarabic{ـع} (final).
 Since letters are connected into words by ligatures (joined strokes), an OCR
 engine must recognise not just a character in isolation but a glyph in context,
 making segmentation errors compound recognition errors.
@@ -90,38 +90,38 @@ sequence can represent multiple words depending on vowelisation.
 
 \textbf{Hamza.}
 The glottal stop (hamza) has a complex orthography.
-In some positions it appears alone (\textarabic{�}); in others it appears on a
-carrier letter: alef (\textarabic{�} above, \textarabic{�} below), waw (\textarabic{�}),
-or ya without dots (\textarabic{�}).
+In some positions it appears alone (\textarabic{ء}); in others it appears on a
+carrier letter: alef (\textarabic{أ} above, \textarabic{إ} below), waw (\textarabic{ؤ}),
+or ya without dots (\textarabic{ئ}).
 The choice of carrier follows rules based on the surrounding vowels, and even
 educated native speakers sometimes apply these rules inconsistently.
 Hamza rules are a major source of spelling errors in human writing and a
 significant challenge for OCR.
 
 \textbf{Taa marbuta.}
-The feminine ending \textarabic{�} (taa marbuta) is pronounced /at/ in context
+The feminine ending \textarabic{ة} (taa marbuta) is pronounced /at/ in context
 and /a/ in pause.
-It is written with the same base shape as the letter ha (\textarabic{�}) but
+It is written with the same base shape as the letter ha (\textarabic{ه}) but
 with two dots above.
-The visual similarity between \textarabic{�} and \textarabic{�} is a direct
+The visual similarity between \textarabic{ة} and \textarabic{ه} is a direct
 source of OCR errors whenever the ink quality, resolution, or font rendering
 is imperfect.
 
 \textbf{Alef maqsura.}
-The letter \textarabic{�} (alef maqsura, literally ``abbreviated alef'') appears
+The letter \textarabic{ى} (alef maqsura, literally ``abbreviated alef'') appears
 at the end of certain words to write the long vowel /aa/.
-Its shape is identical to ya (\textarabic{�}) but without the two dots below.
-OCR engines regularly confuse \textarabic{�} and \textarabic{�}, and the
+Its shape is identical to ya (\textarabic{ي}) but without the two dots below.
+OCR engines regularly confuse \textarabic{ى} and \textarabic{ي}, and the
 distinction is orthographically important because the two letters signal
 different word identities.
 
 \textbf{Dot-group characters.}
 Six groups of letters share the same base skeletal shape and differ only in
 the count or position of diacritical dots above or below:
-\textarabic{�}~/~\textarabic{�}~/~\textarabic{�}~(1/2/3 dots above),
-\textarabic{�}~/~\textarabic{�}~/~\textarabic{�}~(1 dot below / none / 1 dot above),
-\textarabic{�}~/~\textarabic{�}~(1 dot above / 2 dots above),
-\textarabic{�}~/~\textarabic{�}~(1 dot above / 2 dots below), and others.
+\textarabic{ب}~/~\textarabic{ت}~/~\textarabic{ث}~(1/2/3 dots above),
+\textarabic{ج}~/~\textarabic{ح}~/~\textarabic{خ}~(1 dot below / none / 1 dot above),
+\textarabic{ف}~/~\textarabic{ق}~(1 dot above / 2 dots above),
+\textarabic{ن}~/~\textarabic{ي}~(1 dot above / 2 dots below), and others.
 Dot placement errors -- caused by ink smearing, low resolution, or font
 rendering artefacts -- are the most frequent single-character OCR confusion
 in Arabic typewritten text.
@@ -288,7 +288,7 @@ This is the most frequent source of character-level errors in PATS-A01.
 \textbf{Ligature handling.}
 Certain letter combinations in Arabic merge into single ligature glyphs with
 a shape that may not visually resemble the component letters in isolation.
-Common examples include lam-alef (\textarabic{��}), which is always written as
+Common examples include lam-alef (\textarabic{لا}), which is always written as
 a single glyph.
 OCR engines trained on character-level templates may not include all ligature
 shapes, leading to substitution or insertion errors.
@@ -359,162 +359,35 @@ as primary throughout this thesis.
 \label{sec:llms}
 % ============================================================
 
-\subsection{Why LLMs for Post-OCR Correction}
-\label{subsec:why_llms}
-
-Before introducing the technical foundations of large language models, it is
-worth establishing \emph{why} they are the right tool for Arabic post-OCR
-correction, and why this thesis adopts a prompt-engineering paradigm rather
-than the traditional or deep-learning approaches reviewed in
-Section~\ref{sec:related}.
-
-Post-OCR correction is fundamentally a \emph{conditional text restoration}
-task: given a noisy observation of a clean text (the OCR output), produce the
-most likely original.  Historically, this task has been addressed by three
-paradigm families, each with characteristic limitations for Arabic.
-
-\textbf{Rule-based and statistical methods} (n-gram language models, lexicon
-lookup, noisy-channel formulations) require hand-crafted rules or
-frequency tables for each error type and language pair.
-For Arabic, the combinatorial explosion of positional glyph variants,
-dot-group confusions, and morphological inflections makes rule curation
-infeasible at the scale required for robust coverage.
-N-gram models capture local context (typically 3--5 tokens) but cannot
-leverage sentential or discourse-level coherence, which is essential for
-resolving valid-but-wrong substitutions --- the dominant error type in Arabic
-OCR (71\% of errors in this study).
-
-\textbf{Neural sequence-to-sequence models} (encoder--decoder
-architectures such as those based on LSTMs or smaller transformers)
-treat correction as a translation task from noisy to clean text.
-They can learn complex error patterns from data but require large parallel
-corpora of (OCR output, ground truth) pairs.
-For Arabic OCR, such corpora are scarce: the only substantial Arabic
-error correction dataset (QALB~\cite{zaghouani2014qalb}) targets \emph{grammatical}
-errors in human-authored text, not \emph{visual} errors produced by OCR
-engines.
-Building an OCR-specific training corpus requires rendering text in multiple
-fonts, running OCR, and aligning output with ground truth --- a process
-that is engine-specific (a model trained on Tesseract errors does not
-transfer to Qaari errors) and must be repeated for each font and engine
-combination.
-Furthermore, seq2seq models trained on one error distribution are brittle
-when the error profile changes: a font change alters the confusion matrix
-and can invalidate the learned correction mapping.
-
-\textbf{Large language models} (LLMs) offer a fundamentally different
-proposition.
-A model pre-trained on hundreds of billions of tokens of multilingual text
-acquires, as a byproduct of next-token prediction, an implicit probability
-distribution over valid Arabic sentences.
-This distribution functions as an extremely rich language model that captures
-not just n-gram statistics but morphological constraints, syntactic structure,
-semantic coherence, and world knowledge --- all without any task-specific
-training.
-Instruction tuning then teaches the model to follow explicit correction
-instructions, converting this passive language competence into an active
-error-correction capability.
-
-The advantages of this paradigm for Arabic post-OCR correction are:
-
-\begin{enumerate}
-  \item \textbf{No parallel training data required.}  The model's correction
-        capability derives from its pre-trained language prior, not from
-        OCR-specific training pairs.  This eliminates the data bottleneck that
-        limits seq2seq approaches for low-resource OCR correction scenarios.
-
-  \item \textbf{Engine and font agnosticism.}  Because the model corrects
-        based on its understanding of valid Arabic rather than on memorised
-        error patterns, the same model and prompt can be applied to output from
-        any OCR engine without retraining.  Knowledge augmentation (Phases~3
-        and~4) can adapt the prompt to a specific engine's error profile, but
-        the base capability transfers.
-
-  \item \textbf{Rich contextual reasoning.}  Unlike n-gram models, LLMs
-        process the full input sequence through multi-layer self-attention,
-        enabling them to use long-range context to disambiguate locally
-        ambiguous tokens.  This is particularly important for Arabic, where
-        valid-but-wrong OCR errors can only be detected by semantic or
-        syntactic analysis of the surrounding sentence.
-
-  \item \textbf{Zero-shot applicability.}  An instruction-tuned LLM can
-        perform correction immediately upon deployment, without any
-        task-specific training phase.  This enables rapid experimentation with
-        different prompt strategies (the core methodology of this thesis)
-        without the computational cost of model training.
-
-  \item \textbf{Interpretable prompt engineering.}  The knowledge injected
-        into the model's prompt (confusion matrices, self-reflective insights,
-        correction rules) is human-readable and auditable.  Unlike neural
-        model weights, prompt content can be inspected, modified, and
-        version-controlled, supporting transparent and reproducible research.
-\end{enumerate}
-
-The primary risk of the LLM paradigm --- and a central finding of this
-thesis --- is \emph{over-correction}: the model's tendency to rewrite
-tokens that are already correct, introducing new errors.
-This risk is inherent to instruction-following models operating on text that
-is mostly correct, and it is the reason that knowledge augmentation
-(Phases~3--5) and prompt design (conservative v2 prompt) are necessary to
-constrain the model's intervention behaviour.
-Understanding and quantifying this over-correction tendency is a major
-contribution of this work.
-
 \subsection{From N-grams to Transformers}
 \label{subsec:lm_history}
 
 Statistical language modelling has a long history in NLP.
 N-gram language models assign a probability to a sequence of words by decomposing
 the joint probability into a product of conditional probabilities of each word
-given the preceding $n-1$ words:
-\begin{equation}\label{eq:ngram}
-  P(w_1, w_2, \ldots, w_m) \approx \prod_{i=1}^{m} P(w_i \mid w_{i-n+1}, \ldots, w_{i-1})
-\end{equation}
+given the preceding $n-1$ words.
 They were the dominant approach for language modelling and speech recognition
 through the 1990s and 2000s.
-Their limitations --- sparse counts for long contexts (the \emph{curse of
-dimensionality}: the number of possible n-grams grows exponentially with $n$),
-inability to generalise across syntactically similar contexts that happen to use
-different vocabulary, and the practical ceiling of $n \leq 5$ due to memory
-constraints --- motivated neural approaches.
+Their limitations -- sparse counts for long contexts and inability to generalise
+across syntactically similar contexts -- motivated neural approaches.
 
 Bengio et al.\ \cite{bengio2003neural} introduced the neural probabilistic language
-model, which represents each word as a dense real-valued vector (an
-\emph{embedding}) in a continuous space and uses a feedforward network to predict
-the next word given a fixed-width context window.
+model, which represents words as dense real-valued vectors (embeddings) and uses
+a feedforward network to predict the next word given a fixed-width context window.
 This model demonstrated that neural approaches could outperform n-gram models by
-exploiting the geometric structure of embedding space: words used in similar
-contexts are mapped to nearby vectors, enabling the model to generalise from
-observed contexts to unseen but structurally similar ones.
+generalising across similar word contexts.
 
-Recurrent Neural Networks (RNNs) extended this to variable-length contexts by
-maintaining a hidden state vector that is updated at each time step, enabling the
-model to condition its prediction on the entire preceding sequence.
+Recurrent Neural Networks (RNNs) extended this to variable-length contexts.
 Long Short-Term Memory (LSTM) networks \cite{hochreiter1997long} addressed the
-vanishing gradient problem of vanilla RNNs with gated memory cells --- input,
-forget, and output gates that control the flow of information into and out of a
-persistent cell state --- enabling effective modelling of long-range
-dependencies over hundreds of tokens.
+vanishing gradient problem of vanilla RNNs with gated memory cells, enabling
+effective modelling of long-range dependencies.
 LSTM-based language models and encoder-decoder sequence-to-sequence models
-\cite{sutskever2014sequence} dominated NLP in the early 2010s, achieving
-state-of-the-art results in machine translation, text summarisation, and
-dialogue systems.
+dominated NLP in the early 2010s.
 
 The transformer architecture \cite{vaswani2017attention}, introduced in 2017,
-replaced recurrence entirely with self-attention mechanisms.
-By computing attention over all positions simultaneously rather than sequentially,
-transformers eliminated the sequential bottleneck of RNNs and enabled
-embarrassingly parallel training on modern GPU hardware.
-The result was a dramatic improvement in training efficiency: transformers train
-orders of magnitude faster than LSTMs on the same data and, critically, exhibit
-favourable \emph{scaling laws} --- their performance improves predictably as a
-power law of model size, dataset size, and compute
-\cite{kaplan2020scaling,hoffmann2022training}.
-This scalability property is the foundation of the modern LLM paradigm: given
-sufficient data and compute, a transformer-based model can be scaled to sizes
-where qualitatively new capabilities emerge --- instruction following, few-shot
-learning, chain-of-thought reasoning --- that are not present at smaller scales
-\cite{wei2022emergent}.
+replaced recurrence with self-attention mechanisms.
+Transformers train orders of magnitude faster than LSTMs on parallel hardware
+and scale more effectively with data and model size.
 All modern large language models are transformer-based.
 
 \subsection{The Transformer Architecture}
@@ -558,70 +431,37 @@ autoregressive generation.
 \subsection{Pre-Training and Instruction Tuning}
 \label{subsec:pretraining}
 
-Modern LLMs are trained in two or three stages, each adding a qualitatively
-different capability.
+Modern LLMs are trained in two stages.
 
-\textbf{Stage 1: Pre-training (next-token prediction).}
+\textbf{Pre-training.}
 The model is trained to predict the next token given all preceding tokens, on a
-massive corpus of text scraped from the internet, books, code, scientific
-papers, and other sources --- typically trillions of tokens spanning dozens
-of languages.
-The training objective is the standard autoregressive language modelling loss:
-\begin{equation}\label{eq:pretraining}
-  \mathcal{L} = -\sum_{t=1}^{T} \log P_\theta(x_t \mid x_1, \ldots, x_{t-1})
-\end{equation}
-where $\theta$ denotes the model parameters and $x_1, \ldots, x_T$ is a
-tokenised training sequence.
-Despite its simplicity, this objective is remarkably powerful: by learning to
-predict the next token across a sufficiently large and diverse corpus, the model
-acquires broad language competence, world knowledge, logical reasoning patterns,
-and the ability to perform tasks it was never explicitly trained for --- purely
-from the statistical structure of human language.
+massive corpus of text scraped from the internet, books, code, and other sources.
+Pre-training instils broad language competence, world knowledge, and the ability
+to reason across many domains, all from the statistical structure of the training
+corpus.
 GPT-3 \cite{brown2020language} demonstrated that scaling pre-training to 175
 billion parameters enables dramatic improvements in few-shot performance across
-NLP tasks, establishing the empirical basis for the \emph{scaling hypothesis}:
-larger models trained on more data exhibit qualitatively new capabilities.
+NLP tasks.
 
-For Arabic post-OCR correction, the critical consequence of pre-training is
-that the model learns an implicit distribution over valid Arabic text.
-When presented with a noisy OCR sequence, the model's next-token predictions
-are biased toward tokens that form valid Arabic words and coherent sentences,
-effectively functioning as a powerful contextual spell-checker --- but one that
-operates at the semantic and syntactic level, not just the lexical level.
-
-\textbf{Stage 2: Instruction tuning (supervised fine-tuning, SFT).}
+\textbf{Instruction tuning and RLHF.}
 A pre-trained model produces likely continuations of text; it does not
 reliably follow explicit instructions.
 Instruction tuning \cite{ouyang2022training} fine-tunes the model on a curated
-set of (instruction, response) pairs, teaching it to interpret natural-language
-instructions as tasks and produce helpful, structured outputs.
-The fine-tuning dataset covers diverse tasks --- question answering, summarisation,
-translation, code generation, text editing --- formatted as multi-turn dialogues
-with system prompts, user messages, and assistant responses.
-After instruction tuning, the model responds predictably to prompts of the form
-``correct this OCR text and return only the corrected version,'' making it
-directly applicable to the post-OCR correction task without further training.
+set of instruction-response pairs, teaching it to interpret instructions as tasks
+and produce helpful, structured outputs.
+Reinforcement Learning from Human Feedback (RLHF) further aligns the model's
+outputs with human preferences by training a reward model on human comparisons
+and optimising the language model against it using policy gradient methods.
+The result is an instruction-tuned model that follows natural language
+instructions reliably across a wide range of tasks without requiring task-specific
+fine-tuning.
 
-\textbf{Stage 3: Alignment (RLHF / DPO).}
-Reinforcement Learning from Human Feedback (RLHF)~\cite{ouyang2022training}
-further aligns the model's outputs with human preferences.
-A reward model is trained on human comparisons of model outputs (``output A is
-better than output B for this prompt''), and the language model is then
-optimised against this reward model using policy gradient methods (typically
-Proximal Policy Optimisation, PPO~\cite{schulman2017proximal}).
-More recent approaches such as Direct Preference Optimisation
-(DPO)~\cite{rafailov2023direct} bypass the reward model entirely and
-optimise the policy directly on preference pairs.
-The result is a model that not only follows instructions but does so in a way
-that is helpful, harmless, and honest --- reducing the frequency of
-hallucinations, harmful outputs, and unnecessary rewrites.
-
-For post-OCR correction, alignment is particularly important because it
-reduces the model's tendency to ``hallucinate'' --- to generate plausible but
-incorrect text that replaces what the OCR actually produced.
-An aligned model is more likely to return the input unchanged when it is
-already correct, which is precisely the conservative behaviour needed to
-avoid over-correction on low-error input.
+Instruction-tuned models are the right choice for post-OCR correction because
+they can follow a correction instruction directly.
+Unlike pre-trained base models, which require careful prompt engineering to
+elicit a specific output format, instruction-tuned models respond predictably
+to system messages of the form ``correct this text and return only the corrected
+version.''
 
 \subsection{Qwen3-4B-Instruct-2507}
 \label{subsec:qwen3}
@@ -740,13 +580,13 @@ Several practical decisions govern few-shot performance:
         corrections look like.
 
   \item \textbf{Source of examples.}
-        The choice of few-shot corpus matters.
+        Phase~4B uses QALB corpus pairs.
         QALB annotations cover human typing errors (omitted diacritics, wrong
         hamza form, case-agreement errors) that have a partial but imperfect
         overlap with OCR errors (visual confusion between similar-shape characters).
-        This \emph{transfer gap} --- the mismatch between human-error and OCR-error
-        distributions --- is a known limitation of few-shot approaches using
-        human-authored error corpora for OCR correction.
+        This \emph{transfer gap} -- the mismatch between human-error and OCR-error
+        distributions -- is a potential explanation for the performance outcome
+        discussed in Chapter~5.
 \end{itemize}
 
 \subsection{Chain-of-Thought and Instruction Augmentation}
@@ -805,22 +645,18 @@ The RAG pipeline consists of the following components:
 \end{enumerate}
 
 \noindent
+This study uses the \texttt{paraphrase-multilingual-MiniLM-L12-v2} model
+\cite{reimers2019sentence} for both corpus and query encoding.
+This is a compact 12-layer multilingual sentence encoder with strong Arabic
+support, suitable for embedding the 200,000-sentence OpenITI index on a CPU
+without excessive memory usage.
+
 An important consideration for RAG quality is \emph{domain match}: if the
 retrieval corpus covers a different domain or time period than the input text,
 retrieved passages may not be relevant and could mislead the model.
-Section~\ref{subsec:ks_openiti} discusses how the classical OpenITI corpus
-proved too domain-mismatched for this task.
-
-Phase~8 of this study uses a domain-matched retrieval corpus: the Phase~2
-training-split corrections themselves. Instead of dense embedding retrieval,
-Phase~8 employs BM25 \cite{robertson2009bm25} with character $n$-gram
-tokenisation, querying a pre-built BM25 index of training OCR texts to
-retrieve the $k=5$ most similar (OCR, ground-truth) pairs for each validation
-sample. These pairs are injected into the system prompt as per-sample
-few-shot correction examples. This design sidesteps domain mismatch entirely,
-since the retrieval corpus is drawn from the same OCR engine and text domain
-as the evaluation data. The RAGIndexBuilder and RAGRetriever components are
-implemented in \texttt{src/data/rag\_index.py}.
+The domain mismatch between the classical OpenITI corpus and the modern
+newspaper PATS-A01 text is a central element of the Phase~5 analysis in
+Chapter~5.
 
 \subsection{Self-Reflective and Meta-Cognitive Prompting}
 \label{subsec:self_reflective}
@@ -833,7 +669,7 @@ failures and incorporating this feedback into their decision-making.
 Similarly, self-critique prompting asks the model to evaluate its own output
 and revise it, akin to verbal reinforcement learning.
 
-Phase~4 operationalises a lightweight variant of this idea.
+Phase~4D operationalises a lightweight variant of this idea.
 Rather than asking the model to introspect on its current output at inference
 time -- which adds latency and the risk of circular reasoning -- the model is
 given \emph{pre-computed statistics} about its systematic failure patterns,
@@ -879,21 +715,19 @@ to the character positions most likely to contain errors.
 
 Arabic orthographic rules govern the correct spelling of characters that OCR
 commonly misidentifies.
-Relevant rule categories include: hamza placement (al-qat' vs.\ al-wasl),
+The rules used in this study address: hamza placement (al-qat' vs.\ al-wasl),
 taa marbuta vs.\ ha, alef maqsura vs.\ ya, tanwin placement, and definite
 article assimilation.
 These rules are grounded in classical Arabic grammar and are taught in Arabic
 primary education.
+They are stored in the \texttt{data/rules/} directory as JSONL files and loaded
+by \texttt{RulesLoader} at runtime.
 
-Unlike the confusion matrix (which is descriptive --- ``this engine makes this
-mistake''), orthographic rules are prescriptive --- ``the correct form is X''.
-Both types of knowledge can in principle direct the model's attention to
-correction-relevant phenomena; however, preliminary experiments in this study
-found that rule-augmented prompting did not improve on zero-shot correction
-(the rules tended to duplicate guidance already embedded in the base prompt),
-and this approach was excluded from the final experimental design.
-The confusion-matrix injection in Phase~3 proved the more effective descriptive
-alternative.
+Unlike the confusion matrix (which is descriptive -- ``this engine makes this
+mistake''), orthographic rules are prescriptive -- ``the correct form is X''.
+Both types of knowledge tell the model what to look for; the confusion matrix
+focuses its attention by describing the engine's error patterns, while the
+rules frame the correction task in terms of canonical Arabic spelling.
 
 \subsection{The QALB Corpus}
 \label{subsec:ks_qalb}
@@ -904,10 +738,10 @@ It contains thousands of human-authored Arabic sentences from online news
 comments, annotated with corrections for spelling, grammatical, punctuation,
 and other errors by trained annotators.
 
-QALB has been used in related work as a source of few-shot demonstration pairs
-for Arabic correction tasks.
-After filtering for OCR-relevance and length, several hundred pairs are available
-for potential use.
+QALB is used in this study as a source of few-shot demonstration pairs for
+Phase~4B.
+After filtering for OCR-relevance and length (Section~\ref{subsec:kb_qalb},
+Chapter~3), 528 pairs are available.
 The primary limitation of QALB as an OCR correction resource is the
 \emph{transfer gap}: QALB errors are human typing errors, while OCR errors are
 visual confusion errors.
@@ -928,17 +762,14 @@ With hundreds of millions of words of Arabic text spanning many centuries and
 genres, it provides a large pool of grammatically correct Arabic sentences for
 dense retrieval.
 
-OpenITI represents a potential retrieval corpus for RAG-based correction
-approaches. Its primary limitation is \emph{domain mismatch}: OpenITI
-texts are classical and historical, while PATS-A01 documents are modern
-newspaper text. The semantic and lexical overlap between medieval religious
-scholarship and contemporary news reporting is low. Preliminary experiments
-with OpenITI-based RAG showed severe degradation due to this mismatch, and
-the OpenITI corpus was not used in the RAG experiments of this thesis.
-Phase~8 instead uses a domain-matched retrieval corpus --- the Phase~2
-training-split corrections from the same OCR engine and text domain --- and
-employs BM25 character $n$-gram retrieval rather than dense embedding search
-(see Section~\ref{subsec:rag} and Section~\ref{sec:phase8}).
+OpenITI is used in Phase~5 as the retrieval corpus for RAG.
+Its primary limitation for this application is \emph{domain mismatch}: OpenITI
+texts are classical and historical, while PATS-A01 Akhbar documents are modern
+newspaper text.
+The semantic and lexical overlap between medieval religious scholarship and
+contemporary news reporting is low, which affects retrieval quality.
+A retrieval corpus drawn from modern Arabic newspapers would be a better match
+for the PATS-A01 domain.
 
 \subsection{CAMeL Tools}
 \label{subsec:ks_camel}
@@ -963,7 +794,7 @@ CAMeL Tools is used in Phase~1 to classify OCR error tokens as either
 The distinction is informative: if most OCR errors are valid-but-wrong, then
 dictionary lookup cannot detect them and context is required for correction.
 
-\textbf{Application in Phase~5.}
+\textbf{Application in Phase~4C.}
 The \emph{revert strategy} described in Chapter~3 uses the morphological analyser
 to post-process LLM corrections.
 Words introduced by the LLM that fail morphological analysis while the original
@@ -1090,31 +921,29 @@ setting with quantitative evidence.
 This thesis makes the following contributions relative to the existing literature:
 
 \begin{enumerate}
-  \item \textbf{Systematic multi-dataset evaluation of augmentation strategies.}
+  \item \textbf{Systematic evaluation of six isolated augmentation strategies.}
         Prior work on LLM-based OCR correction has at most compared zero-shot
-        with one or two augmentation conditions on a single dataset.
-        This study isolates three isolated knowledge augmentation conditions
-        (confusion-matrix injection, self-reflective prompting, and morphological
-        post-processing), tests all pairwise combinations with ablation, and
-        evaluates across nine datasets (eight typewritten fonts and handwritten
-        text) using the same model and evaluation protocol.
+        with one or two augmentation conditions.
+        This study isolates six conditions (confusion matrix, orthographic rules,
+        few-shot examples, morphological post-processing, self-reflective
+        prompting, and RAG), each compared against the same zero-shot baseline
+        using the same model, dataset, and evaluation protocol.
 
   \item \textbf{Self-reflective prompting for OCR correction.}
-        The Phase~4 strategy --- injecting pre-computed statistics about the
-        model's own training-split error patterns into the inference prompt ---
+        The Phase~4D strategy -- injecting pre-computed statistics about the
+        model's own training-split error patterns into the inference prompt --
         is, to the author's knowledge, the first application of self-reflective
         prompting to OCR correction in any language.
 
   \item \textbf{Quantitative study of over-correction in Arabic OCR.}
-        The finding that LLM interventions harm fonts with CER below approximately
-        8\%, and that the over-correction rate grows as more knowledge is injected
+        The finding that the LLM introduces errors on 25.06\% of previously
+        correct tokens, and that this rate increases as more knowledge is injected
         into the prompt, is a novel empirical characterisation of a failure mode
         that deserves attention from practitioners deploying LLMs for text
         normalisation tasks.
 
-  \item \textbf{Arabic-specific multi-font evaluation.}
-        The PATS-A01 corpus provides eight typewritten Arabic fonts with an
-        aligned train/validation split, enabling precise attribution of CER
-        changes to specific prompt interventions while controlling for content
-        effects across fonts.
+  \item \textbf{Arabic-specific evaluation.}
+        The PATS-A01 Akhbar dataset provides a controlled typewritten Arabic
+        testbed with known font characteristics and a clean ground truth, enabling
+        precise attribution of CER changes to specific prompt interventions.
 \end{enumerate}

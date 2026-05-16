@@ -143,10 +143,13 @@ a subset of datasets changes.
 \label{sec:datasets}
 % ============================================================
 
-Two Arabic text datasets are included in the study, spanning nine distinct
-evaluation configurations: eight typewritten fonts from PATS-A01 and one
-handwritten corpus (KHATT). All fonts and both datasets are evaluated across
-all experimental phases on their respective validation splits.
+The study uses six Arabic text datasets spanning thirteen distinct evaluation
+configurations: eight typewritten fonts from PATS-A01, one handwritten
+line-level corpus (KHATT), and four full-page document datasets
+(KHATT-Paragraph, Yarmouk, Muharaf, and Historical Arabic Manuscripts).
+The nine PATS-A01 and KHATT configurations form Experiment~1; all thirteen
+configurations are evaluated in Experiment~2. All validation and testing splits
+are evaluated across the experimental phases on their respective splits.
 
 \subsection{PATS-A01 --- Printed Arabic Text Set}
 \label{subsec:pats}
@@ -253,6 +256,109 @@ experimental phases to test whether knowledge augmentation strategies behave
 differently when the baseline error rate is much higher than on typewritten
 text.
 
+\subsection{KHATT-Paragraph}
+\label{subsec:khatt_paragraph}
+
+KHATT-Paragraph is derived from the same underlying writer pool as KHATT
+but provides paragraph-level samples rather than isolated text lines.
+Each sample contains multiple handwritten lines belonging to the same
+paragraph, making it a substantially longer and more contextually coherent
+unit than any single KHATT line.
+
+The dataset contains 449 validation samples, selected by identifying
+KHATT paragraph identifiers that overlap with the KHATT line-level
+validation set.
+Ground-truth files are encoded in CP-1256 and stored under
+\texttt{data/ocr-raw-data/KHATT\_Paragraph/khatt-paragraphs-text/proc\_text/}
+as per-sample plain-text files.
+Qaari OCR results are stored under
+\texttt{data/ocr-results/qaari-results/khatt-paragraph-data/}.
+No training-split OCR was produced for this dataset; only the validation
+split is used in Experiment~2.
+
+KHATT-Paragraph is included to assess whether paragraph-level context
+changes LLM correction behaviour relative to line-level KHATT input.
+Longer inputs provide more surrounding context, which may help the model
+resolve segmentation errors and character ambiguities that are difficult
+to interpret from isolated line-level text.
+
+\subsection{Yarmouk}
+\label{subsec:yarmouk}
+
+The Yarmouk dataset consists of printed full-page Arabic documents from
+Yarmouk University (Jordan), covering encyclopedic and reference content
+drawn from Wikipedia and similar sources.
+The corpus spans a wide range of topics presented in formal Modern Standard
+Arabic prose, typeset in a standard printed font without hand-applied
+variation.
+
+The testing split used in this study contains 200 documents.
+Ground-truth text was extracted from HTML source files and normalised to
+UTF-8 by the script \texttt{scripts/prepare\_yarmouk\_gt.py}.
+Document images were extracted from single-page PDFs at 300~DPI
+(\texttt{scripts/convert\_yarmouk\_pdfs.py}), and per-page Qaari OCR results
+were merged into per-document files using
+\texttt{scripts/merge\_yarmouk\_ocr\_pages.py}.
+OCR outputs are stored under
+\texttt{data/ocr-results/qaari-results/yarmouk-data/testing/}.
+Only the testing split is available with Qaari OCR; no training split was produced.
+
+Yarmouk provides the cleanest typewritten condition among the new datasets:
+formal printed MSA with a consistent layout and high-quality scan.
+It tests whether correction strategies established on PATS-A01 (line-level
+printed text) generalise to full-page printed documents with different
+structural properties (page headers, paragraph breaks, multi-column layouts
+common in encyclopedic references).
+
+\subsection{Muharaf}
+\label{subsec:muharaf}
+
+Muharaf is a dataset of historical Arabic handwritten letters from the
+19th and 20th centuries, drawn from archival correspondence collections.
+The letters represent diverse handwriting styles from the late Ottoman and
+early modern Arabic periods, with characteristic calligraphic and cursive
+forms that differ substantially from contemporary handwriting as captured
+in KHATT.
+
+The validation split contains 116 samples, drawn from the official set0
+partition (50 validation images, 66 test images, combined into the
+``validation'' split used here).
+Ground-truth text is stored as per-image UTF-8 plain-text files under
+\texttt{data/ocr-raw-data/Muharaf/gt/}, extracted from JSON annotation
+files using \texttt{scripts/prepare\_muharaf\_gt.py}
+(Crossed\_out lines are skipped during extraction).
+Qaari OCR results are stored under
+\texttt{data/ocr-results/qaari-results/muharaf-data/}.
+No training-split OCR is available for this dataset.
+
+Muharaf is the most challenging new dataset for both OCR and post-OCR
+correction: the historical writing style, ink degradation, paper texture,
+and non-standard orthographic conventions all increase both the OCR baseline
+error rate and the difficulty of recognising the intended text from OCR output
+alone.
+
+\subsection{Historical Arabic Manuscripts}
+\label{subsec:historical}
+
+The Historical Arabic Handwritten Text Recognition dataset consists of
+40 pages drawn from eight historical Arabic books (five pages per book).
+The books span a range of manuscript styles and periods; ground truth was
+extracted from DOCX annotation files by the script
+\texttt{scripts/prepare\_historical\_gt.py}, producing one UTF-8 plain-text
+file per page under
+\texttt{data/ocr-raw-data/Historical\,Arabic\,Handwritten\,Text\,Recognition\,Dataset/gt/Book\{N\}/}.
+Document images were extracted from the same DOCX files into
+\texttt{.../images/Book\{N\}/}.
+Qaari OCR results are stored under
+\texttt{data/ocr-results/qaari-results/historical-data/}.
+
+The 40-page size makes this the smallest new dataset in the study.
+Results should be interpreted with caution given this limited sample count.
+Manuscript text presents the greatest typographic diversity of any dataset:
+ligature conventions, glyph proportions, and ink characteristics vary
+substantially across the eight books, reflecting different scribal schools
+and centuries of composition.
+
 \subsection{Dataset Statistics}
 \label{subsec:dataset_stats}
 
@@ -261,26 +367,32 @@ Table~\ref{tab:datasets} summarises all datasets included in the system.
 \begin{table}[ht]
 \caption{Dataset summary. All PATS-A01 fonts share the same aligned split
          (415 validation / 2,351 training samples). KHATT sample counts
-         depend on writer structure. All validation splits are evaluated
-         across all experimental phases.}
+         depend on writer structure. The four new datasets provide
+         validation/testing splits only (no training-split OCR). All
+         validation and testing splits are evaluated in Experiment~2.}
 \label{tab:datasets}
 \centering
 \renewcommand{\arraystretch}{1.3}
 \begin{tabularx}{\linewidth}{lllrrl}
 \toprule
-\textbf{Dataset Key} & \textbf{Type} & \textbf{Split} & \textbf{Train} & \textbf{Val} & \textbf{Notes} \\
+\textbf{Dataset Key} & \textbf{Type} & \textbf{Split} & \textbf{Train} & \textbf{Val/Test} & \textbf{Experiment} \\
 \midrule
-PATS-A01-Akhbar       & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Andalus      & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Arial        & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Naskh        & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Simplified   & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Tahoma       & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Thuluth      & Typewritten & Both & 2,351 & 415 & Evaluated \\
-PATS-A01-Traditional  & Typewritten & Both & 2,351 & 415 & Evaluated \\
-KHATT                 & Handwritten & Both & ---   & --- & Evaluated \\
+PATS-A01-Akhbar       & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Andalus      & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Arial        & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Naskh        & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Simplified   & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Tahoma       & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Thuluth      & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+PATS-A01-Traditional  & Typewritten & Both & 2,351 & 415 & Exp.~1+2 \\
+KHATT                 & Handwritten & Both & ---   & --- & Exp.~1+2 \\
 \midrule
-\multicolumn{4}{l}{\footnotesize Total: 9 evaluation datasets (8 fonts + KHATT)} & & \\
+KHATT-Paragraph       & HW Paragraph & Val only & --- & 449 & Exp.~2 \\
+Yarmouk               & Printed (full-page) & Test only & --- & 200 & Exp.~2 \\
+Muharaf               & HW Letters (hist.) & Val only & --- & 116 & Exp.~2 \\
+Historical            & Manuscripts & Val only & --- & 40 & Exp.~2 \\
+\midrule
+\multicolumn{4}{l}{\footnotesize Total: 13 evaluation datasets (Exp.~1: 9; Exp.~2: 13)} & & \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -293,8 +405,12 @@ Each file contains the recognised text for that document page.
 OCR results are stored under \texttt{data/ocr-results/qaari-results/} with
 sub-directories organised by dataset type:
 \begin{itemize}
-  \item PATS-A01: \texttt{qaari-results/pats-a01-data/A01-\{font\}/}
-  \item KHATT:    \texttt{qaari-results/khatt-data/\{split\}/\{Training|Validation\}/}
+  \item PATS-A01:      \texttt{qaari-results/pats-a01-data/A01-\{font\}/}
+  \item KHATT:         \texttt{qaari-results/khatt-data/\{split\}/\{Training|Validation\}/}
+  \item KHATT-Paragraph: \texttt{qaari-results/khatt-paragraph-data/\{stem\}.txt}
+  \item Yarmouk:       \texttt{qaari-results/yarmouk-data/\{split\}/\{doc\_id\}.txt}
+  \item Muharaf:       \texttt{qaari-results/muharaf-data/\{stem\}.txt}
+  \item Historical:    \texttt{qaari-results/historical-data/Book\{N\}/\{stem\}.txt}
 \end{itemize}
 
 \noindent
@@ -439,7 +555,7 @@ Similar shapes
   & Substitution between characters sharing the same skeleton but differing
     in secondary visual features:
     \{ra, zay\}, \{dal, dhal\}, \{ta marbuta, ha\},
-    \{ta with extended tail (\RL{�}), dha (\RL{�})\}. \\
+    \{ta with extended tail (\RL{Ø·}), dha (\RL{Ø¸})\}. \\
 Merged words
   & Fewer words in the OCR output than in the ground truth;
     a word boundary is missing. \\

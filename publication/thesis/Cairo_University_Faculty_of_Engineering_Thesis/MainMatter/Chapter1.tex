@@ -256,13 +256,36 @@ retrieval?
 on the baseline OCR error profile of the input, or can knowledge augmentation
 overcome the over-correction problem observed on low-error fonts?
 
+\textbf{RQ9 --- Prompt Conservatism and Domain Generalisation:} Does prompt
+conservatism --- contrasting an aggressive correction instruction (``correct
+all errors'') with a conservative one (``return unchanged if already correct'')
+--- affect generalisation to unseen full-page document domains such as
+encyclopedic printed text, historical manuscripts, and archival handwritten
+letters?
+
+\textbf{RQ10 --- Domain-Matched Example Selection:} Does providing
+hand-picked, domain-matched examples --- synthetic OCR errors crafted from
+the ground truth of new target-domain datasets, covering all four new document
+types --- outperform generic auto-generated examples on those new dataset
+types, and does this advantage extend to the established PATS-A01 and KHATT
+datasets?
+
+\textbf{RQ11 --- Cross-Domain BM25 Retrieval:} Can a BM25 retrieval index
+built on one document domain (PATS-A01 typewritten and KHATT handwritten
+training corrections) provide useful correction context for a structurally
+different domain (historical manuscripts, encyclopedic full-page content)?
+Does cross-domain retrieval degrade, match, or improve over zero-shot
+prompting on the new datasets?
+
 RQ1 is addressed in Chapter~\ref{ch_results}, Section~\ref{sec:res_phase1},
 using Phase~1 outputs. RQ2--RQ5 are each addressed by a corresponding
 isolated experiment (Phases~2--5), all reporting on the validation split.
 RQ6 is addressed by the combination and ablation study (Phase~6). RQ8 is
 addressed by the retrieval-augmented experiment (Phase~8). RQ7 is
 addressed by synthesising findings across Phases~2--6 and~8 in
-Chapter~\ref{ch_conc}.
+Chapter~\ref{ch_conc}. RQ9--RQ11 are addressed by Experiment~2
+(Section~\ref{sec:exp2}), whose results are reported in
+Chapter~\ref{ch_results}.
 
 %----------------------------------------------------------------------------
 \section{Contributions}
@@ -360,6 +383,25 @@ This thesis makes the following contributions.
   notebooks. The \texttt{MockCorrector} backend enables local development
   and testing of all phases without GPU access.
 
+  \item \textbf{Four new full-page Arabic document datasets integrated into
+  the evaluation framework.} KHATT-Paragraph (449 multi-line handwritten
+  paragraph samples), Yarmouk (200 printed encyclopedic full-page documents),
+  Muharaf (116 historical handwritten letter images from 19th--20th century
+  correspondence), and a Historical Manuscripts dataset (40 pages from eight
+  Arabic books) are prepared, aligned with Qaari OCR outputs, and incorporated
+  into the DataLoader. This expands the evaluation from nine to thirteen
+  datasets and introduces document-level, full-page, and historically diverse
+  content that is absent from the established PATS-A01 and KHATT benchmarks.
+
+  \item \textbf{A 2$\times$2$\times$2 factorial experiment design for
+  cross-domain prompt ablation (Experiment~2).} Eight trials systematically
+  vary prompt conservatism, example selection strategy, and retrieval mode
+  across all thirteen validation/testing datasets. Hand-picked examples are
+  synthetically constructed from the ground truth of the four new datasets
+  to cover their domain-specific OCR error patterns, enabling a controlled
+  comparison of domain-matched vs.\ generic example selection on unseen
+  document types.
+
 \end{enumerate}
 
 %----------------------------------------------------------------------------
@@ -401,6 +443,17 @@ on OCR error pairs is outside the scope of this thesis. Fine-tuned models
 might outperform all prompt strategies tested but require labelled training
 data and substantially greater compute.
 
+\textbf{Thirteen evaluation datasets across two experiments.}
+Experiment~1 evaluates nine datasets (eight PATS-A01 fonts plus KHATT) under
+the controlled isolation design described above. Experiment~2 extends to
+thirteen datasets by adding four full-page document corpora (KHATT-Paragraph,
+Yarmouk, Muharaf, and Historical). OCR results for the new datasets are
+available on validation and testing splits only; training-split OCR was not
+produced due to compute constraints. The factorial design of Experiment~2
+therefore does not use the isolation principle of Experiment~1 (no training
+split for self-reflective analysis), and comparisons between experiments
+should account for this difference in methodology.
+
 %----------------------------------------------------------------------------
 \section{Thesis Organisation}
 \label{sec:intro_organisation}
@@ -436,15 +489,18 @@ output files, and the research question answered. Phases~1 through~5 are
 covered as isolated experiments, followed by Phase~6 (combinations and
 ablation) and Phase~8 (retrieval-augmented generation), with particular
 attention to the isolation principle that ensures each augmentation condition
-can be attributed to a single knowledge source.
+can be attributed to a single knowledge source. The chapter concludes with
+Experiment~2 (Section~\ref{sec:exp2}): the 2$\times$2$\times$2 factorial
+prompt design ablation across all thirteen datasets.
 
 \textbf{Chapter~\ref{ch_results} --- Results and Analysis}
-reports all numerical results across the nine evaluation datasets.
-Per-font Phase~1 baselines establish the OCR error landscape. Phase~2
-zero-shot results reveal font-dependent correction effectiveness. Phases~3--5
-quantify the impact of each knowledge source, and Phase~6 tests combinations
-with ablation. Every result is presented in a table and interpreted in prose,
-with statistical significance reported via paired t-tests and Cohen's~$d$
+reports all numerical results. For Experiment~1 (nine datasets), per-font
+Phase~1 baselines establish the OCR error landscape, Phase~2 zero-shot
+results reveal font-dependent correction effectiveness, Phases~3--5 quantify
+individual knowledge sources, and Phase~6 tests combinations with ablation.
+Section~\ref{sec:res_exp2} reports Experiment~2 results across the thirteen
+evaluation datasets. Every result is presented in a table and interpreted in
+prose, with statistical significance reported via paired t-tests and Cohen's~$d$
 effect sizes.
 
 \textbf{Chapter~\ref{ch_conc} --- Discussion and Conclusion}

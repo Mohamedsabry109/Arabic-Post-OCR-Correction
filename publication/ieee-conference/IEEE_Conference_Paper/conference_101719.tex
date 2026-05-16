@@ -839,6 +839,22 @@ document images with OCR text for handwritten text recovery, and develop
 richer retrieval methods (dense embedding, larger training pools) to unlock
 the full potential of RAG-based post-OCR correction.
 
+An extended evaluation is under way that adds four full-page Arabic document
+datasets---KHATT-Paragraph (449 multi-line handwritten paragraphs), Yarmouk
+(200 printed encyclopedic pages), Muharaf (116 historical handwritten letters),
+and a Historical Manuscripts set (40 pages from eight books)---for a total of
+13 evaluation datasets. A $2{\times}2{\times}2$ factorial experiment on all 13
+datasets systematically ablates prompt conservatism (aggressive vs.\ conservative
+framing), example selection (generic vs.\ hand-picked domain-matched examples),
+and retrieval strategy (zero-shot vs.\ BM25-RAG). This experiment tests whether
+the prompt strategies established on line-level typewritten and handwritten text
+generalise to full-page, historically diverse document domains, and whether a
+BM25 index built on one domain provides useful correction context in another.
+A further planned experiment will replace Qaari with Gemma4 VLM for end-to-end
+image-to-text transcription, and test correction with larger models (Qwen3-27B,
+Gemma4-27B) on RDI benchmark datasets, to assess whether post-OCR correction
+remains beneficial at higher underlying OCR quality.
+
 % -------------------------------------------------------------------------
 \section*{Acknowledgment}
 % -------------------------------------------------------------------------
