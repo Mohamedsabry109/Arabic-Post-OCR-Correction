@@ -572,13 +572,10 @@ def main() -> None:
         sampling_params = None
         logger.info("Mock backend — vLLM not loaded.")
     else:
-        # V1 engine uses UvaBuffer (cudaHostGetDevicePointer) which fails on many
-        # cloud VMs. Default to V0 unless --v1 is explicitly requested.
-        if not args.use_v1_engine:
-            os.environ.setdefault("VLLM_USE_V1", "0")
-            logger.info("Using vLLM V0 engine (pass --v1 to try V1).")
-        else:
+        if args.use_v1_engine:
             logger.info("Using vLLM V1 engine.")
+        else:
+            logger.info("Using vLLM default engine.")
 
         logger.info("Loading vLLM engine: %s ...", model_id)
         from vllm import LLM, SamplingParams  # type: ignore[import]
