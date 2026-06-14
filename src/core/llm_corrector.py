@@ -116,6 +116,22 @@ class BaseLLMCorrector(ABC):
             CorrectionResult with corrected_text always populated.
         """
 
+    def correct_batch(
+        self,
+        sample_ids: list[str],
+        ocr_texts: list[str],
+        messages_list: list[list[dict]],
+        max_retries: int = 2,
+    ) -> list[CorrectionResult]:
+        """Correct a batch of samples. Default: sequential loop over correct().
+
+        Override in subclasses for true batched GPU inference.
+        """
+        return [
+            self.correct(sid, ocr, msgs, max_retries)
+            for sid, ocr, msgs in zip(sample_ids, ocr_texts, messages_list)
+        ]
+
     @property
     @abstractmethod
     def model_name(self) -> str:
@@ -499,7 +515,7 @@ class TransformersCorrector(BaseLLMCorrector):
 
         prompt_len = input_ids.shape[1]
 
-        with torch.no_grad():
+        with torch.inference_mode():
             generate_kwargs: dict = dict(
                 input_ids=input_ids,
                 max_new_tokens=self._max_tokens,
@@ -518,6 +534,101 @@ class TransformersCorrector(BaseLLMCorrector):
 
         decoded = self._tokenizer.decode(new_token_ids[0], skip_special_tokens=True)
         return decoded, prompt_len, output_tokens
+
+    def _generate_batch(
+        self, messages_list: list[list[dict]]
+    ) -> list[tuple[str, int, int]]:
+        """Batched GPU generation — processes N samples in one model.generate() call.
+
+        Uses left-padding so all sequences end at the same position, which is
+        required for correct auto-regressive generation with decoder-only models.
+
+        Returns a list of (decoded_text, actual_prompt_token_count, output_token_count).
+        """
+        import torch
+
+        fitted = [self._fit_to_token_budget(msgs) for msgs in messages_list]
+
+        formatted = [
+            self._tokenizer.apply_chat_template(
+                msgs,
+                tokenize=False,
+                add_generation_prompt=True,
+                **self._template_extra_kwargs(),
+            )
+            for msgs in fitted
+        ]
+
+        # Left-pad: all sequences must end at the same position for batch generation
+        prev_side = self._tokenizer.padding_side
+        self._tokenizer.padding_side = "left"
+        if self._tokenizer.pad_token_id is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+            self._tokenizer.pad_token_id = self._tokenizer.eos_token_id
+
+        inputs = self._tokenizer(formatted, return_tensors="pt", padding=True, truncation=False)
+        self._tokenizer.padding_side = prev_side
+
+        device = next(self._model.parameters()).device
+        input_ids = inputs["input_ids"].to(device)
+        attention_mask = inputs["attention_mask"].to(device)
+        padded_prompt_len = input_ids.shape[1]
+
+        with torch.inference_mode():
+            output_ids = self._model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_new_tokens=self._max_tokens,
+                do_sample=True,
+                temperature=self._temperature,
+                pad_token_id=self._tokenizer.eos_token_id,
+            )
+
+        new_token_ids = output_ids[:, padded_prompt_len:]
+        n_out = new_token_ids.shape[1]
+
+        results: list[tuple[str, int, int]] = []
+        for i in range(len(messages_list)):
+            decoded = self._tokenizer.decode(new_token_ids[i], skip_special_tokens=True)
+            actual_prompt_len = int(attention_mask[i].sum().item())
+            results.append((decoded, actual_prompt_len, n_out))
+        return results
+
+    def correct_batch(
+        self,
+        sample_ids: list[str],
+        ocr_texts: list[str],
+        messages_list: list[list[dict]],
+        max_retries: int = 2,
+    ) -> list[CorrectionResult]:
+        """Correct a batch of samples with one GPU call. Falls back to sequential on error."""
+        t0 = time.monotonic()
+        try:
+            batch_out = self._generate_batch(messages_list)
+        except Exception as exc:
+            logger.warning("Batch generation failed (%s) — falling back to sequential.", exc)
+            return super().correct_batch(sample_ids, ocr_texts, messages_list, max_retries)
+
+        results: list[CorrectionResult] = []
+        for i, (decoded, prompt_tokens, output_tokens) in enumerate(batch_out):
+            sid, ocr = sample_ids[i], ocr_texts[i]
+            corrected = self._extract_corrected_text(decoded, ocr)
+            if corrected == ocr and not decoded.strip():
+                # Empty output from batch — retry this sample individually
+                logger.warning("[%s] Empty batch output — retrying individually.", sid)
+                results.append(self.correct(sid, ocr, messages_list[i], max_retries))
+            else:
+                results.append(CorrectionResult(
+                    sample_id=sid,
+                    ocr_text=ocr,
+                    corrected_text=corrected,
+                    prompt_tokens=prompt_tokens,
+                    output_tokens=output_tokens,
+                    latency_s=round(time.monotonic() - t0, 3),
+                    success=True,
+                    error=None,
+                ))
+        return results
 
     def _extract_corrected_text(self, raw_output: str, ocr_text: str) -> str:
         """Clean decoded model output into usable corrected text.

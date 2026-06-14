@@ -417,4 +417,4 @@ output:
 # ---------------------------------------------------------------------------
 processing:
   limit_per_dataset: null   # set to an integer (e.g. 50) for quick testing
-  batch_size: 1
+  batch_size: 4             # samples per GPU call; 4-8 for T4 16GB, 16-32 for A100; 1 = original sequential

@@ -37,7 +37,7 @@ tnr connect 0
 
 ```bash
 cd /root
-git clone https://github.com/YOUR_USERNAME/Arabic-Post-OCR-Correction.git
+git clone https://github.com/MohamedSabry109/Arabic-Post-OCR-Correction.git
 cd Arabic-Post-OCR-Correction
 ```
 
