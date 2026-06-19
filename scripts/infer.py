@@ -53,6 +53,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+# ---------------------------------------------------------------------------
+# Experiment 3 model registry — maps short name to (backend, HF model ID)
+# ---------------------------------------------------------------------------
+EXPERIMENT_MODELS: dict[str, dict[str, str]] = {
+    "qwen3-4b":   {"backend": "transformers", "model_id": "Qwen/Qwen3-4B-Instruct-2507"},
+    "qwen3-14b":  {"backend": "transformers", "model_id": "Qwen/Qwen3-14B-Instruct"},
+    "gemma-3-4b": {"backend": "gemma",        "model_id": "google/gemma-3-4b-it"},
+    "gemma-3-12b":{"backend": "gemma",        "model_id": "google/gemma-3-12b-it"},
+}
+
 import yaml
 from tqdm import tqdm
 
@@ -158,6 +168,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Number of samples per GPU batch (default: processing.batch_size from config). "
             "Set to 4-8 for Kaggle T4, 16-32 for A100. batch_size=1 = original sequential mode."
+        ),
+    )
+    parser.add_argument(
+        "--experiment-model", type=str, default=None, dest="experiment_model",
+        choices=list(EXPERIMENT_MODELS.keys()),
+        help=(
+            "Experiment 3 model shorthand. Sets --backend and --model automatically. "
+            "Choices: " + ", ".join(EXPERIMENT_MODELS.keys())
         ),
     )
     return parser.parse_args()
@@ -358,7 +376,13 @@ def main() -> None:
         logger.warning("Config not found at %s — using defaults.", args.config)
         config = {}
 
-    # Apply --model / --backend overrides
+    # Apply --experiment-model first (sets both backend and model_id)
+    if args.experiment_model:
+        em = EXPERIMENT_MODELS[args.experiment_model]
+        config.setdefault("model", {})["backend"]  = em["backend"]
+        config.setdefault("model", {})["name"]     = em["model_id"]
+
+    # --model / --backend can override further if explicitly given
     if args.model:
         config.setdefault("model", {})["name"] = args.model
     if args.backend:
@@ -601,6 +625,7 @@ def main() -> None:
                 out_record = {
                     "sample_id":      record["sample_id"],
                     "dataset":        record.get("dataset", ""),
+                    "ocr_source":     record.get("ocr_source", "qaari"),
                     "ocr_text":       record["ocr_text"],
                     "corrected_text": result.corrected_text,
                     "gt_text":        record.get("gt_text", ""),
