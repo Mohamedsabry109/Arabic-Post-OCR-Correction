@@ -240,6 +240,14 @@ class TransformersCorrector(BaseLLMCorrector):
         self._model = None
         self._load_model()
 
+    def _model_torch_dtype(self, torch):
+        """Return the torch dtype to load the model weights in.
+
+        Default float16. Subclasses (e.g. Gemma) override to bfloat16 to avoid
+        fp16 activation overflow that triggers CUDA device-side asserts.
+        """
+        return torch.float16
+
     def _load_model(self) -> None:
         """Load tokenizer and model into memory. Called once in __init__."""
         try:
@@ -257,6 +265,8 @@ class TransformersCorrector(BaseLLMCorrector):
             trust_remote_code=True,
         )
 
+        model_dtype = self._model_torch_dtype(torch)
+
         if self._quantize_4bit:
             logger.info("Loading model with 4-bit quantization (bitsandbytes)...")
             try:
@@ -264,7 +274,7 @@ class TransformersCorrector(BaseLLMCorrector):
                 bnb_config = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_compute_dtype=model_dtype,
                 )
                 self._model = AutoModelForCausalLM.from_pretrained(
                     self._model_id,
@@ -278,11 +288,13 @@ class TransformersCorrector(BaseLLMCorrector):
                     "Install with: pip install bitsandbytes"
                 ) from exc
         else:
-            import torch as _torch
-            logger.info("Loading model: %s  (device=%s)", self._model_id, self._device)
+            logger.info(
+                "Loading model: %s  (device=%s, dtype=%s)",
+                self._model_id, self._device, model_dtype,
+            )
             self._model = AutoModelForCausalLM.from_pretrained(
                 self._model_id,
-                torch_dtype=_torch.float16,
+                torch_dtype=model_dtype,
                 device_map=self._device,
                 trust_remote_code=True,
             )
@@ -689,6 +701,11 @@ class Gemma4Corrector(TransformersCorrector):
 
     def _template_extra_kwargs(self) -> dict:
         return {}
+
+    def _model_torch_dtype(self, torch):
+        """Gemma must run in bfloat16 — fp16 overflows and triggers CUDA
+        device-side asserts during generation."""
+        return torch.bfloat16
 
 
 # ---------------------------------------------------------------------------
