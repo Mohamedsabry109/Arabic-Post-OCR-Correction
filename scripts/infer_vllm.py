@@ -59,7 +59,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 # ---------------------------------------------------------------------------
 EXPERIMENT_MODELS: dict[str, dict[str, str]] = {
     "qwen3-4b":    {"backend": "transformers", "model_id": "Qwen/Qwen3-4B-Instruct-2507"},
-    "qwen3-14b":   {"backend": "transformers", "model_id": "Qwen/Qwen3-14B-Instruct"},
+    "qwen3-14b":   {"backend": "transformers", "model_id": "Qwen/Qwen3-14B-Instruct-2507"},
     "gemma-3-4b":  {"backend": "gemma",        "model_id": "google/gemma-3-4b-it"},
     "gemma-3-12b": {"backend": "gemma",        "model_id": "google/gemma-3-12b-it"},
 }
