@@ -54,6 +54,16 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
+# ---------------------------------------------------------------------------
+# Experiment 3 model registry
+# ---------------------------------------------------------------------------
+EXPERIMENT_MODELS: dict[str, dict[str, str]] = {
+    "qwen3-4b":    {"backend": "transformers", "model_id": "Qwen/Qwen3-4B-Instruct-2507"},
+    "qwen3-14b":   {"backend": "transformers", "model_id": "Qwen/Qwen3-14B-Instruct"},
+    "gemma-3-4b":  {"backend": "gemma",        "model_id": "google/gemma-3-4b-it"},
+    "gemma-3-12b": {"backend": "gemma",        "model_id": "google/gemma-3-12b-it"},
+}
+
 from src.core.prompt_builder import PromptBuilder
 
 logging.basicConfig(
@@ -358,6 +368,14 @@ def parse_args() -> argparse.Namespace:
             "V0 engine is used by default for compatibility."
         ),
     )
+    p.add_argument(
+        "--experiment-model", type=str, default=None, dest="experiment_model",
+        choices=list(EXPERIMENT_MODELS.keys()),
+        help=(
+            "Experiment 3 model shorthand — sets --backend and --model automatically. "
+            "Choices: " + ", ".join(EXPERIMENT_MODELS.keys())
+        ),
+    )
     return p.parse_args()
 
 
@@ -376,6 +394,11 @@ def main() -> None:
         logger.warning("Config not found at %s — using defaults.", args.config)
         config = {}
 
+    # --experiment-model sets both backend and model_id; --model/--backend can override further
+    if args.experiment_model:
+        em = EXPERIMENT_MODELS[args.experiment_model]
+        config.setdefault("model", {})["backend"] = em["backend"]
+        config.setdefault("model", {})["name"]    = em["model_id"]
     if args.model:
         config.setdefault("model", {})["name"] = args.model
     if args.backend:
@@ -667,6 +690,7 @@ def main() -> None:
                 out_record = {
                     "sample_id":      record["sample_id"],
                     "dataset":        record.get("dataset", ""),
+                    "ocr_source":     record.get("ocr_source", "qaari"),
                     "ocr_text":       record["ocr_text"],
                     "corrected_text": corrected,
                     "gt_text":        record.get("gt_text", ""),

@@ -548,13 +548,13 @@ def _print_commands(results_dir: Path) -> None:
                 output_file = out / f"{model}_{group}_{ocr_src}_{trial}.jsonl"
                 _p(f"\n# Run {run_no:02d}: {model} | {group}/{ocr_src} | {trial}")
                 _p(
-                    f"python scripts/infer.py \\\n"
+                    f"python scripts/infer_vllm.py \\\n"
                     f"    --input  {input_file} \\\n"
                     f"    --output {output_file} \\\n"
                     f"    --system-prompt {prompt} \\\n"
                     f"    --experiment-model {model} \\\n"
-                    f"    --batch-size 32 \\\n"
-                    f"    --hf-repo YOUR_HF_REPO --hf-token $HF_TOKEN"
+                    f"    --chunk-size 500 \\\n"
+                    f"    --enforce-eager"
                 )
                 run_no += 1
 
