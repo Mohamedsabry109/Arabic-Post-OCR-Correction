@@ -3,12 +3,12 @@
 \contentsline {chapter}{Dedication}{\if@rlmain \I {2}\else \textLR {2}\fi }{table.caption.1}%
 \contentsline {chapter}{Acknowledgements}{\if@rlmain \I {3}\else \textLR {3}\fi }{table.caption.1}%
 \contentsline {chapter}{Table of Contents}{\if@rlmain \I {4}\else \textLR {4}\fi }{table.caption.1}%
-\contentsline {chapter}{List of Tables}{\if@rlmain \I {5}\else \textLR {5}\fi }{table.caption.1}%
-\contentsline {chapter}{List of Figures}{\if@rlmain \I {6}\else \textLR {6}\fi }{table.caption.1}%
-\contentsline {chapter}{List of Symbols and Abbreviations}{\if@rlmain \I {7}\else \textLR {7}\fi }{table.caption.1}%
-\contentsline {chapter}{List of Publications}{\if@rlmain \I {9}\else \textLR {9}\fi }{table.0.1}%
-\contentsline {chapter}{Abstract}{\if@rlmain \I {10}\else \textLR {10}\fi }{Item.1}%
-\contentsline {chapter}{\numberline {1}\caseupper {Introduction}}{\if@rlmain \I {1}\else \textLR {1}\fi }{chapter.1}%
+\contentsline {chapter}{List of Tables}{\if@rlmain \I {12}\else \textLR {12}\fi }{table.caption.1}%
+\contentsline {chapter}{List of Figures}{\if@rlmain \I {16}\else \textLR {16}\fi }{table.caption.1}%
+\contentsline {chapter}{List of Symbols and Abbreviations}{\if@rlmain \I {17}\else \textLR {17}\fi }{table.caption.1}%
+\contentsline {chapter}{List of Publications}{\if@rlmain \I {19}\else \textLR {19}\fi }{table.0.1}%
+\contentsline {chapter}{Abstract}{\if@rlmain \I {20}\else \textLR {20}\fi }{Item.1}%
+\contentsline {chapter}{\numberline {1}\caseupper {Introduction}}{\if@rlmain \I {24}\else \textLR {24}\fi }{chapter.1}%
 \contentsline {section}{\numberline {\if@rl \I {1.1}\else \textLR {1.1}\fi }The Problem with Arabic OCR}{\if@rlmain \I {1}\else \textLR {1}\fi }{section.1.1}%
 \contentsline {section}{\numberline {\if@rl \I {2.1}\else \textLR {1.2}\fi }The Open-Source vs.\ Closed-Source Gap}{\if@rlmain \I {2}\else \textLR {2}\fi }{section.1.2}%
 \contentsline {section}{\numberline {\if@rl \I {3.1}\else \textLR {1.3}\fi }Post-OCR Correction as a Text-to-Text Task}{\if@rlmain \I {4}\else \textLR {4}\fi }{section.1.3}%
@@ -177,56 +177,59 @@
 \contentsline {subsection}{\numberline {\if@rl \I {1.5.5}\else \textLR {5.5.1}\fi }Combination Results}{\if@rlmain \I {104}\else \textLR {104}\fi }{subsection.5.5.1}%
 \contentsline {subsection}{\numberline {\if@rl \I {2.5.5}\else \textLR {5.5.2}\fi }Per-Font Combination Results}{\if@rlmain \I {105}\else \textLR {105}\fi }{subsection.5.5.2}%
 \contentsline {subsection}{\numberline {\if@rl \I {3.5.5}\else \textLR {5.5.3}\fi }Ablation Results}{\if@rlmain \I {106}\else \textLR {106}\fi }{subsection.5.5.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.5.5}\else \textLR {5.5.4}\fi }Statistical Significance}{\if@rlmain \I {107}\else \textLR {107}\fi }{subsection.5.5.4}%
-\contentsline {section}{\numberline {\if@rl \I {6.5}\else \textLR {5.6}\fi }Phase 8 Results --- Retrieval-Augmented Generation}{\if@rlmain \I {108}\else \textLR {108}\fi }{section.5.6}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.5.5}\else \textLR {5.5.4}\fi }Statistical Significance}{\if@rlmain \I {106}\else \textLR {106}\fi }{subsection.5.5.4}%
+\contentsline {section}{\numberline {\if@rl \I {6.5}\else \textLR {5.6}\fi }Phase 8 Results --- Retrieval-Augmented Generation}{\if@rlmain \I {107}\else \textLR {107}\fi }{section.5.6}%
 \contentsline {section}{\numberline {\if@rl \I {7.5}\else \textLR {5.7}\fi }Summary and Final Ranking}{\if@rlmain \I {109}\else \textLR {109}\fi }{section.5.7}%
-\contentsline {section}{\numberline {\if@rl \I {8.5}\else \textLR {5.8}\fi }Experiment 2 Results --- Prompt Design Ablation on Full-Page Datasets}{\if@rlmain \I {110}\else \textLR {110}\fi }{section.5.8}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.8.5}\else \textLR {5.8.1}\fi }OCR Baselines on New Datasets}{\if@rlmain \I {110}\else \textLR {110}\fi }{subsection.5.8.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.8.5}\else \textLR {5.8.2}\fi }Trial Results on New Datasets}{\if@rlmain \I {110}\else \textLR {110}\fi }{subsection.5.8.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.8.5}\else \textLR {5.8.3}\fi }Trial Results on Established Datasets}{\if@rlmain \I {112}\else \textLR {112}\fi }{subsection.5.8.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.8.5}\else \textLR {5.8.4}\fi }Factorial Main Effects}{\if@rlmain \I {112}\else \textLR {112}\fi }{subsection.5.8.4}%
-\contentsline {chapter}{\numberline {6}\caseupper {Discussion and Conclusion}}{\if@rlmain \I {114}\else \textLR {114}\fi }{chapter.6}%
-\contentsline {section}{\numberline {\if@rl \I {1.6}\else \textLR {6.1}\fi }Revisiting the Research Questions}{\if@rlmain \I {115}\else \textLR {115}\fi }{section.6.1}%
-\contentsline {section}{\numberline {\if@rl \I {2.6}\else \textLR {6.2}\fi }The Over-Correction Threshold: A Theoretical Account}{\if@rlmain \I {120}\else \textLR {120}\fi }{section.6.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.2.6}\else \textLR {6.2.1}\fi }Formal Definition}{\if@rlmain \I {120}\else \textLR {120}\fi }{subsection.6.2.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.2.6}\else \textLR {6.2.2}\fi }Empirical Estimation}{\if@rlmain \I {121}\else \textLR {121}\fi }{subsection.6.2.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.2.6}\else \textLR {6.2.3}\fi }Why Augmentation Raises the Threshold}{\if@rlmain \I {122}\else \textLR {122}\fi }{subsection.6.2.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {4.2.6}\else \textLR {6.2.4}\fi }Connection to the Broader Literature}{\if@rlmain \I {122}\else \textLR {122}\fi }{subsection.6.2.4}%
-\contentsline {section}{\numberline {\if@rl \I {3.6}\else \textLR {6.3}\fi }Why Phase~3 and Phase~4 Combine Synergistically}{\if@rlmain \I {123}\else \textLR {123}\fi }{section.6.3}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.3.6}\else \textLR {6.3.1}\fi }Orthogonal Failure Mode Coverage}{\if@rlmain \I {123}\else \textLR {123}\fi }{subsection.6.3.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.3.6}\else \textLR {6.3.2}\fi }Quantitative Evidence of Synergy}{\if@rlmain \I {124}\else \textLR {124}\fi }{subsection.6.3.2}%
-\contentsline {section}{\numberline {\if@rl \I {4.6}\else \textLR {6.4}\fi }Why Handwritten Correction Differs}{\if@rlmain \I {124}\else \textLR {124}\fi }{section.6.4}%
-\contentsline {subsection}{\numberline {\if@rl \I {1.4.6}\else \textLR {6.4.1}\fi }The Role of Error Type}{\if@rlmain \I {124}\else \textLR {124}\fi }{subsection.6.4.1}%
-\contentsline {subsection}{\numberline {\if@rl \I {2.4.6}\else \textLR {6.4.2}\fi }Why Zero-Shot Correction Provides Limited Benefit on KHATT}{\if@rlmain \I {125}\else \textLR {125}\fi }{subsection.6.4.2}%
-\contentsline {subsection}{\numberline {\if@rl \I {3.4.6}\else \textLR {6.4.3}\fi }What Could Improve KHATT Correction}{\if@rlmain \I {125}\else \textLR {125}\fi }{subsection.6.4.3}%
-\contentsline {section}{\numberline {\if@rl \I {5.6}\else \textLR {6.5}\fi }Implications for System Design}{\if@rlmain \I {126}\else \textLR {126}\fi }{section.6.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.1}Apply correction selectively, not universally.}{\if@rlmain \I {126}\else \textLR {126}\fi }{paragraph.6.5.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.2}Use the \texttt {conf\_self} configuration as the default.}{\if@rlmain \I {126}\else \textLR {126}\fi }{paragraph.6.5.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.3}Add Phase~5 CAMeL post-processing on typewritten text only.}{\if@rlmain \I {126}\else \textLR {126}\fi }{paragraph.6.5.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.4}Compute per-font evaluation before deployment.}{\if@rlmain \I {126}\else \textLR {126}\fi }{paragraph.6.5.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.5}Recalibrate self-reflective insights for new OCR engines.}{\if@rlmain \I {127}\else \textLR {127}\fi }{paragraph.6.5.0.0.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.6}Use the aligned split design for future multi-font studies.}{\if@rlmain \I {127}\else \textLR {127}\fi }{paragraph.6.5.0.0.6}%
-\contentsline {section}{\numberline {\if@rl \I {6.6}\else \textLR {6.6}\fi }Limitations}{\if@rlmain \I {127}\else \textLR {127}\fi }{section.6.6}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.1}Single OCR engine (Qaari).}{\if@rlmain \I {127}\else \textLR {127}\fi }{paragraph.6.6.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.2}Single LLM (Qwen3-4B).}{\if@rlmain \I {127}\else \textLR {127}\fi }{paragraph.6.6.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.3}Single text content (PATS-A01).}{\if@rlmain \I {128}\else \textLR {128}\fi }{paragraph.6.6.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.4}Text-only correction.}{\if@rlmain \I {128}\else \textLR {128}\fi }{paragraph.6.6.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.5}Diacritic stripping.}{\if@rlmain \I {128}\else \textLR {128}\fi }{paragraph.6.6.0.0.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.6.6}\else \textLR {6.6.0}\fi .0.6}Morphological database coverage.}{\if@rlmain \I {128}\else \textLR {128}\fi }{paragraph.6.6.0.0.6}%
-\contentsline {section}{\numberline {\if@rl \I {7.6}\else \textLR {6.7}\fi }Future Work}{\if@rlmain \I {129}\else \textLR {129}\fi }{section.6.7}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.1}Characterise the threshold across models and engines.}{\if@rlmain \I {129}\else \textLR {129}\fi }{paragraph.6.7.0.0.1}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.2}Fine-tune for conservative OCR correction.}{\if@rlmain \I {129}\else \textLR {129}\fi }{paragraph.6.7.0.0.2}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.3}Scale to larger and Arabic-specialised models (Experiment~3).}{\if@rlmain \I {129}\else \textLR {129}\fi }{paragraph.6.7.0.0.3}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.4}Multi-modal correction for handwritten text.}{\if@rlmain \I {129}\else \textLR {129}\fi }{paragraph.6.7.0.0.4}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.5}Improved retrieval for RAG-based correction.}{\if@rlmain \I {130}\else \textLR {130}\fi }{paragraph.6.7.0.0.5}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.6}Confidence-guided selective correction.}{\if@rlmain \I {130}\else \textLR {130}\fi }{paragraph.6.7.0.0.6}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.7}Extension to dialectal Arabic.}{\if@rlmain \I {130}\else \textLR {130}\fi }{paragraph.6.7.0.0.7}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.8}Cross-engine comparison and VLM OCR (Experiment~3).}{\if@rlmain \I {131}\else \textLR {131}\fi }{paragraph.6.7.0.0.8}%
-\contentsline {paragraph}{\numberline {\if@rl \I {0.7.6}\else \textLR {6.7.0}\fi .0.9}Adversarial stress testing.}{\if@rlmain \I {131}\else \textLR {131}\fi }{paragraph.6.7.0.0.9}%
-\contentsline {section}{\numberline {\if@rl \I {8.6}\else \textLR {6.8}\fi }Conclusion}{\if@rlmain \I {132}\else \textLR {132}\fi }{section.6.8}%
+\contentsline {section}{\numberline {\if@rl \I {8.5}\else \textLR {5.8}\fi }Experiment 2 Results --- Prompt Design Study}{\if@rlmain \I {110}\else \textLR {110}\fi }{section.5.8}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.8.5}\else \textLR {5.8.1}\fi }Full-Page Dataset Results in Experiment~2}{\if@rlmain \I {111}\else \textLR {111}\fi }{subsection.5.8.1}%
+\contentsline {section}{\numberline {\if@rl \I {9.5}\else \textLR {5.9}\fi }Experiment 3 Results --- Final Multi-Model, Multi-Domain}{\if@rlmain \I {113}\else \textLR {113}\fi }{section.5.9}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.9.5}\else \textLR {5.9.1}\fi }3A: Model Comparison}{\if@rlmain \I {113}\else \textLR {113}\fi }{subsection.5.9.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.9.5}\else \textLR {5.9.2}\fi }3B: OCR Source Impact}{\if@rlmain \I {113}\else \textLR {113}\fi }{subsection.5.9.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.9.5}\else \textLR {5.9.3}\fi }3C: Generalization}{\if@rlmain \I {114}\else \textLR {114}\fi }{subsection.5.9.3}%
+\contentsline {chapter}{\numberline {6}\caseupper {Discussion and Conclusion}}{\if@rlmain \I {118}\else \textLR {118}\fi }{chapter.6}%
+\contentsline {section}{\numberline {\if@rl \I {1.6}\else \textLR {6.1}\fi }Revisiting the Research Questions}{\if@rlmain \I {119}\else \textLR {119}\fi }{section.6.1}%
+\contentsline {section}{\numberline {\if@rl \I {2.6}\else \textLR {6.2}\fi }The Over-Correction Threshold: A Theoretical Account}{\if@rlmain \I {125}\else \textLR {125}\fi }{section.6.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.2.6}\else \textLR {6.2.1}\fi }Formal Definition}{\if@rlmain \I {125}\else \textLR {125}\fi }{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.2.6}\else \textLR {6.2.2}\fi }Empirical Estimation}{\if@rlmain \I {126}\else \textLR {126}\fi }{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.2.6}\else \textLR {6.2.3}\fi }Why Augmentation Raises the Threshold}{\if@rlmain \I {126}\else \textLR {126}\fi }{subsection.6.2.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {4.2.6}\else \textLR {6.2.4}\fi }Connection to the Broader Literature}{\if@rlmain \I {127}\else \textLR {127}\fi }{subsection.6.2.4}%
+\contentsline {section}{\numberline {\if@rl \I {3.6}\else \textLR {6.3}\fi }Why Phase~3 and Phase~4 Combine Synergistically}{\if@rlmain \I {127}\else \textLR {127}\fi }{section.6.3}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.3.6}\else \textLR {6.3.1}\fi }Orthogonal Failure Mode Coverage}{\if@rlmain \I {127}\else \textLR {127}\fi }{subsection.6.3.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.3.6}\else \textLR {6.3.2}\fi }Quantitative Evidence of Synergy}{\if@rlmain \I {128}\else \textLR {128}\fi }{subsection.6.3.2}%
+\contentsline {section}{\numberline {\if@rl \I {4.6}\else \textLR {6.4}\fi }Why Handwritten Correction Differs}{\if@rlmain \I {128}\else \textLR {128}\fi }{section.6.4}%
+\contentsline {subsection}{\numberline {\if@rl \I {1.4.6}\else \textLR {6.4.1}\fi }The Role of Error Type}{\if@rlmain \I {129}\else \textLR {129}\fi }{subsection.6.4.1}%
+\contentsline {subsection}{\numberline {\if@rl \I {2.4.6}\else \textLR {6.4.2}\fi }Why Zero-Shot Correction Provides Limited Benefit on KHATT}{\if@rlmain \I {129}\else \textLR {129}\fi }{subsection.6.4.2}%
+\contentsline {subsection}{\numberline {\if@rl \I {3.4.6}\else \textLR {6.4.3}\fi }What Could Improve KHATT Correction}{\if@rlmain \I {130}\else \textLR {130}\fi }{subsection.6.4.3}%
+\contentsline {section}{\numberline {\if@rl \I {5.6}\else \textLR {6.5}\fi }Implications for System Design}{\if@rlmain \I {130}\else \textLR {130}\fi }{section.6.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.1}Apply correction selectively, not universally.}{\if@rlmain \I {130}\else \textLR {130}\fi }{paragraph.6.5.0.0.1}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.2}Use the \texttt {conf\_self} configuration as the default.}{\if@rlmain \I {130}\else \textLR {130}\fi }{paragraph.6.5.0.0.2}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.3}Add Phase~5 CAMeL post-processing on typewritten text only.}{\if@rlmain \I {131}\else \textLR {131}\fi }{paragraph.6.5.0.0.3}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.4}Compute per-font evaluation before deployment.}{\if@rlmain \I {131}\else \textLR {131}\fi }{paragraph.6.5.0.0.4}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.5}Recalibrate self-reflective insights for new OCR engines.}{\if@rlmain \I {131}\else \textLR {131}\fi }{paragraph.6.5.0.0.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.5.6}\else \textLR {6.5.0}\fi .0.6}Use the aligned split design for future multi-font studies.}{\if@rlmain \I {131}\else \textLR {131}\fi }{paragraph.6.5.0.0.6}%
+\contentsline {section}{\numberline {\if@rl \I {6.6}\else \textLR {6.6}\fi }Experiment 2: Prompt Design Study --- Findings and Implications}{\if@rlmain \I {131}\else \textLR {131}\fi }{section.6.6}%
+\contentsline {section}{\numberline {\if@rl \I {7.6}\else \textLR {6.7}\fi }Experiment 3: Final Evaluation --- Findings and Implications}{\if@rlmain \I {133}\else \textLR {133}\fi }{section.6.7}%
+\contentsline {section}{\numberline {\if@rl \I {8.6}\else \textLR {6.8}\fi }Limitations}{\if@rlmain \I {136}\else \textLR {136}\fi }{section.6.8}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.8.6}\else \textLR {6.8.0}\fi .0.1}Single OCR engine (Qaari).}{\if@rlmain \I {136}\else \textLR {136}\fi }{paragraph.6.8.0.0.1}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.8.6}\else \textLR {6.8.0}\fi .0.2}Single LLM (Qwen3-4B).}{\if@rlmain \I {136}\else \textLR {136}\fi }{paragraph.6.8.0.0.2}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.8.6}\else \textLR {6.8.0}\fi .0.3}Single text content (PATS-A01).}{\if@rlmain \I {136}\else \textLR {136}\fi }{paragraph.6.8.0.0.3}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.8.6}\else \textLR {6.8.0}\fi .0.4}Text-only correction.}{\if@rlmain \I {136}\else \textLR {136}\fi }{paragraph.6.8.0.0.4}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.8.6}\else \textLR {6.8.0}\fi .0.5}Diacritic stripping.}{\if@rlmain \I {137}\else \textLR {137}\fi }{paragraph.6.8.0.0.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.8.6}\else \textLR {6.8.0}\fi .0.6}Morphological database coverage.}{\if@rlmain \I {137}\else \textLR {137}\fi }{paragraph.6.8.0.0.6}%
+\contentsline {section}{\numberline {\if@rl \I {9.6}\else \textLR {6.9}\fi }Future Work}{\if@rlmain \I {137}\else \textLR {137}\fi }{section.6.9}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.1}Characterise the threshold across models and engines.}{\if@rlmain \I {137}\else \textLR {137}\fi }{paragraph.6.9.0.0.1}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.2}Fine-tune for conservative OCR correction.}{\if@rlmain \I {137}\else \textLR {137}\fi }{paragraph.6.9.0.0.2}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.3}Scale to larger and Arabic-specialised models (Experiment~3).}{\if@rlmain \I {138}\else \textLR {138}\fi }{paragraph.6.9.0.0.3}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.4}Multi-modal correction for handwritten text.}{\if@rlmain \I {138}\else \textLR {138}\fi }{paragraph.6.9.0.0.4}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.5}Improved retrieval for RAG-based correction.}{\if@rlmain \I {138}\else \textLR {138}\fi }{paragraph.6.9.0.0.5}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.6}Confidence-guided selective correction.}{\if@rlmain \I {138}\else \textLR {138}\fi }{paragraph.6.9.0.0.6}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.7}Extension to dialectal Arabic.}{\if@rlmain \I {139}\else \textLR {139}\fi }{paragraph.6.9.0.0.7}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.8}Cross-engine comparison and VLM OCR (Experiment~3).}{\if@rlmain \I {139}\else \textLR {139}\fi }{paragraph.6.9.0.0.8}%
+\contentsline {paragraph}{\numberline {\if@rl \I {0.9.6}\else \textLR {6.9.0}\fi .0.9}Adversarial stress testing.}{\if@rlmain \I {140}\else \textLR {140}\fi }{paragraph.6.9.0.0.9}%
+\contentsline {section}{\numberline {\if@rl \I {10.6}\else \textLR {6.10}\fi }Conclusion}{\if@rlmain \I {140}\else \textLR {140}\fi }{section.6.10}%
 \select@language {english}
-\contentsline {chapter}{\nameref {ch_references}}{\if@rlmain \I {135}\else \textLR {135}\fi }{chapter*.33}%
-\contentsline {chapter}{Appendix \numberline {A}\caseupper {Full Prompt Templates}}{\if@rlmain \I {138}\else \textLR {138}\fi }{appendix.1.A}%
-\contentsline {chapter}{Appendix \numberline {B}\caseupper {Phase 4 Self-Reflective Insights}}{\if@rlmain \I {144}\else \textLR {144}\fi }{appendix.1.B}%
-\contentsline {chapter}{Appendix \numberline {C}\caseupper {Configuration Files}}{\if@rlmain \I {148}\else \textLR {148}\fi }{appendix.1.C}%
-\contentsline {chapter}{Appendix \numberline {D}\caseupper {PATS-A01 Error Examples}}{\if@rlmain \I {153}\else \textLR {153}\fi }{appendix.1.D}%
+\contentsline {chapter}{\nameref {ch_references}}{\if@rlmain \I {143}\else \textLR {143}\fi }{chapter*.36}%
+\contentsline {chapter}{Appendix \numberline {A}\caseupper {Full Prompt Templates}}{\if@rlmain \I {146}\else \textLR {146}\fi }{appendix.1.A}%
+\contentsline {chapter}{Appendix \numberline {B}\caseupper {Phase 4 Self-Reflective Insights}}{\if@rlmain \I {152}\else \textLR {152}\fi }{appendix.1.B}%
+\contentsline {chapter}{Appendix \numberline {C}\caseupper {Configuration Files}}{\if@rlmain \I {156}\else \textLR {156}\fi }{appendix.1.C}%
+\contentsline {chapter}{Appendix \numberline {D}\caseupper {PATS-A01 Error Examples}}{\if@rlmain \I {161}\else \textLR {161}\fi }{appendix.1.D}%

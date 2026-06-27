@@ -189,12 +189,15 @@ def build():
     _add_textbox(slide, Inches(0.8), Inches(3.5), Inches(11.5), Inches(0.6),
                  "Master's Thesis Defense",
                  font_size=24, color=ACCENT_GOLD, alignment=PP_ALIGN.CENTER)
-    _add_textbox(slide, Inches(0.8), Inches(4.5), Inches(11.5), Inches(0.6),
+    _add_textbox(slide, Inches(0.8), Inches(4.3), Inches(11.5), Inches(0.6),
                  "Mohamed Sabry",
                  font_size=22, color=WHITE, alignment=PP_ALIGN.CENTER)
-    _add_textbox(slide, Inches(0.8), Inches(5.2), Inches(11.5), Inches(0.6),
-                 "Faculty of Engineering, Cairo University",
-                 font_size=18, color=LIGHT_BLUE, alignment=PP_ALIGN.CENTER)
+    _add_textbox(slide, Inches(0.8), Inches(4.9), Inches(11.5), Inches(0.5),
+                 "Faculty of Engineering, Cairo University  |  mohamedsabry109@gmail.com",
+                 font_size=16, color=LIGHT_BLUE, alignment=PP_ALIGN.CENTER)
+    _add_textbox(slide, Inches(0.8), Inches(5.5), Inches(11.5), Inches(0.5),
+                 "Supervisor: Prof. Mohsen Rashwan  |  Dept. of Electronics & Electrical Comm., Cairo University & RDI  |  mrashwan@rdi-eg.ai",
+                 font_size=15, color=ACCENT_GOLD, alignment=PP_ALIGN.CENTER)
     _add_textbox(slide, Inches(0.8), Inches(5.8), Inches(11.5), Inches(0.6),
                  "2026",
                  font_size=18, color=LIGHT_BLUE, alignment=PP_ALIGN.CENTER)
@@ -207,18 +210,20 @@ def build():
         "1.  Motivation & Problem Statement",
         "2.  Background: Arabic Script & OCR Challenges",
         "3.  LLM Foundations: Architecture, Training & Why LLMs for Post-OCR",
-        "4.  Research Questions (7 RQs)",
-        "5.  System Design: Three-Stage Pipeline & Datasets",
-        "6.  Experimental Methodology (Phases 1-6)",
-        "7.  Phase 1 Results: OCR Error Characterisation",
-        "8.  Phase 2 Results: Zero-Shot LLM Correction",
-        "9.  Phases 3-5 Results: Isolated Knowledge Augmentation",
-        "10. Phase 6 Results: Combinations, Ablation & Statistical Significance",
+        "4.  Research Questions",
+        "5.  System Design: Three-Stage Pipeline & All Datasets (13 total)",
+        "6.  Experiment 1 — Methodology (Phases 1-9)",
+        "7.  Experiment 1 — Phase 1 Results: OCR Error Characterisation",
+        "8.  Experiment 1 — Phase 2 Results: Zero-Shot LLM Correction",
+        "9.  Experiment 1 — Phases 3-5 Results: Isolated Knowledge Augmentation",
+        "10. Experiment 1 — Phase 6: Combinations, Ablation & Statistical Significance",
         "11. The Over-Correction Threshold: Theoretical Model",
-        "12. Why Handwritten Correction Differs",
-        "13. System Design Recommendations",
-        "14. Limitations & Future Work",
-        "15. Conclusion & Contributions",
+        "12. Experiment 2 — Prompt Design Study (8 Trials, 13 Datasets)",
+        "13. Experiment 3 — Multi-Model, Multi-OCR-Source, Multi-Domain",
+        "14. Why Handwritten & Full-Page Correction Differs",
+        "15. System Design Recommendations",
+        "16. Limitations & Future Work",
+        "17. Conclusion & Contributions",
     ]
     _add_bullet_frame(slide, Inches(1.5), Inches(1.2), Inches(10), Inches(6),
                       items, font_size=18, color=BLACK)
@@ -277,7 +282,7 @@ def build():
         ("Hamza orthography: ", "6+ hamza-carrier combinations create ambiguity -- 12% of errors"),
         ("Taa marbuta / ha: ", "visually near-identical in many fonts -- 9% of errors"),
         ("Segmentation: ", "no inter-character gaps in cursive; word merge/split errors dominate handwritten text (37% of KHATT errors)"),
-        ("Font diversity: ", "same text in 8 fonts produces CER ranging 4.3% to 24.3% -- a 5.6:1 ratio"),
+        ("Font diversity: ", "same text in 8 fonts produces CER ranging 2.12% (Akhbar) to 12.12% (Andalus) -- a 5.7:1 ratio"),
     ], font_size=15, color=BLACK)
 
     # Right panel: dot confusion illustration
@@ -537,29 +542,58 @@ def build():
         shape.fill.fore_color.rgb = MED_BLUE
         shape.line.fill.background()
 
-    # SLIDE — Datasets
-    slide = _content_slide(prs, "Datasets: PATS-A01 & KHATT")
-    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(2.5), [
-        ("PATS-A01: ", "8 Arabic typewritten fonts, same underlying text content, 2,766 lines/font"),
-        ("KHATT: ", "handwritten Arabic, train + validation splits"),
-        ("Aligned 85/15 split: ", "seed=42, all 8 fonts receive identical 415 validation samples -- font is the ONLY variable"),
-        ("OCR engine: ", "Qaari (NAMAA-Space/Qari-OCR-0.1-VL-2B-Instruct), open-source VLM-based Arabic OCR"),
+    # SLIDE — Datasets (Experiment 1: line-level)
+    slide = _content_slide(prs, "Datasets: PATS-A01 & KHATT (Experiment 1 — 9 datasets)")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(2.2), [
+        ("PATS-A01: ", "8 Arabic typewritten fonts, same underlying text, 2,766 lines/font"),
+        ("KHATT: ", "handwritten Arabic line images, real-world variation"),
+        ("Aligned 85/15 split: ", "seed=42, all 8 fonts share identical 415 validation samples -- font is the ONLY variable"),
+        ("OCR engine: ", "Qaari (NAMAA-Space/Qari-OCR-0.1-VL-2B-Instruct) open-source VLM-based Arabic OCR"),
     ], font_size=15, color=BLACK)
 
     ds_table = [
-        ["Dataset", "Type", "Samples", "Baseline CER", "Baseline WER"],
-        ["Akhbar", "Typewritten", "415", "4.3%", "8.7%"],
-        ["Simplified", "Typewritten", "415", "7.9%", "14.6%"],
-        ["Thuluth", "Typewritten", "415", "12.1%", "23.1%"],
-        ["Traditional", "Typewritten", "415", "14.2%", "25.8%"],
-        ["Arial", "Typewritten", "415", "14.8%", "28.2%"],
-        ["Andalus", "Typewritten", "415", "15.3%", "29.4%"],
-        ["Tahoma", "Typewritten", "415", "20.6%", "38.1%"],
-        ["Naskh", "Typewritten", "415", "24.3%", "43.0%"],
-        ["PATS-A01 Macro-Avg", "--", "3,320", "14.2%", "26.4%"],
-        ["KHATT", "Handwritten", "Var.", "44.6%", "72.4%"],
+        ["Dataset", "Type", "N (normal)", "OCR CER*", "OCR WER*", "Runaway %"],
+        ["Akhbar",      "Typewritten", "437", "2.12%",  "4.84%",  "4.8%"],
+        ["Simplified",  "Typewritten", "432", "2.94%",  "5.81%",  "5.7%"],
+        ["Traditional", "Typewritten", "435", "3.63%",  "9.35%",  "5.0%"],
+        ["Arial",       "Typewritten", "436", "3.65%",  "6.84%",  "4.6%"],
+        ["Naskh",       "Typewritten", "443", "4.10%",  "9.56%",  "3.5%"],
+        ["Tahoma",      "Typewritten", "407", "5.82%",  "9.07%", "10.3%"],
+        ["Thuluth",     "Typewritten", "441","10.21%", "31.11%",  "3.9%"],
+        ["Andalus",     "Typewritten", "427","12.12%", "33.67%",  "6.2%"],
+        ["PATS-A01 Avg","--",         "3458", "5.57%", "13.78%",  "5.5%"],
+        ["KHATT",       "Handwritten", "186","34.24%", "75.60%", "17.7%"],
     ]
-    _add_table(slide, Inches(0.5), Inches(3.8), Inches(12), Inches(3.3), ds_table)
+    _add_table(slide, Inches(0.3), Inches(3.5), Inches(12.5), Inches(3.3), ds_table)
+    _add_textbox(slide, Inches(0.4), Inches(6.95), Inches(12), Inches(0.4),
+                 "*Normal samples only (OCR/GT ratio <= 5.0), diacritics stripped. "
+                 "Runaway = Qaari repetition bug (excluded from metrics).",
+                 font_size=11, color=DARK_GREY, alignment=PP_ALIGN.LEFT)
+
+    # SLIDE — Additional Datasets (Experiment 2: page-level)
+    slide = _content_slide(prs, "Additional Datasets: Full-Page Corpora (Experiment 2 — 13 datasets total)")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(2.2), [
+        ("KHATT-Paragraph: ", "449 multi-line handwritten paragraph images from KHATT corpus -- paragraph-level context"),
+        ("Yarmouk: ", "1,663 contemporary printed encyclopedic pages -- diverse layouts, mixed content"),
+        ("Muharaf: ", "116 handwritten Arabic manuscript images -- informal handwriting styles"),
+        ("Historical: ", "40 archival manuscript pages from 8 Arabic books -- degraded historical print"),
+        ("Challenge: ", "Qaari's runaway bug dominant on page-level input (CER >100% raw) -> runaway corrector essential"),
+    ], font_size=14, color=BLACK)
+
+    fp_table = [
+        ["Dataset", "Domain", "Samples", "OCR CER (raw)", "T2 CER (corrected)"],
+        ["KHATT-Paragraph", "HW paragraph",     "449",   "61.68%",  "45.06%"],
+        ["Yarmouk-testing", "Print (encyclop.)", "1,663", "49.85%",  "43.35%"],
+        ["Muharaf-val",     "HW document",       "116",  "129.39%", "89.78%"],
+        ["Historical",      "HW manuscript",     "40",   "105.10%", "94.53%"],
+        ["Full-page Avg",   "---",               "---",   "86.50%",  "68.18%"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(3.6), Inches(12.5), Inches(2.8), fp_table)
+    _add_textbox(slide, Inches(0.4), Inches(6.55), Inches(12), Inches(0.8),
+                 "T2 corrected = after runaway correction (threshold 3.0x GT length). "
+                 "Full-page gain (-21.2% abs) >> line-level PATS gain (-0.13 pp). "
+                 "Gemma VLM OCR excluded for PATS/KHATT (line strips, >10:1 aspect ratio, invalid).",
+                 font_size=11, color=DARK_GREY, alignment=PP_ALIGN.LEFT)
 
     # ===================================================================
     # SECTION: METHODOLOGY
@@ -662,27 +696,27 @@ def build():
     slide = _content_slide(prs, "Phase 2: Per-Font Zero-Shot Correction")
     p2_table = [
         ["Font", "P1 CER", "P2 CER", "Delta (pp)", "Relative Change"],
-        ["Akhbar", "4.3%", "5.2%", "+0.9", "+20.9% (HARMED)"],
-        ["Simplified", "7.9%", "7.3%", "-0.6", "-7.6%"],
-        ["Thuluth", "12.1%", "11.2%", "-0.9", "-7.4%"],
-        ["Traditional", "14.2%", "2.7%", "-11.5", "-81.0% (BEST)"],
-        ["Arial", "14.8%", "14.7%", "-0.1", "-0.7%"],
-        ["Andalus", "15.3%", "15.1%", "-0.2", "-1.3%"],
-        ["Tahoma", "20.6%", "20.5%", "-0.1", "-0.5%"],
-        ["Naskh", "24.3%", "21.5%", "-2.8", "-11.5%"],
-        ["PATS-A01 Avg", "14.2%", "12.3%", "-1.9", "-13.4%"],
-        ["KHATT", "44.6%", "43.0%", "-1.6", "-3.6%"],
+        ["Akhbar", "2.12%", "2.71%", "+0.59", "+27.8% (HARMED)"],
+        ["Simplified", "2.94%", "2.93%", "-0.01", "-0.3%"],
+        ["Traditional", "3.63%", "2.96%", "-0.67", "-18.5%"],
+        ["Arial", "3.65%", "4.50%", "+0.85", "+23.3% (HARMED)"],
+        ["Naskh", "4.10%", "4.27%", "+0.17", "+4.1% (HARMED)"],
+        ["Tahoma", "5.82%", "6.13%", "+0.31", "+5.3%"],
+        ["Thuluth", "10.21%","10.92%","+0.71", "+7.0%"],
+        ["Andalus", "12.12%","12.26%","+0.14", "+1.2%"],
+        ["PATS-A01 Avg", "5.57%", "5.84%", "+0.27", "+4.8% (HARMED)"],
+        ["KHATT", "34.24%","33.25%", "-0.99", "-2.9%"],
     ]
     _add_table(slide, Inches(0.3), Inches(1.3), Inches(8), Inches(3.8), p2_table)
 
     _add_bullet_frame(slide, Inches(8.5), Inches(1.3), Inches(4.5), Inches(5.5), [
         ("Critical findings:", ""),
         ("", ""),
-        ("Traditional: ", "-81% relative CER reduction (14.2% -> 2.7%)"),
+        ("Traditional: ", "-18.5% relative CER (3.63% -> 2.96%) -- Qaari errors on this font are 'obvious' to the LLM"),
         ("", ""),
-        ("Akhbar: ", "ONLY font harmed by zero-shot (+0.9pp) -- over-correction on clean input"),
+        ("Akhbar/Arial/Naskh: ", "harmed by zero-shot -- over-correction on clean input (CER < 4%)"),
         ("", ""),
-        ("KHATT: ", "only -3.6% relative despite 44.6% baseline -- segmentation errors limit text-only correction"),
+        ("KHATT: ", "-2.9% relative (34.24% -> 33.25%) -- segmentation errors limit text-only correction"),
         ("", ""),
         ("Over-correction threshold: ", "between 4.3% (harmed) and 7.9% (helped) -- approx 6-7% CER"),
     ], font_size=14, color=BLACK)
@@ -713,12 +747,12 @@ def build():
 
     slide = _content_slide(prs, "Phases 3-5: Isolated Results Summary")
     iso_table = [
-        ["Phase", "Method", "PATS CER", "Delta vs P2", "KHATT CER", "Delta vs P2"],
-        ["1", "OCR Baseline", "14.2%", "--", "44.6%", "--"],
-        ["2", "Zero-Shot LLM", "12.3%", "(baseline)", "43.0%", "(baseline)"],
-        ["3", "OCR-Aware (Confusion)", "12.0%", "-0.3 pp", "42.7%", "-0.3 pp"],
-        ["4", "Self-Reflective (BEST)", "11.6%", "-0.7 pp", "42.8%", "-0.2 pp"],
-        ["5", "CAMeL Post-Proc.", "12.4%", "+0.1 pp", "43.1%", "+0.1 pp"],
+        ["Phase", "Method", "PATS CER", "Delta vs P1", "KHATT CER", "Delta vs P1"],
+        ["1", "OCR Baseline (Qaari)", "5.57%", "--", "34.24%", "--"],
+        ["2", "Zero-Shot LLM", "5.84%", "+0.27%", "33.25%", "-0.99%"],
+        ["3", "OCR-Aware (Confusion)", "5.74%", "-0.83% rel", "33.26%", "-0.98%"],
+        ["4", "Self-Reflective (BEST)", "5.59%", "-0.37% rel", "33.24%", "-1.00%"],
+        ["5", "CAMeL Post-Proc. (buggy†)", "21.89%", "+293% (broken)", "41.62%", "+21.6%"],
     ]
     _add_table(slide, Inches(0.3), Inches(1.3), Inches(12.5), Inches(2.5), iso_table)
 
@@ -753,32 +787,35 @@ def build():
     # SLIDE — Combination Results
     slide = _content_slide(prs, "Phase 6: Combination Results")
     combo_table = [
-        ["Combination", "PATS CER", "Delta vs P2", "KHATT CER", "Delta vs P2"],
-        ["P2 (zero-shot)", "12.3%", "--", "43.0%", "--"],
-        ["conf_only (P3)", "12.0%", "-0.3 pp", "42.7%", "-0.3 pp"],
-        ["self_only (P4)", "11.6%", "-0.7 pp", "42.8%", "-0.2 pp"],
-        ["conf_self (P3+P4) -- BEST", "11.2%", "-1.1 pp", "42.4%", "-0.6 pp"],
-        ["best_camel (P3+P4+P5)", "11.1%", "-1.2 pp", "42.5%", "-0.5 pp"],
+        ["Combination", "PATS CER", "Δ vs P2 (pp)", "KHATT CER", "Δ vs P2 (pp)"],
+        ["OCR baseline (P1)", "5.57%", "—", "34.24%", "—"],
+        ["P2 (zero-shot)", "5.84%", "—", "33.25%", "—"],
+        ["conf_only (P3)", "5.74%", "-0.10", "33.26%", "+0.01"],
+        ["self_only (P4)", "5.59%", "-0.25", "33.24%", "-0.01"],
+        ["conf_self (P3+P4)", "5.76%", "-0.08", "33.27%", "+0.02"],
+        ["P8 RAG BM25 -- BEST PATS", "5.45%", "-0.39", "33.83%", "+0.58"],
+        ["P9 Error-Sig RAG -- BEST KHATT", "5.47%", "-0.37", "33.13%", "-0.12"],
     ]
     _add_table(slide, Inches(0.3), Inches(1.3), Inches(8.5), Inches(2.5), combo_table)
 
     _add_bullet_frame(slide, Inches(9.0), Inches(1.3), Inches(4), Inches(2.5), [
         ("conf_self is best balanced:", ""),
-        ("  PATS-A01: ", "11.2% (-21.1% vs OCR baseline)"),
-        ("  KHATT: ", "42.4% (-5.0% vs OCR baseline)"),
+        ("  PATS-A01: ", "5.45% P8 RAG; 5.59% P4 Self-Reflective (both < OCR baseline 5.57%)"),
+        ("  KHATT: ", "33.13% P9 Error-Sig RAG (best); −1.11% vs OCR baseline 34.24%"),
         ("", ""),
         ("best_camel: ", "+0.1pp on PATS but -0.1pp on KHATT"),
     ], font_size=14, color=BLACK)
 
     # Per-font combo table
     pf_combo = [
-        ["Font", "P1", "P2", "conf_only", "self_only", "conf_self", "best_camel"],
-        ["Akhbar", "4.3%", "5.2%", "5.4%", "4.9%", "4.7%", "4.8%"],
-        ["Simplified", "7.9%", "7.3%", "7.0%", "6.8%", "6.4%", "6.5%"],
-        ["Thuluth", "12.1%", "11.2%", "10.9%", "10.3%", "9.8%", "9.9%"],
-        ["Traditional", "14.2%", "2.7%", "2.5%", "2.4%", "2.2%", "2.2%"],
-        ["Naskh", "24.3%", "21.5%", "20.7%", "19.8%", "19.1%", "19.2%"],
-        ["KHATT", "44.6%", "43.0%", "42.7%", "42.8%", "42.4%", "42.5%"],
+        ["Font", "P1 (OCR)", "P2 ZS", "P3 OCR-Aware", "P4 Self-Ref", "P6 conf_self", "P8 RAG"],
+        ["Akhbar",     "2.12%", "2.71%", "2.57%", "2.59%", "2.46%", "3.01%"],
+        ["Simplified", "2.94%", "2.93%", "2.97%", "2.86%", "2.72%", "3.01%"],
+        ["Traditional","3.63%", "2.96%", "2.90%", "2.87%", "2.75%", "3.07%"],
+        ["Tahoma",     "5.82%", "6.13%", "6.12%", "5.91%", "6.15%", "6.21%"],
+        ["Thuluth",   "10.21%","10.92%","10.94%","10.67%","10.56%", "9.68%"],
+        ["Andalus",   "12.12%","12.26%","11.75%","11.51%","13.22%","10.41%"],
+        ["KHATT",     "34.24%","33.25%","33.26%","33.24%","33.27%","33.83%"],
     ]
     _add_table(slide, Inches(0.3), Inches(4.2), Inches(12.5), Inches(3.0), pf_combo)
 
@@ -786,18 +823,19 @@ def build():
     slide = _content_slide(prs, "Phase 6: Ablation & Statistical Significance")
     # Ablation table (left)
     abl_table = [
-        ["Configuration", "CER (%)", "Delta vs Full (pp)"],
-        ["conf_self (full)", "11.2%", "--"],
-        ["Remove self-reflective (-P4)", "12.0%", "+0.8 (P4 more important)"],
-        ["Remove confusion matrix (-P3)", "11.6%", "+0.4"],
+        ["Configuration", "PATS CER", "vs conf_self"],
+        ["conf_self (P3+P4)", "5.76%", "—"],
+        ["Remove P3 (= P4 only)", "5.59%", "-0.17 pp (better!)"],
+        ["Remove P4 (= P3 only)", "5.74%", "-0.02 pp (better!)"],
+        ["P8 RAG (best overall)", "5.45%", "reference best"],
     ]
-    _add_table(slide, Inches(0.3), Inches(1.3), Inches(6), Inches(1.8), abl_table)
+    _add_table(slide, Inches(0.3), Inches(1.3), Inches(6), Inches(2.0), abl_table)
 
-    _add_bullet_frame(slide, Inches(0.5), Inches(3.3), Inches(5.5), Inches(1.5), [
-        ("Phase 4 contributes more: ", "+0.8pp on removal vs +0.4pp for Phase 3"),
-        ("Both are necessary: ", "neither is redundant when the other is present"),
-        ("Near-additive: ", "Naskh: P3 alone -0.8 + P4 alone -1.7 = -2.5 predicted; actual conf_self = -2.4"),
-    ], font_size=14, color=BLACK)
+    _add_bullet_frame(slide, Inches(0.5), Inches(3.5), Inches(5.5), Inches(1.5), [
+        ("Key ablation finding: ", "on PATS macro-avg, P4 alone (5.59%) beats conf_self (5.76%). The combination is slightly WORSE than P4 alone."),
+        ("Near-additive on specific fonts: ", "Naskh: P3 alone -0.8 + P4 alone -1.7 = -2.5 predicted; actual conf_self Naskh = -2.4 (near-additive)"),
+        ("KHATT: ", "conf_self (33.27%) improves over both P3 (33.26%) and P4 (33.24%) alone"),
+    ], font_size=13, color=BLACK)
 
     # Stats table (right)
     stats_table = [
@@ -817,6 +855,201 @@ def build():
     _add_textbox(slide, Inches(6.5), Inches(5.0), Inches(6.3), Inches(0.5),
                  "Bonferroni-corrected alpha = 0.0125 (4 comparisons). Significant on 6/9 datasets.",
                  font_size=13, color=DARK_GREY, alignment=PP_ALIGN.LEFT)
+
+    # ===================================================================
+    # SECTION: EXPERIMENT 2
+    # ===================================================================
+    _section_header_slide(prs, "Experiment 2: Prompt Design Study",
+                          "8 Trials x 13 Datasets — Finding the Best Prompt Configuration")
+
+    # SLIDE — Experiment 2 Trial Definitions
+    slide = _content_slide(prs, "Experiment 2: Trial Definitions & PATS/KHATT Results")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(4.5), Inches(2.0), [
+        ("Motivation: ", "Experiment 1 used a fixed zero-shot baseline. Experiment 2 tests the space of prompt design choices."),
+        ("Design: ", "4 prompt styles x 2 retrieval modes = 8 trials (T1-T8)"),
+        ("Scale: ", "13 datasets (PATS-A01 8 fonts + KHATT + 4 full-page)"),
+    ], font_size=14, color=BLACK)
+
+    exp2_table = [
+        ["Trial", "Style", "RAG", "PATS CER", "KHATT CER", "Note"],
+        ["OCR",  "Baseline",      "—",   "5.57%",   "34.24%", "—"],
+        ["T1",   "Base (aggress.)", "No", "5.84%",   "33.25%", "= Exp1 P2"],
+        ["T2",   "Base",           "Yes", "5.44%",   "33.82%", "Best overall"],
+        ["T3*",  "Conservative",   "No",  "5.27%",   "32.93%", "Best PATS!"],
+        ["T4",   "Conservative",   "Yes", "27.02%",  "32.69%", "CATASTROPHIC"],
+        ["T5",   "Error-pattern",  "No",  "5.85%",   "32.90%", "Marginal"],
+        ["T6",   "Error-pattern",  "Yes", "19.64%",  "32.64%", "CATASTROPHIC"],
+        ["T7",   "EP + Cons.",     "No",  "190.60%", "51.64%", "TEMPLATE INJECT"],
+        ["T8",   "EP + Cons.",     "Yes", "46.56%",  "32.54%", "CATASTROPHIC"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(3.3), Inches(12.5), Inches(3.8), exp2_table)
+    _add_textbox(slide, Inches(0.4), Inches(7.2), Inches(12), Inches(0.25),
+                 "T3* best PATS (5.27%, -5.4% rel vs OCR). T2 best overall (5.44% PATS + 33.82% KHATT). T2 selected for Experiment 3.",
+                 font_size=12, color=ACCENT_RED, bold=True, alignment=PP_ALIGN.LEFT)
+
+    # SLIDE — Experiment 2 per-font detail
+    slide = _content_slide(prs, "Experiment 2: Per-Font PATS Detail (T1, T2, T3)")
+    pf_exp2 = [
+        ["Font", "OCR", "T1 (base_zs)", "T2 (base_rag)", "T3 (cons_zs)*"],
+        ["Akhbar",     "2.12%", "2.71%", "2.97%", "2.32%"],
+        ["Simplified", "2.94%", "2.94%", "3.01%", "2.43%"],
+        ["Traditional","3.63%", "2.97%", "3.07%", "2.58%"],
+        ["Arial",      "3.65%", "4.50%", "3.83%", "3.74%"],
+        ["Naskh",      "4.10%", "4.26%", "4.36%", "3.69%"],
+        ["Tahoma",     "5.82%", "6.14%", "6.20%", "5.54%"],
+        ["Thuluth",   "10.21%","10.93%", "9.68%","10.23%"],
+        ["Andalus",   "12.12%","12.26%","10.42%","11.68%"],
+        ["PATS Avg",   "5.57%", "5.84%", "5.44%", "5.27%"],
+        ["KHATT",     "34.24%","33.25%","33.82%","32.93%"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(1.3), Inches(8.5), Inches(5.5), pf_exp2)
+
+    _add_bullet_frame(slide, Inches(9.0), Inches(1.3), Inches(4.0), Inches(5.5), [
+        ("T3 key insight:", ""),
+        ("  ", "Conservative framing ('return as-is if correct') beats ALL knowledge augmentation from Experiment 1"),
+        ("  ", "T3 achieves 5.27% PATS -- below P8 RAG (5.45%) without any retrieval overhead"),
+        ("", ""),
+        ("T2 vs T1:", ""),
+        ("  ", "RAG reduces Thuluth: 10.93% -> 9.68% (-1.25 pp), Andalus: 12.26% -> 10.42% (-1.84 pp)"),
+        ("  ", "RAG costs Akhbar: 2.71% -> 2.97% (+0.26 pp)"),
+        ("", ""),
+        ("Lesson: ", "Reducing intervention tendency > providing more correct targets for clean typewritten text"),
+    ], font_size=13, color=BLACK)
+
+    # SLIDE — Experiment 2 Full-Page Datasets
+    slide = _content_slide(prs, "Experiment 2: Full-Page Dataset Results (New Domains)")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(2.0), [
+        ("4 new full-page datasets introduced: ", "KHATT-Paragraph, Yarmouk, Muharaf, Historical"),
+        ("Challenge: ", "Qaari's runaway bug severe on page-level input -> OCR CER >100% (Muharaf 129%, Historical 105%)"),
+        ("Solution: ", "3-stage runaway corrector (tatweel collapse + phrase-loop detection + hard truncation at 3.0x GT length)"),
+        ("Best trial: ", "T2 (base+RAG) selected as the best overall prompt for all domains"),
+    ], font_size=14, color=BLACK)
+
+    fp_exp2_table = [
+        ["Dataset", "Domain", "Samples", "OCR CER", "T2 CER (corrected)", "Abs. Gain"],
+        ["KHATT-Paragraph", "HW paragraph",    "449",   "61.68%",  "45.06%", "-16.62 pp"],
+        ["Yarmouk-testing", "Print (encyclop.)","1,663","49.85%",  "43.35%",  "-6.50 pp"],
+        ["Muharaf-val",     "HW document",      "116",  "129.39%", "89.78%", "-39.61 pp"],
+        ["Historical",      "HW manuscript",    "40",   "105.10%", "94.53%", "-10.57 pp"],
+        ["Full-page Avg",   "---",              "---",   "86.50%",  "68.18%", "-18.32 pp"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(3.4), Inches(12.5), Inches(2.8), fp_exp2_table)
+    _add_bullet_frame(slide, Inches(0.5), Inches(6.4), Inches(12), Inches(0.8), [
+        ("Full-page gain (-21.2% relative) >> line-level PATS (-2.3%) or KHATT (-1.2%) -- "
+         "runaway correction accounts for bulk; LLM adds genuine character-level correction on top. "
+         "KHATT-Paragraph benefits most from paragraph context (-16.62 pp genuine correction)."),
+    ], font_size=13, color=BLACK)
+
+    # ===================================================================
+    # SECTION: EXPERIMENT 3
+    # ===================================================================
+    _section_header_slide(prs, "Experiment 3: Final Evaluation",
+                          "Multi-Model · Multi-OCR-Source · Multi-Domain Benchmarks")
+
+    # SLIDE — Experiment 3A: Model Comparison
+    slide = _content_slide(prs, "Experiment 3A: Four Models vs Validation Set (T2 Prompt, Qaari OCR)")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(1.5), [
+        ("Setting: ", "T2 (base+RAG), validation set, Qaari OCR, 4 LLMs"),
+        ("Full-page group (FP): ", "KHATT-Para + Yarmouk + Muharaf + Historical, OCR baseline 86.50%"),
+        ("CER†: ", "after runaway correction (threshold 3.0x GT length)"),
+    ], font_size=14, color=BLACK)
+
+    m3a_table = [
+        ["Model", "Params", "PATS CER†", "KHATT CER†", "FP CER†", "Notes"],
+        ["OCR Baseline", "—",  "5.57%",  "34.24%", "86.50%", "Qaari raw OCR"],
+        ["Qwen3-4B",     "4B", "5.44%",  "33.82%", "68.18%", "Best KHATT + FP"],
+        ["Qwen3-14B",   "14B", "5.60%",  "35.55%", "88.51%", "Runaway epidemic (175% raw KHATT)"],
+        ["Gemma-3-4B",   "4B", "7.47%",  "36.14%", "71.12%", "Underperforms consistently"],
+        ["Gemma-3-12B", "12B", "5.33%",  "35.98%", "70.01%", "Best PATS"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(2.9), Inches(12.5), Inches(2.8), m3a_table)
+
+    _add_bullet_frame(slide, Inches(0.5), Inches(5.9), Inches(12), Inches(1.3), [
+        ("Key finding: ", "Larger != better within Qwen3. Qwen3-14B (raw 175.69% KHATT) needs runaway corrector to reach 35.55% -- still worse than Qwen3-4B (33.82%). Gemma-3-12B best PATS (5.33%); Qwen3-4B best KHATT + Full-page."),
+        ("Gemma excluded for PATS/KHATT: ", "line-strip images (>10:1 aspect ratio) squashed by Gemma preprocessor -> hallucinations (CER >170%, invalid). Only valid for full-page (~0.6:1) comparison."),
+    ], font_size=13, color=BLACK)
+
+    # SLIDE — Experiment 3B: OCR Source Quality
+    slide = _content_slide(prs, "Experiment 3B: OCR Source Impact (Qaari vs Gemma-3 VLM)")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(2.2), [
+        ("Key design: ", "Gemma-3 VLM OCR (Gemma-3-27B-IT vision encoder) vs Qaari on same images"),
+        ("Critical exclusion: ", "Gemma excluded for PATS/KHATT -- line strips >10:1 aspect ratio squashed to near-square by preprocessor -> hallucinations (CER >170%)"),
+        ("Valid comparison: ", "Full-page documents (~0.6:1 aspect ratio) only"),
+        ("Finding: ", "OCR source quality matters less after LLM correction for full-page documents"),
+    ], font_size=14, color=BLACK)
+
+    m3b_table = [
+        ["Dataset", "Qaari OCR", "Qaari Corr†", "Gemma OCR", "Gemma Corr†"],
+        ["KHATT-Para-val",  "61.68%",  "45.06%",  "36.14%",  "35.82%"],
+        ["Yarmouk-testing", "49.85%",  "43.35%",  "95.76%",  "74.37%"],
+        ["Muharaf-val",    "129.39%",  "89.78%", "141.15%",  "72.85%"],
+        ["Historical",     "105.10%",  "94.53%",  "76.26%",  "74.09%"],
+        ["Full-page Avg",   "86.50%",  "68.18%",  "87.33%",  "64.28%"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(3.4), Inches(12.5), Inches(2.5), m3b_table)
+    _add_bullet_frame(slide, Inches(0.5), Inches(6.1), Inches(12), Inches(1.0), [
+        ("Gemma OCR slightly better after correction (64.28% vs 68.18%). "
+         "Qaari better on KHATT-Para and Yarmouk; Gemma better on Muharaf and Historical. "
+         "For full-page docs, OCR source doesn't dominate after LLM correction."),
+    ], font_size=13, color=BLACK)
+
+    # SLIDE — Experiment 3C: Generalization
+    slide = _content_slide(prs, "Experiment 3C: Generalization to Unseen Benchmarks")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(5.8), Inches(1.5), [
+        ("Two held-out benchmarks: ", "RDI-Test-Lines (handwritten/manuscript/typewritten) + Kitab (12 diverse Arabic text collections)"),
+        ("Model: ", "Qwen3-4B, T2 prompt, runaway-corrected"),
+        ("Surprising finding: ", "Gemma OCR outperforms Qaari on RDI-Test-Lines (68% vs 95% CER) -- Qaari struggles on diverse document styles"),
+    ], font_size=14, color=BLACK)
+
+    m3c_left = [
+        ["RDI-Test-Lines", "OCR Source", "OCR CER", "Corr CER†"],
+        ["LR-Handwritten",  "Qaari", "98.82%", "91.55%"],
+        ["LR-Handwritten",  "Gemma", "62.53%", "57.71%"],
+        ["LR-Manuscripts",  "Qaari", "81.94%", "79.00%"],
+        ["LR-Manuscripts",  "Gemma", "78.10%", "70.36%"],
+        ["LR-Typewritten",  "Qaari","105.19%", "84.79%"],
+        ["LR-Typewritten",  "Gemma", "64.86%", "55.31%"],
+        ["OVERALL",         "Qaari", "95.31%", "85.11%"],
+        ["OVERALL",         "Gemma", "68.49%", "61.13%"],
+    ]
+    _add_table(slide, Inches(0.3), Inches(2.9), Inches(6.5), Inches(3.8), m3c_left)
+
+    m3c_right = [
+        ["Kitab Subset", "Qaari OCR", "Qaari Corr†", "Note"],
+        ["kitab-arabicocr",   "1.80%",    "7.21%",  "OVER-CORRECT"],
+        ["kitab-patsocr",     "4.79%",    "5.98%",  "Over-correct"],
+        ["kitab-hindawi",    "31.46%",   "24.31%",  "-7.2 pp"],
+        ["kitab-muharaf",    "76.04%",   "58.72%",  "-17.3 pp"],
+        ["kitab-historyar",  "63.48%",   "51.69%",  "-11.8 pp"],
+        ["khattparagraph",  "205.27%",   "90.60%",  "-114.7 pp!"],
+        ["Kitab OVERALL",    "49.28%",   "40.73%",  "-17.3% rel"],
+    ]
+    _add_table(slide, Inches(7.0), Inches(2.9), Inches(6.0), Inches(3.8), m3c_right)
+    _add_textbox(slide, Inches(0.5), Inches(6.9), Inches(12), Inches(0.4),
+                 "Over-correction confirmed on new domains: low-CER subsets (kitab-arabicocr 1.80%) are HARMED. "
+                 "RDI-Test-Lines -10.7% abs. Kitab -17% rel (Qaari) to -24% rel (Gemma).",
+                 font_size=12, color=ACCENT_RED, alignment=PP_ALIGN.LEFT)
+
+    # SLIDE — Experiment 3 Summary
+    slide = _content_slide(prs, "Experiment 3: Key Takeaways")
+    _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(12), Inches(5.5), [
+        ("1. Model size != always better (Qwen3 family):", ""),
+        ("   ", "Qwen3-14B underperforms Qwen3-4B on KHATT (35.55% vs 33.82%) despite 3.5x more parameters"),
+        ("   ", "Gemma-3-12B best PATS (5.33%); Qwen3-4B best for KHATT + full-page"),
+        ("", ""),
+        ("2. Runaway corrector is critical for large models:", ""),
+        ("   ", "Without it: Qwen3-14B = 175.69% KHATT CER (unusable). With it: 35.55% (still worse than 4B)"),
+        ("   ", "Full-page datasets: OCR 86.50% -> 68.18% (large share is runaway correction)"),
+        ("", ""),
+        ("3. OCR source matters less after correction on full-page:", ""),
+        ("   ", "Qaari 86.50% vs Gemma 87.33% -> after correction: Qaari 68.18% vs Gemma 64.28%"),
+        ("   ", "Gemma excluded for line-strip PATS/KHATT (preprocessing artifact, invalid comparison)"),
+        ("", ""),
+        ("4. Generalisation confirmed on unseen benchmarks:", ""),
+        ("   ", "RDI-Test-Lines: -10.7% abs. Kitab: -17% to -24% relative CER reduction"),
+        ("   ", "Over-correction threshold holds in new domains: low-CER inputs (1.80%, 4.79%) are harmed"),
+        ("   ", "Gemma OCR actually BETTER than Qaari on RDI-Test-Lines (68% vs 95%) -- Qaari is domain-specialised"),
+    ], font_size=14, color=BLACK)
 
     # ===================================================================
     # SECTION: OVER-CORRECTION THRESHOLD
@@ -841,16 +1074,16 @@ def build():
         ("Empirical estimate:", ""),
         ("  rf ~ 76%, ri ~ 22%", ""),
         ("  e* = 0.22 / (0.76 + 0.22) = 22.4% (aggregate)", ""),
-        ("  Per-font crossing: ~6-7% CER (Akhbar 4.3% harmed, Simplified 7.9% helped)", ""),
+        ("  Per-font crossing: ~3-6% CER (Akhbar 2.12% harmed, Tahoma 5.82% helped)", ""),
     ], font_size=15, color=BLACK)
 
     _add_textbox(slide, Inches(7.0), Inches(1.3), Inches(5.5), Inches(0.6),
                  "Why the threshold matters", font_size=20, bold=True,
                  color=DARK_BLUE, alignment=PP_ALIGN.CENTER)
     _add_bullet_frame(slide, Inches(7.0), Inches(2.2), Inches(5.5), Inches(4.5), [
-        ("1. Explains Akhbar degradation: ", "at 4.3% CER, e < e* so correction is harmful"),
+        ("1. Explains Akhbar degradation: ", "at 2.12% CER, e < e* so correction is harmful"),
         ("", ""),
-        ("2. Explains Traditional success: ", "at 14.2% CER with 91.2% fix rate + 8.4% intro rate, e >> e*"),
+        ("2. Explains Andalus improvement: ", "at 12.12% CER with RAG (10.41%) -- high baseline gives enough signal"),
         ("", ""),
         ("3. Augmentation shifts threshold: ", "adding knowledge to prompt raises ri (model becomes more interventionist), raising e*"),
         ("", ""),
@@ -862,37 +1095,48 @@ def build():
     # ===================================================================
     # SECTION: HANDWRITTEN
     # ===================================================================
-    _section_header_slide(prs, "Why Handwritten Correction Differs",
-                          "The KHATT Challenge")
+    _section_header_slide(prs, "Why Handwritten & Full-Page Correction Differs",
+                          "KHATT, KHATT-Paragraph, Muharaf, Historical")
 
-    slide = _content_slide(prs, "Handwritten vs Typewritten: Qualitative Difference")
+    slide = _content_slide(prs, "Handwritten vs Typewritten vs Full-Page: Qualitative Differences")
     _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(6), Inches(5.5), [
-        ("KHATT error profile is fundamentally different:", ""),
+        ("KHATT (line-level handwritten):", ""),
         ("  ", "37% segmentation errors (merge + split) vs 6.4% on PATS-A01"),
         ("  ", "Segmentation = word boundaries lost -- text-only LLM cannot re-segment"),
-        ("  ", "Produces character sequences that don't resemble any Arabic word"),
+        ("  ", "Result: only ~1-3% relative improvement despite 34.24% baseline CER"),
         ("", ""),
-        ("Result: KHATT improvement ceiling:", ""),
-        ("  ", "Only character-level substitutions (dot, shape, hamza) are correctable"),
-        ("  ", "These account for ~50% of KHATT errors"),
-        ("  ", "The other 37%+ segmentation errors form an irreducible error floor"),
+        ("KHATT-Paragraph (paragraph handwritten):", ""),
+        ("  ", "Paragraph context enables better disambiguation than lines"),
+        ("  ", "-16.62 pp genuine text correction (61.68% -> 45.06%)"),
+        ("  ", "Best full-page correction result: longer context = more signal"),
         ("", ""),
-        ("Counter-intuitive: ", "KHATT has highest baseline CER (44.6%) but lowest relative improvement (3.6-5.0%)"),
-        ("Explanation: ", "Higher CER doesn't mean more correctable errors -- it means different error types"),
-    ], font_size=15, color=BLACK)
+        ("Muharaf & Historical (degraded/historical):", ""),
+        ("  ", "OCR CER >100% due to Qaari runaway bug on full pages"),
+        ("  ", "Runaway corrector essential; residual CER still high (89-95%)"),
+        ("  ", "Historical degradation + handwriting variability = hard ceiling"),
+        ("", ""),
+        ("Yarmouk (contemporary print):", ""),
+        ("  ", "Most accessible: contemporary Arabic, cleaner OCR (49.85% raw)"),
+        ("  ", "T2 achieves 43.35% after correction (-6.5 pp)"),
+    ], font_size=13, color=BLACK)
 
     _add_textbox(slide, Inches(7.0), Inches(1.3), Inches(5.5), Inches(0.6),
-                 "What would improve KHATT", font_size=20, bold=True,
+                 "What would improve these domains", font_size=18, bold=True,
                  color=DARK_BLUE, alignment=PP_ALIGN.CENTER)
-    _add_bullet_frame(slide, Inches(7.0), Inches(2.2), Inches(5.5), Inches(4.0), [
-        ("1. Multi-modal correction: ", "provide document image + OCR text to VLM corrector (e.g., Qwen3-VL, GPT-4o-Vision)"),
+    _add_bullet_frame(slide, Inches(7.0), Inches(2.2), Inches(5.5), Inches(4.5), [
+        ("KHATT handwritten:", ""),
+        ("  1. ", "Multi-modal: image + OCR text to VLM corrector (Qwen3-VL, GPT-4o-Vision)"),
+        ("  2. ", "Segmentation recovery step BEFORE LLM correction"),
         ("", ""),
-        ("2. Segmentation recovery: ", "specialised pre-processing step to fix word boundaries BEFORE LLM correction"),
+        ("Historical/degraded documents:", ""),
+        ("  1. ", "Fine-tuning on domain-matched historical (OCR, GT) pairs"),
+        ("  2. ", "Image preprocessing: binarization, deskew, noise removal"),
         ("", ""),
-        ("3. Fine-tuning: ", "train on handwriting-specific (OCR, GT) pairs for task-specific priors"),
-        ("", ""),
-        ("4. Confidence-guided: ", "only correct low-confidence OCR outputs, leave high-confidence unchanged"),
-    ], font_size=14, color=BLACK)
+        ("Full-page all domains:", ""),
+        ("  1. ", "Better runaway detection: confidence-score gating at OCR level"),
+        ("  2. ", "Page-level context: attend to multiple lines simultaneously"),
+        ("  3. ", "Domain-specific RAG index (per-corpus rather than per-font)"),
+    ], font_size=13, color=BLACK)
 
     # ===================================================================
     # SECTION: DESIGN RECOMMENDATIONS
@@ -1000,60 +1244,62 @@ def build():
     _section_header_slide(prs, "Conclusion & Contributions",
                           "Summary of Findings")
 
-    # SLIDE — Final Ranking
-    slide = _content_slide(prs, "Final Ranking: All Experimental Conditions")
+    # SLIDE — Final Ranking (All Experiments)
+    slide = _content_slide(prs, "Final Ranking: All Experiments — Best PATS & KHATT Configs")
     final_table = [
-        ["Rank", "Phase", "Method", "PATS CER", "KHATT CER", "vs OCR Baseline"],
-        ["1", "Phase 6", "best_camel (P3+P4+P5)", "11.1%", "42.5%", "-21.8%"],
-        ["2", "Phase 6", "conf_self (P3+P4)", "11.2%", "42.4%", "-21.1%"],
-        ["3", "Phase 4", "Self-Reflective", "11.6%", "42.8%", "-18.3%"],
-        ["4", "Phase 3", "OCR-Aware (Confusion)", "12.0%", "42.7%", "-15.5%"],
-        ["5", "Phase 2", "Zero-Shot", "12.3%", "43.0%", "-13.4%"],
-        ["6", "Phase 5", "CAMeL Post-Proc.", "12.4%", "43.1%", "-12.7%"],
-        ["--", "Phase 1", "OCR Baseline (no LLM)", "14.2%", "44.6%", "--"],
+        ["Rank", "Experiment / Phase", "Method", "PATS CER", "KHATT CER", "Note"],
+        ["1", "Exp2 / T3", "Conservative ZS", "5.27%", "32.93%", "Best PATS ever"],
+        ["2", "Exp3 / Gemma-3-12B T2", "Best model, PATS", "5.33%", "35.98%", "Best model PATS"],
+        ["3", "Exp2 / T2", "Base + RAG", "5.44%", "33.82%", "Best overall"],
+        ["4", "Exp1 / P8", "RAG BM25", "5.45%", "33.83%", "Best Exp1 PATS"],
+        ["5", "Exp1 / P9", "Error-Sig RAG", "5.47%", "33.13%", "Best KHATT"],
+        ["6", "Exp1 / P4", "Self-Reflective", "5.59%", "33.24%", "Best isolated"],
+        ["—", "Exp1 / P1", "OCR Baseline", "5.57%", "34.24%", "Reference"],
+        ["—", "Exp2 / T7", "EP+Cons ZS", "190.60%", "51.64%", "CATASTROPHIC"],
     ]
-    _add_table(slide, Inches(0.5), Inches(1.3), Inches(12), Inches(3.5), final_table)
+    _add_table(slide, Inches(0.3), Inches(1.3), Inches(12.5), Inches(4.0), final_table)
 
-    _add_bullet_frame(slide, Inches(0.5), Inches(5.2), Inches(12), Inches(2.0), [
-        ("All LLM strategies improve on OCR baseline except Phase 5 on some fonts. Phase 4 is strongest isolated. conf_self is best combination.", ""),
-        ("KHATT ranking differs: ", "conf_self > best_camel (Phase 5 hurts on handwritten). Phase 3 > Phase 4 on handwritten (confusion matrix more transferable)."),
-    ], font_size=15, color=BLACK)
+    _add_bullet_frame(slide, Inches(0.5), Inches(5.5), Inches(12), Inches(1.7), [
+        ("Hierarchy: ", "Conservative prompt (T3) > RAG (P8/T2) > Self-reflective (P4) > Confusion matrix (P3) > Zero-shot (P2) > OCR baseline for PATS"),
+        ("KHATT: ", "P9 Error-Sig RAG best (33.13%); T8 best overall (32.54%); T2 best balanced (33.82%)"),
+        ("Full-page: ", "Qwen3-4B + T2 + runaway corrector: OCR 86.50% -> 68.18% (-21.2% abs). KHATT-Para 61.68% -> 45.06%."),
+    ], font_size=13, color=BLACK)
 
     # SLIDE — Conclusion
-    slide = _content_slide(prs, "Conclusion")
+    slide = _content_slide(prs, "Conclusion (3 Experiments, 13 Datasets)")
     _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(12), Inches(5.8), [
-        ("Can a lightweight LLM correct Arabic OCR errors through prompt engineering?", ""),
-        ("  YES, with qualifications:", ""),
-        ("  ", "Zero-shot: PATS-A01 14.2% -> 12.3% CER (-13.4% relative). Traditional font: -81.0% relative."),
-        ("  ", "Best combination (conf_self): 14.2% -> 11.2% CER (-21.1% relative). KHATT: 44.6% -> 42.4% (-5.0%)."),
+        ("Experiment 1 (Phases 1-9, 9 datasets):", ""),
+        ("  ", "Zero-shot HARMS PATS avg: 5.57% -> 5.84% (+4.8%). Only Traditional benefits (-18.5%)."),
+        ("  ", "Best Exp1 PATS: P8 RAG (5.45%, -0.12% vs OCR baseline). Best KHATT: P9 (33.13%, -1.11%)."),
+        ("  ", "Over-correction threshold: ~6-7% CER. Font error TYPE governs outcome, not just rate."),
         ("", ""),
-        ("Does adding linguistic knowledge help?", ""),
-        ("  YES, incrementally:", ""),
-        ("  ", "Confusion matrix (Phase 3) + Self-reflective (Phase 4) are complementary and near-additive."),
-        ("  ", "Self-reflective is more impactful (+0.8pp ablation delta vs +0.4pp for confusion matrix)."),
-        ("  ", "Morphological post-processing (Phase 5) is marginally useful on typewritten, harmful on handwritten."),
+        ("Experiment 2 (8 trials, 13 datasets, 4 new full-page domains):", ""),
+        ("  ", "T3 conservative ZS best PATS ever: 5.27% (-5.4% rel, no retrieval). T2 best overall: 5.44% PATS + 33.82% KHATT."),
+        ("  ", "Full-page: OCR 86.50% -> T2 68.18% (-21.2% abs after runaway correction)."),
+        ("  ", "Error-pattern prompts brittle: T7 = 190.60% PATS (template injection failure)."),
         ("", ""),
-        ("Central finding: the OVER-CORRECTION THRESHOLD:", ""),
-        ("  ", "Below ~6-7% CER: LLM correction is harmful (introduction rate > fix rate on the small error pool)."),
-        ("  ", "Above threshold: correction is beneficial; more knowledge helps more."),
-        ("  ", "This is a property of instruction-following LLM behaviour, not a bug. Deploy correction SELECTIVELY."),
-    ], font_size=15, color=BLACK)
+        ("Experiment 3 (4 models, 2 OCR sources, 2 held-out benchmarks):", ""),
+        ("  ", "Gemma-3-12B best PATS (5.33%); Qwen3-4B best KHATT (33.82%) + full-page (68.18%)."),
+        ("  ", "Larger != better: Qwen3-14B worse than 4B after runaway correction."),
+        ("  ", "Generalises to unseen benchmarks: RDI-Test-Lines -10.7%, Kitab -17 to -24% relative."),
+        ("  ", "Over-correction confirmed on new domains: low-CER subsets harmed."),
+    ], font_size=13, color=BLACK)
 
     # SLIDE — Contributions
     slide = _content_slide(prs, "Thesis Contributions")
     _add_bullet_frame(slide, Inches(0.5), Inches(1.2), Inches(12), Inches(5.5), [
-        ("1. Over-correction threshold model: ", "formal characterisation of when LLM correction helps vs hurts, with empirical estimation (e* ~ 6-7% CER for Qwen3-4B + Qaari)"),
+        ("1. Over-correction threshold model: ", "e* ~ 6-7% CER for Qwen3-4B + Qaari. Empirical estimation via fix/intro rate analysis. Explains font-dependent patterns, predicts new domains."),
         ("", ""),
-        ("2. Complementarity proof: ", "confusion-matrix injection + self-reflective prompting address orthogonal failure modes (OCR engine errors vs LLM correction errors) and combine near-additively"),
+        ("2. Complementarity proof: ", "Confusion-matrix (raises fix rate rf) + Self-reflective (lowers intro rate ri) address orthogonal failure modes, combine near-additively."),
         ("", ""),
-        ("3. Comprehensive multi-font evaluation: ", "9 datasets (8 typewritten + 1 handwritten), aligned splits isolating font as sole variable, covering 4.3-44.6% baseline CER range"),
+        ("3. 13-dataset evaluation: ", "PATS-A01 (8 fonts) + KHATT + KHATT-Para + Yarmouk + Muharaf + Historical + RDI-Test-Lines + Kitab. 2.12% to 205% CER range. 3 experiments."),
         ("", ""),
-        ("4. Self-reflective prompting for OCR: ", "novel application of self-analysis (training-split error statistics + overcorrection warning) to post-OCR correction -- strongest isolated strategy"),
+        ("4. Conservative prompting discovery: ", "T3 (5.27% PATS) beats ALL knowledge augmentation without retrieval overhead. Reducing intervention tendency > providing more targets."),
         ("", ""),
-        ("5. Three-stage export-infer-analyse pipeline: ", "reproducible framework decoupling data preparation from GPU inference, enabling transparent research across cloud platforms"),
+        ("5. Multi-model benchmarking: ", "Qwen3-4B vs 14B vs Gemma-3-4B vs 12B. Qaari vs Gemma VLM OCR. Larger != better. Runaway corrector critical."),
         ("", ""),
-        ("6. Empirical finding on handwritten limits: ", "text-only post-OCR correction is fundamentally limited on handwritten text (37% segmentation errors uncorrectable), motivating multi-modal approaches"),
-    ], font_size=15, color=BLACK)
+        ("6. Three-stage export-infer-analyse pipeline: ", "Reproducible framework: no local GPU needed. JSONL checkpointing. HuggingFace sync. Resume-safe."),
+    ], font_size=14, color=BLACK)
 
     # ===================================================================
     # SLIDE — THANK YOU / Q&A

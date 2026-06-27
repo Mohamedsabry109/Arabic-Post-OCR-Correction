@@ -26,18 +26,22 @@ statement.
 on Arabic typewritten and handwritten text? How do error profiles differ
 across fonts and script types?
 
-\textbf{Finding:} Qaari's baseline CER on PATS-A01 varies from 4.3\% (Akhbar)
-to 24.3\% (Naskh), with a macro-average of 14.2\%. KHATT reaches 44.6\% CER.
+\textbf{Finding:} Qaari's baseline CER on PATS-A01 varies from 2.12\% (Akhbar)
+to 12.12\% (Andalus), with a macro-average of 5.57\% (WER 13.78\%).
+KHATT reaches 34.24\% CER (WER 75.60\%). All figures are reported on
+normal samples only (OCR/GT length ratio $\leq 5.0$) with diacritics
+stripped --- the primary evaluation metric throughout this thesis.
 On typewritten fonts, 42.1\% of errors are dot confusions and 18.3\% are
 similar-shape substitutions. On KHATT, 36.9\% of errors are segmentation
 failures (merges + splits), a category largely absent from typewritten text.
 Morphologically, 71.3\% of PATS-A01 OCR errors produce valid-but-wrong words,
 with only 28.7\% producing morphologically invalid non-words.
+The Qaari repetition (runaway) bug affects 4.6--10.3\% of PATS-A01 samples
+per font and 17.7\% of KHATT; these samples are excluded from all LLM metrics.
 
-\textbf{Significance:} The wide range of baseline CER across fonts --- sharing
-identical text content --- demonstrates that font choice alone can change the
-OCR error rate by a factor of 5.6. This variation is the empirical foundation
-for all font-dependent correction findings in RQ2--RQ6. The 71.3\%
+\textbf{Significance:} The PATS-A01 CER range spans 2.12\%--12.12\% across
+fonts rendering identical text --- a 5.7$\times$ factor attributable solely
+to typeface. KHATT is 6.1$\times$ harder than the PATS average. The 71.3\%
 valid-but-wrong rate establishes the ceiling on Phase~5's effectiveness: the
 CAMeL revert strategy can intervene on at most 28.7\% of errors.
 
@@ -47,16 +51,24 @@ CAMeL revert strategy can intervene on at most 28.7\% of errors.
 errors without any task-specific guidance? How does correction effectiveness
 vary across fonts?
 
-\textbf{Finding:} Zero-shot correction reduces PATS-A01 macro-average CER
-from 14.2\% to 12.3\% ($-$13.4\% relative). However, the effect is strongly
-font-dependent. Traditional font achieves 81.0\% relative CER reduction
-(14.2\% $\to$ 2.7\%). Akhbar is harmed ($+$20.9\% relative, 4.3\% $\to$ 5.2\%).
-On KHATT, the relative improvement is only 3.6\% (44.6\% $\to$ 43.0\%).
+\textbf{Finding:} Zero-shot correction \emph{increases} the PATS-A01
+macro-average CER from 5.57\% to 5.84\% ($+$4.8\% relative) --- a net-harmful
+outcome on average. The effect is strongly font-dependent: 7 of 8 fonts are
+harmed, with only Traditional benefiting (3.63\%~$\to$~2.96\%, $-$18.5\%
+relative). Akhbar is harmed by $+$0.59~pp (2.12\%~$\to$~2.71\%). On KHATT,
+correction is beneficial: 34.24\%~$\to$~33.25\% ($-$0.99~pp, $-$2.9\%
+relative).
 
-\textbf{Significance:} This duality establishes the \emph{over-correction
-threshold}: a baseline CER level below which LLM correction is harmful and
-above which it is beneficial. The threshold lies between Akhbar (4.3\%,
-harmed) and Simplified (7.9\%, helped), at approximately 6--7\% CER. This
+\textbf{Significance:} The central finding of Phase~2 is that zero-shot LLM
+correction is \emph{on net harmful for typewritten Arabic OCR} when the OCR
+baseline is already low. The model's alignment training causes it to rewrite
+tokens even with a conservative prompt, introducing more errors than it fixes
+on 7 of 8 fonts. Traditional font is the exception because its specific
+Qaari errors are linguistically obvious (systematic character substitutions
+that produce clearly non-standard word forms). The lack of a simple
+CER-based threshold --- Traditional (3.63\%) is helped while Arial (3.65\%)
+is harmed --- indicates that font-specific error character\-istics, not just
+error rate, determine whether zero-shot correction is beneficial. This
 finding has direct practical implications: LLM correction should be deployed
 conditionally, not uniformly, based on expected OCR quality.
 
@@ -66,9 +78,10 @@ conditionally, not uniformly, based on expected OCR quality.
 patterns into the system prompt improve correction beyond zero-shot?
 
 \textbf{Finding:} OCR-aware prompting (Phase~3) achieves PATS-A01
-macro-average CER of 12.0\% ($-$0.3~pp vs.\ Phase~2, $-$2.4\% relative)
-and 42.7\% on KHATT ($-$0.3~pp). It improves on Phase~2 in seven of nine
-datasets. Only Akhbar shows degradation ($+$0.2~pp).
+macro-average CER of 5.74\% ($-$0.10~pp vs.\ Phase~2, $-$1.7\% relative
+vs.\ Phase~2; still $+$0.17~pp above OCR baseline)
+and 33.26\% on KHATT ($-$0.01~pp vs.\ Phase~2, a marginal improvement).
+It improves on Phase~2 in seven of eight PATS fonts and on KHATT.
 
 \textbf{Significance:} The failure-filtering design --- retaining only
 confusion pairs the model does not handle at zero-shot level --- produces a
@@ -83,9 +96,11 @@ training-split correction failures improve its correction quality on a
 held-out validation set?
 
 \textbf{Finding:} Self-reflective prompting (Phase~4) achieves PATS-A01
-macro-average CER of 11.6\% ($-$0.7~pp vs.\ Phase~2, $-$5.7\% relative)
-and 42.8\% on KHATT ($-$0.2~pp). Phase~4 is the strongest isolated strategy
-and the only one to improve Akhbar ($-$0.3~pp, 5.2\% $\to$ 4.9\%).
+macro-average CER of 5.59\% ($-$0.25~pp vs.\ Phase~2; barely $+$0.02~pp
+above OCR baseline 5.57\%) and 33.24\% on KHATT ($-$1.00~pp vs.\ baseline).
+Phase~4 is the strongest isolated strategy on PATS and one of the best on KHATT.
+Among isolated strategies it is the only one that brings PATS essentially to
+parity with the OCR baseline.
 
 \textbf{Significance:} The self-reflective diagnostic text --- which
 explicitly identifies the model's systematic biases including its 25\%
@@ -102,10 +117,14 @@ fonts where more failure data is available.
 \textbf{Question:} Does applying CAMeL Tools morphological validation after
 zero-shot correction improve the quality of corrected text?
 
-\textbf{Finding:} CAMeL post-processing (Phase~5) produces a small degradation
-of $+$0.1~pp on both PATS-A01 (12.3\% $\to$ 12.4\%) and KHATT (43.0\% $\to$
-43.1\%). The average revert rate is 3.4\% on PATS-A01 and 6.1\% on KHATT.
-Traditional font is unaffected (0.0~pp change).
+\textbf{Finding:} Phase~5 (CAMeL morphological post-processing) had
+implementation bugs discovered post-hoc: the MorphAnalyzer was passed the
+full configuration dictionary instead of a database path (silently disabling
+CAMeL analysis), and the known-overcorrection revert was keyed by word token
+rather than by position (causing wrong reverts when the same word appeared
+multiple times). As a result, the Phase~5 numbers (PATS-A01: 21.89\%,
+KHATT: 41.62\%) are invalid and are excluded from all comparisons and
+conclusions. The bugs were fixed for Experiments~2 and~3.
 
 \textbf{Significance:} The degradation follows directly from the Phase~1
 morphological analysis: 71.3\% of OCR errors produce valid-but-wrong words
@@ -120,15 +139,14 @@ on KHATT, confirming its marginal and inconsistent value.
 \textbf{Question:} Which combination produces the best correction quality?
 What does each component contribute in ablation?
 
-\textbf{Finding:} The \texttt{conf\_self} combination (Phase~3 + Phase~4)
-achieves the best balanced result: 11.2\% on PATS-A01 ($-$1.1~pp vs.\ Phase~2,
-$-$9.0\% relative) and 42.4\% on KHATT ($-$0.6~pp, $-$1.4\% relative).
-Ablation shows Phase~4 contributes $+$0.8~pp (removing it degrades to
-12.0\%) and Phase~3 contributes $+$0.4~pp (removing it degrades to 11.6\%).
-Adding Phase~5 (\texttt{best\_camel}) gains a further $-$0.1~pp on PATS-A01
-(11.1\%) but costs $+$0.1~pp on KHATT (42.5\%). The improvement is
-statistically significant on six of nine datasets at Bonferroni-corrected
-$\alpha = 0.0125$.
+\textbf{Finding:} The \texttt{conf\_self} combination (Phase~6, Phase~3 +
+Phase~4) achieves: PATS-A01 5.76\% ($+$0.19~pp vs.\ OCR baseline;
+$-$0.08~pp vs.\ Phase~2) and KHATT 33.27\% ($-$0.97~pp vs.\ OCR baseline).
+Notably, the combination is slightly \emph{worse} than Phase~4 alone on PATS
+(5.76\% vs.\ 5.59\%) suggesting that adding the confusion matrix injection
+on top of the self-reflective prompt slightly increases false corrections
+on the lower-error fonts. The combination is better than either isolated
+strategy on KHATT.
 
 \textbf{Significance:} The combination outperforms both isolated strategies,
 confirming complementarity: Phase~3 targets known confusion pairs that the
@@ -144,11 +162,15 @@ from the training split (via BM25 character $n$-gram indexing) improve
 correction quality beyond zero-shot? Does domain-matched retrieval avoid the
 degradation seen with external corpus RAG?
 
-\textbf{Finding:} Phase~8 (BM25 RAG from training corrections) achieves
-PATS-A01 macro-average CER of 12.1\% ($-$0.2~pp vs.\ Phase~2, $-$1.6\%
-relative) and 42.9\% on KHATT ($-$0.1~pp). Phase~8 does not degrade Akhbar
-($\pm$0.0~pp), unlike zero-shot and confusion injection. It ranks between
-Phase~3 ($-$0.3~pp) and Phase~5 ($+$0.1~pp) in isolated performance.
+\textbf{Finding:} Phase~8 (BM25 RAG from Phase~2 training corrections)
+achieves PATS-A01 macro-average CER of \textbf{5.45\%} --- the only phase
+that beats the OCR baseline (5.57\%), by $-$0.12~pp. On KHATT it achieves
+33.83\% ($-$0.41~pp vs.\ OCR baseline). Phase~8 is the \textbf{best
+strategy for PATS}. Phase~9 (Error-Signature RAG) achieves 5.47\% PATS
+and \textbf{33.13\% KHATT} (best KHATT, $-$1.11~pp vs.\ baseline).
+Domain-matched retrieval is the key design choice: same-engine, same-font
+(OCR, GT) pairs provide ground-truth-anchored few-shot examples that reduce
+false corrections on clean input.
 
 \textbf{Significance:} Domain-matched BM25 retrieval avoids the severe
 degradation observed with external corpus retrieval (OpenITI), confirming
@@ -167,11 +189,14 @@ baseline OCR error profile, or can knowledge augmentation overcome the
 over-correction problem on low-error fonts?
 
 \textbf{Finding:} Baseline error profile is the primary determinant of
-correction effectiveness. All strategies fail to benefit Akhbar in isolation
-(Phases~2 and~3 harm it, Phase~5 harms it). Only Phase~4, with its explicit
-over-correction warning, provides a small benefit. The combination (\texttt{conf\_self})
-reduces Akhbar's CER to 4.7\%, still above the 4.3\% OCR baseline. No
-strategy achieves sub-baseline CER on Akhbar.
+correction effectiveness --- but not through a simple CER threshold.
+Zero-shot correction (P2) harms 7 of 8 PATS fonts; only Traditional
+(3.63\%) benefits ($-$18.5\%). Arial (3.65\%) --- essentially the same
+baseline CER --- is harmed ($+$0.85~pp). This disproves a simple CER
+cutoff. Among isolated strategies, only Phase~8 RAG achieves below-baseline
+PATS CER (5.45\% vs.\ OCR 5.57\%). The Phase~9 Error-Signature RAG
+achieves the best KHATT result (33.13\%, $-$1.11~pp). On Akhbar (2.12\%
+baseline, the cleanest font), no strategy achieves sub-baseline CER.
 
 \textbf{Significance:} Knowledge augmentation cannot overcome the fundamental
 over-correction tendency on low-error input. The over-correction threshold
@@ -230,12 +255,14 @@ Equation~\ref{eq:threshold_solution}:
   e^* = \frac{0.22}{0.76 + 0.22} \approx 0.224 \approx 22\%
 \end{equation}
 
-However, the per-font data shows that Akhbar (4.3\% CER) is harmed and
-Simplified (7.9\%) is helped. This indicates that the threshold is lower
-than the aggregate estimate suggests, likely because the fix rate drops at
-very low error densities (fewer obvious errors for the model to identify).
-In practice, the threshold is estimated at approximately 6--7\% CER from the
-per-font crossing point between Akhbar and Simplified.
+However, per-font data reveals that a simple CER threshold cannot fully
+explain the results: Traditional (3.63\%) is helped while Arial (3.65\%) is
+harmed. The threshold analysis must be tempered by the observation that
+error \emph{type} and \emph{systematicity}, not just error rate, determine
+whether the model can reliably fix errors without introducing new ones. In
+practice, zero-shot correction is harmful on all but Traditional among the
+eight PATS fonts; only domain-matched RAG (Phase~8) achieves below-baseline
+PATS average CER (5.45\% vs.\ OCR 5.57\%).
 
 \subsection{Why Augmentation Raises the Threshold}
 \label{subsec:disc_oc_augmentation}
@@ -426,6 +453,166 @@ the same text are available, to avoid confounding font effects with
 content effects.
 
 %----------------------------------------------------------------------------
+\section{Experiment 2: Prompt Design Study --- Findings and Implications}
+\label{sec:disc_exp2}
+%----------------------------------------------------------------------------
+
+Experiment~2 tested eight prompt configurations on thirteen evaluation
+datasets (PATS-A01 eight fonts, KHATT, KHATT-Paragraph, Yarmouk,
+Muharaf, and Historical) using Qwen3-4B-Instruct-2507. The eight trials
+combined four prompt styles (base, conservative, error-pattern, and
+error-pattern+conservative) with two retrieval strategies (zero-shot and
+BM25 RAG).
+
+The conservative zero-shot trial (T3) achieves the best PATS-A01 result:
+5.27\% CER ($-$5.4\% relative vs.\ OCR baseline of 5.57\%). This outperforms
+all eight phases of Experiment~1, including Phase~8 RAG (5.45\%), without
+any retrieval overhead. The key design difference is the conservative
+instruction: ``return the text unchanged if it appears correct; only fix
+clear visual OCR errors.'' This explicitly targets the introduction rate
+$r_i$ in the over-correction threshold model
+(Section~\ref{sec:disc_overcorrection}).
+
+The base+RAG trial (T2) achieves the best overall balance: 5.44\% PATS
+and 33.82\% KHATT, making it the preferred configuration for cross-domain
+deployment. T2 was selected as the prompt for Experiment~3.
+
+Error-pattern trials (T4--T8) reveal a critical failure mode. T7
+(error-pattern + conservative) suffers catastrophic failure: prompt-template
+tags were included in the model output (a template injection artifact),
+yielding 190.60\% PATS CER. T4 and T6 cause severe per-font damage:
+Thuluth CER jumps to 116.3\% (T4) and Andalus to 59.77\% (T6). This
+demonstrates that adding error-pattern context to an already complex
+system prompt can destabilise the model's formatting compliance.
+
+\textbf{Full-page dataset findings.}
+The four full-page datasets introduced in Experiment~2 (KHATT-Paragraph,
+Yarmouk, Muharaf, Historical) reveal a qualitatively different correction
+regime. These datasets are dominated by Qaari's repetition runaway bug on
+page-level input (raw OCR CER 49.85--129.39\%), requiring a dedicated
+runaway corrector as preprocessing. After runaway correction, T2 reduces
+the full-page macro-average from 86.50\% to 68.18\% ($-$21.2\% absolute)
+--- dramatically larger than the PATS gain ($-$0.13~pp) or KHATT gain
+($-$0.42~pp). KHATT-Paragraph achieves the largest text-correction benefit
+($-$16.62~pp, 61.68\%~$\to$~45.06\%), showing that paragraph-level context
+enables better disambiguation than single lines. The over-correction
+threshold finding also holds on these new domains: text quality routing
+remains important for diverse document types.
+
+\subsection*{Implications}
+
+(1) The conservative framing (``return as-is if correct'') is more effective
+than any knowledge augmentation from Experiment~1 for improving PATS. This
+suggests that reducing the \emph{intervention tendency} is more impactful
+than providing \emph{correct targets}.
+
+(2) RAG and the conservative prompt are complementary: T3 (cons+ZS) best
+on PATS, T2 (base+RAG) best on KHATT. No single trial dominates both.
+
+(3) Error-pattern prompts are brittle. Font-specific catastrophic failures
+make them unsuitable for production without careful per-font validation.
+
+%----------------------------------------------------------------------------
+\section{Experiment 3: Final Evaluation --- Findings and Implications}
+\label{sec:disc_exp3}
+%----------------------------------------------------------------------------
+
+Experiment~3 used T2 (base+RAG) across four models, two OCR sources
+(Qaari and Gemma-3 VLM), and three dataset groups (validation set,
+RDI-Test-Lines Benchmark, Kitab Benchmark). All CER values are reported with
+runaway correction applied (CER$\dagger$).
+
+\subsection*{3A: Model Comparison}
+
+Gemma-3-12B achieves the best PATS CER$\dagger$ (5.33\%), narrowly
+outperforming Qwen3-4B (5.44\%). Qwen3-4B is best on KHATT (33.82\%)
+and full-page datasets (68.18\% vs.\ OCR baseline 86.50\%). Qwen3-14B
+suffers a severe runaway epidemic on KHATT without the corrector
+(175.69\%); after correction it reaches 35.55\%, worse than Qwen3-4B's
+33.82\%. This shows that scaling within the Qwen3 family does not improve
+correction quality at this parameter range. Gemma-3-4B consistently
+underperforms Gemma-3-12B.
+
+The runaway corrector is essential for large models: its three-stage cascade
+(tatweel collapse, phrase-loop detection, hard truncation) recovers Qwen3-14B
+from unusable (175\%) to competitive (35.55\%) on KHATT, and substantially
+reduces CER for all models on full-page datasets.
+
+\subsection*{3B: OCR Source Quality}
+
+Gemma-3 VLM OCR is \textbf{excluded} for PATS-A01 and KHATT: these are
+line-strip images with 10--16:1 aspect ratio, which the Gemma-3 preprocessor
+squashes to near-square, producing hallucinations and repetition loops
+(observed CER $>170\%$). These numbers would not represent a valid
+comparison against Qaari. For full-page document images ($\approx 0.6$:1
+aspect ratio), Gemma OCR quality matches Qaari (87.33\% vs.\ 86.50\%),
+and after LLM correction the Gemma-sourced text achieves slightly
+\emph{better} results (64.28\% vs.\ 68.18\%). This establishes that the
+choice of OCR source matters critically for line-level evaluation but less
+so for page-level inputs.
+
+\subsection*{3C: Generalisation to Unseen Benchmarks}
+
+LLM correction generalises robustly to both held-out benchmarks
+(Table~\ref{tab:exp3_generalization} and Table~\ref{tab:exp3_kitab} in
+Chapter~\ref{ch_results}):
+
+\begin{itemize}
+  \item \textbf{RDI-Test-Lines:} Qaari OCR 95.31\% $\to$ corrected 85.11\%
+        ($-$10.7\%~abs); Gemma OCR 68.49\% $\to$ 61.13\% ($-$7.4\%~abs).
+        Correction improves all three sub-categories for both OCR sources:
+        LR-Handwritten (Qaari $-$7.3~pp, Gemma $-$4.8~pp),
+        LR-Manuscripts (Qaari $-$2.9~pp, Gemma $-$7.7~pp), and
+        LR-Typewritten (Qaari $-$20.4~pp, Gemma $-$9.6~pp).
+        Gemma OCR \emph{outperforms} Qaari on all three sub-categories
+        (68.49\% vs.\ 95.31\% overall), showing that Gemma's generalist
+        VLM capabilities are more robust on diverse unseen document styles
+        than Qaari's domain-specific fine-tuning.
+
+  \item \textbf{Kitab Benchmark:} Qaari OCR 49.28\% $\to$ corrected 40.73\%
+        ($-$17.3\%~rel); Gemma OCR 79.45\% $\to$ 60.07\% ($-$24.4\%~rel).
+        The per-subset breakdown (Table~\ref{tab:exp3_kitab}) reveals a
+        heterogeneous pattern. Of the twelve Kitab collections, seven are
+        improved and five are harmed under Qaari OCR correction.
+
+        Improved subsets (Qaari): kitab-hindawi ($-$7.2~pp,
+        31.46\%~$\to$~24.31\%), kitab-historyar ($-$11.8~pp,
+        63.48\%~$\to$~51.69\%), kitab-muharaf ($-$17.3~pp,
+        76.04\%~$\to$~58.72\%), kitab-isippt ($-$2.8~pp),
+        kitab-khatt ($-$1.0~pp). The single most dramatic result is
+        kitab-khattparagraph: 205.27\%~$\to$~90.60\% ($-$114.7~pp) ---
+        almost entirely from runaway correction eliminating Qaari repetition
+        artifacts on handwritten paragraph-level input.
+
+        Harmed subsets (Qaari): kitab-arabicocr (1.80\%~$\to$~7.21\%,
+        $+$5.4~pp), kitab-patsocr (4.79\%~$\to$~5.98\%, $+$1.2~pp),
+        kitab-synthesizear (21.17\%~$\to$~22.42\%, $+$1.3~pp),
+        kitab-adab (44.08\%~$\to$~47.32\%, $+$3.2~pp), and
+        kitab-evarest (32.92\%~$\to$~60.67\%, $+$27.8~pp).
+\end{itemize}
+
+The over-correction phenomenon is confirmed in both new benchmarks. The two
+lowest-CER subsets (kitab-arabicocr 1.80\%, kitab-patsocr 4.79\%) are
+harmed substantially, consistent with the over-correction threshold
+$e^* \approx 6$--$7\%$ CER established in Experiments~1 and~2.
+
+The kitab-evarest degradation ($+$27.8~pp at a 32.92\% baseline) is an
+exception to the threshold model: its baseline is well above $e^*$ yet
+correction is catastrophic. The probable cause is RAG corpus domain
+mismatch: the T2 retrieval pool consists of PATS-A01 and KHATT training
+corrections, which are stylistically distant from the evarest encyclopedic
+text domain. The retrieved few-shot examples apparently activate
+inappropriate correction patterns that introduce more errors than they fix.
+This is the clearest evidence that same-domain retrieval is a necessary
+--- not optional --- condition for safe RAG-based correction.
+
+The residual CER after runaway correction on kitab-khattparagraph
+remains high (90.60\%), confirming that the paragraph-level handwritten
+domain is genuinely difficult beyond runaway elimination. The LLM can
+remove the repetition artifact but cannot effectively correct the
+underlying handwritten OCR errors without image access.
+
+%----------------------------------------------------------------------------
 \section{Limitations}
 \label{sec:disc_limitations}
 %----------------------------------------------------------------------------
@@ -557,25 +744,17 @@ successfully adapted to a different engine's error profile, this would
 confirm the architectural generality of the approach regardless of the specific
 engine used.
 
-A more radical cross-engine extension --- Experiment~3 --- is to replace the
-Qaari OCR engine entirely with a vision--language model (VLM) operating
-directly on document images without a separate OCR stage. Gemma4 (the
-Gemma~4B and Gemma~27B model family) can be applied in VLM mode to transcribe
-Arabic document images end-to-end. Comparing Gemma4-VLM transcription quality
-against Qaari OCR across the thirteen evaluation datasets would quantify the
-gap between a dedicated open-source OCR engine and a general-purpose VLM on
-the same documents. Post-OCR correction of Gemma4-VLM transcriptions using
-the best Experiment~2 prompt configuration would then determine whether
-correction remains beneficial at higher OCR quality, or whether the improvement
-seen with Qaari ($-$21.1\% relative CER on PATS-A01) shrinks as the underlying
-recognition engine strengthens. Evaluation on the RDI (Research and Development
-International) Arabic OCR benchmark datasets would situate these findings in
-the established benchmarking literature. The central question for Experiment~3
-is whether the over-correction threshold shifts with OCR quality: if the Gemma4
-transcription already achieves very low CER, the threshold analysis from
-Section~\ref{sec:disc_overcorrection} predicts that post-OCR correction would
-enter the harmful regime for most documents, making a confidence-gated or
-fully withheld correction strategy the correct choice.
+Experiment~3 (completed; Section~\ref{sec:disc_exp3}) established that
+Gemma-3 VLM OCR is excluded for PATS/KHATT (invalid, >170\% CER due to line-strip preprocessing). For full-page documents it is
+full-page documents. Future work should study confidence-gated correction
+that restricts LLM intervention to tokens where the OCR confidence score
+falls below a threshold, potentially eliminating the harmful regime
+while preserving gains on high-error samples. The over-correction threshold
+model (Section~\ref{sec:disc_overcorrection}) predicts that at very low OCR
+CER the correction threshold $e^*$ cannot be crossed by prompt engineering
+alone; a confidence-based gate would be the principled solution. Evaluation
+on the RDI Arabic OCR benchmark datasets would situate these findings in the
+established benchmarking literature.
 
 \paragraph{Adversarial stress testing.}
 Testing the correction pipeline on intentionally degraded images (added noise,
@@ -593,43 +772,51 @@ This thesis set out to answer a central question: \emph{Can a lightweight
 open-source LLM correct Arabic OCR errors through prompt engineering alone,
 and does adding more linguistic knowledge to the prompt improve the result?}
 
-The answer is: yes, with important qualifications. Zero-shot LLM correction
-reduces the PATS-A01 macro-average CER from 14.2\% to 12.3\% ($-$13.4\%
-relative). On the single most-improved font (Traditional), the reduction is
-81.0\% relative, effectively eliminating most of Qaari's recognition errors.
-These results demonstrate that a 4-billion-parameter instruction-tuned LLM
-possesses sufficient Arabic language knowledge to recognise and correct
-systematic OCR errors without any task-specific training.
+The answer is: yes, with important qualifications that differ from what
+placeholder analyses would suggest. All metrics below use the primary
+evaluation protocol: normal samples only (OCR/GT ratio $\leq 5.0$),
+diacritics stripped before CER/WER computation.
 
-However, this benefit is conditional on the baseline OCR quality. On Akhbar
-(4.3\% baseline CER), zero-shot correction increases CER by 20.9\% ---
-introducing more errors than it fixes. An over-correction threshold at
-approximately 6--7\% CER separates the beneficial regime from the harmful one.
-Below this threshold, the model's tendency to rewrite correct text dominates;
-above it, the error-fixing benefit outweighs the over-correction cost.
+\textbf{Experiment 1 (Phases 1--9).} Zero-shot LLM correction \emph{harms}
+the PATS-A01 macro-average CER: from 5.57\% (OCR baseline) to 5.84\% ($+$4.8\%
+relative). Seven of eight fonts are harmed; only Traditional benefits
+($-$18.5\% relative, 3.63\%~$\to$~2.96\%). On KHATT, all strategies provide
+modest improvement (34.24\%~$\to$~33.13\%--33.83\%). The only Experiment~1
+strategy to beat the PATS OCR baseline is Phase~8 RAG (5.45\%, $-$0.12~pp)
+and Phase~9 Error-Signature RAG (5.47\%, $-$0.10~pp). These results demonstrate
+that a 4-billion-parameter LLM can reduce post-OCR CER, but requires
+domain-matched retrieval to avoid net harm on already-accurate typewritten
+fonts. Phase~5 (CAMeL) results were invalidated by implementation bugs and
+are excluded.
 
-Knowledge augmentation provides further, incremental gains above zero-shot.
-The combination of failure-filtered confusion-matrix injection (Phase~3) and
-self-reflective prompting (Phase~4) achieves the best overall result:
-11.2\% CER on PATS-A01 ($-$21.1\% relative vs.\ OCR baseline) and 42.4\%
-on KHATT ($-$5.0\% relative). The two strategies are complementary: Phase~3
-targets the OCR engine's known confusion patterns; Phase~4 targets the
-correction model's systematic biases. Neither is sufficient alone; together
-they address orthogonal failure modes.
+The over-correction analysis reveals that error \emph{type}, not just error
+rate, governs whether correction is beneficial. Traditional (3.63\%) is
+helped while Arial (3.65\%) is harmed --- refuting a simple CER cutoff.
 
-Morphological post-processing (Phase~5) provides marginal value on typewritten
-text ($-$0.1~pp on PATS-A01) but is neutral or slightly harmful on KHATT.
-Its limited impact follows directly from the Phase~1 finding that 71.3\% of
-OCR errors are morphologically valid --- beyond the reach of a context-free
-morphological filter.
+\textbf{Experiment 2 (Prompt Design Study, 8 Trials).}
+Conservative zero-shot prompting (T3) achieves the best PATS CER of 5.27\%
+($-$5.4\% relative vs.\ OCR baseline) --- outperforming all Experiment~1
+phases without any retrieval overhead. Base+RAG (T2) is the best overall
+configuration (PATS 5.44\%, KHATT 33.82\%). Error-pattern augmented prompts
+(T4--T8) are brittle: T7 causes catastrophic failure (190.60\% PATS CER
+due to template injection).
 
-Retrieval-augmented generation (Phase~8) with domain-matched BM25 character
-$n$-gram retrieval from training corrections provides a modest $-$0.2~pp
-improvement on PATS-A01 and $-$0.1~pp on KHATT. This confirms that corpus
-domain alignment is essential for RAG-based correction, and that per-sample
-adaptive context is a viable complement to global statistical knowledge.
-Phase~8 ranks between Phase~3 and Phase~2, leaving room for improvement
-through denser retrieval and richer training pools.
+\textbf{Experiment 3 (Final, Multi-Model, Multi-Domain).}
+Using T2 across four models: Gemma-3-12B achieves the best PATS CER$\dagger$
+(5.33\%); Qwen3-4B is best on KHATT (33.82\%) and full-page datasets
+(68.18\% vs.\ OCR baseline 86.50\%). Qwen3-14B suffers a runaway epidemic
+on KHATT (175.69\% raw) that the runaway corrector recovers to 35.55\%,
+still worse than Qwen3-4B. LLM correction generalises robustly to unseen
+domains: RDI-Test-Lines $-$10.7\%, Kitab Benchmark $-$17\% to $-$24\%
+CER reduction. Notably, Gemma VLM OCR is excluded for line-strip datasets
+(PATS/KHATT, $>10$:1 aspect ratio, invalid) but outperforms Qaari on
+RDI-Test-Lines (68\% vs.\ 95\% OCR CER).
+
+Knowledge augmentation provides targeted gains in Experiment~1 (P3/P4 reduce
+KHATT by $\approx 1$~pp); prompt conservatism is more impactful for PATS
+(T3 beats P8 RAG by $-$0.18~pp). Together, the three experiments establish
+a hierarchy: \emph{retrieval-anchoring $>$ conservative prompt $>$ statistical
+augmentation} for limiting over-correction on typewritten text.
 
 On handwritten text (KHATT), where 37\% of errors are segmentation failures,
 text-only post-OCR correction provides only marginal benefit (3.6--5.0\%

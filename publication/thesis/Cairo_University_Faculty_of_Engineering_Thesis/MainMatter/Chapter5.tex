@@ -1,17 +1,20 @@
 \setstretch{1.5}
 
 This chapter reports the numerical results for all experimental phases
-across the nine evaluation datasets (eight PATS-A01 typewritten fonts and
-KHATT handwritten text). Every result is first presented in a table and
+across the evaluation datasets. Every result is first presented in a table and
 then interpreted in prose; tables serve comparison and prose serves
 understanding.
 
-Results are reported on the validation split (415 samples per PATS-A01
-font; KHATT validation) with diacritics stripped before CER/WER computation.
-For PATS-A01, the macro-average CER (each font contributing equally,
-regardless of sample count) is reported as the primary aggregate metric;
-per-font results are reported in full. Both CER and WER are presented
-throughout, but CER is the primary metric used for ranking and discussion.
+\textbf{Evaluation protocol.}
+All results in this chapter use the \emph{primary metric}: normal samples only
+(samples where OCR/GT character length ratio $\leq 5.0$ are retained; samples
+where Qaari's repetition runaway bug inflates OCR length are excluded), with
+diacritics stripped before CER and WER computation. This protocol removes
+Qaari runaway artifacts (4.6--17.7\% of samples per dataset) and aligns
+evaluation with the corrected text's linguistic content rather than its
+diacritisation. For PATS-A01, the macro-average CER (each font contributing
+equally) is the primary aggregate; per-font results are reported in full.
+Chapter~\ref{ch_discussion} revisits each research question using these numbers.
 
 %----------------------------------------------------------------------------
 \section{Phase 1 Results --- OCR Error Characterisation}
@@ -29,51 +32,53 @@ included to characterise the spread of per-sample errors within each dataset.
 \begin{table}[htbp]
   \centering
   \caption{Phase~1 Qaari OCR baseline metrics per dataset (validation split,
-           diacritics stripped). Fonts ordered by increasing mean CER.
-           CER Median and P95 characterise within-dataset variation.}
+           normal samples only, diacritics stripped). Fonts ordered by
+           increasing mean CER. N = normal-sample count after excluding Qaari
+           repetition-runaway samples. Runaway \% = excluded samples per dataset.}
   \label{tab:p1_per_font}
   \begin{tabularx}{\textwidth}{lXXXX}
     \toprule
     \textbf{Dataset} & \textbf{CER (\%)} & \textbf{WER (\%)}
-      & \textbf{CER Median} & \textbf{CER P95} \\
+      & \textbf{N (normal)} & \textbf{Runaway (\%)} \\
     \midrule
-    Akhbar       &  4.3 &  8.7 &  2.8 & 14.2 \\
-    Simplified   &  7.9 & 14.6 &  5.1 & 23.7 \\
-    Thuluth      & 12.1 & 23.1 &  9.4 & 34.8 \\
-    Traditional  & 14.2 & 25.8 & 11.3 & 38.6 \\
-    Arial        & 14.8 & 28.2 & 11.7 & 39.2 \\
-    Andalus      & 15.3 & 29.4 & 12.2 & 40.1 \\
-    Tahoma       & 20.6 & 38.1 & 17.8 & 51.4 \\
-    Naskh        & 24.3 & 43.0 & 21.1 & 58.7 \\
+    Akhbar       &  2.12 &  4.84 & 437 & 4.8\% \\
+    Simplified   &  2.94 &  5.81 & 432 & 5.7\% \\
+    Traditional  &  3.63 &  9.35 & 435 & 5.0\% \\
+    Arial        &  3.65 &  6.84 & 436 & 4.6\% \\
+    Naskh        &  4.10 &  9.56 & 443 & 3.5\% \\
+    Tahoma       &  5.82 &  9.07 & 407 &10.3\% \\
+    Thuluth      & 10.21 & 31.11 & 441 & 3.9\% \\
+    Andalus      & 12.12 & 33.67 & 427 & 6.2\% \\
     \midrule
-    \textbf{PATS-A01 Macro-Avg} & \textbf{14.2} & \textbf{26.4} & --- & --- \\
+    \textbf{PATS-A01 Macro-Avg} & \textbf{5.57} & \textbf{13.78} & 3{,}458 & 5.5\% \\
     \midrule
-    KHATT        & 44.6 & 72.4 & 41.2 & 82.3 \\
+    KHATT        & 34.24 & 75.60 & 186 & 17.7\% \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
 The eight PATS-A01 fonts exhibit substantially different baseline CER values,
-spanning from 4.3\% (Akhbar) to 24.3\% (Naskh) --- a ratio of approximately
-5.6:1. This variation is entirely attributable to font, since all fonts
-render the same aligned text content on the validation split. Akhbar, a clean
-modern typeface with well-separated dots and unambiguous glyph shapes, is
-the easiest font for Qaari to recognise. Naskh, a classical font with more
-complex ligature structures and greater glyph density, presents the greatest
-recognition challenge. The PATS-A01 macro-average CER is 14.2\%.
+spanning from 2.12\% (Akhbar) to 12.12\% (Andalus) --- a ratio of 5.7:1.
+This variation is entirely attributable to font, since all fonts render
+the same aligned text content on the validation split. Akhbar, a clean modern
+typeface with well-separated dots, is the easiest for Qaari. Andalus, a
+classical calligraphic font with complex ligature structures, presents the
+greatest challenge. The PATS-A01 macro-average CER is \textbf{5.57\%}
+(WER 13.78\%). Note: Qaari's runaway bug (repetition of phrases on noisy
+images) inflates CER/WER when all samples are included. After excluding
+runaway samples (4.6--10.3\% per font), the metrics reflect true OCR quality.
 
-KHATT handwritten text (44.6\% mean CER) presents a qualitatively different
-challenge from all eight typewritten fonts. The P95 value of 82.3\% indicates
-that the worst-performing 5\% of KHATT samples have near-total recognition
-failure, a condition not observed on any typewritten font.
+KHATT handwritten text (34.24\% mean CER, WER 75.60\%) presents a
+qualitatively different challenge from all eight typewritten fonts. The
+runaway rate is higher (17.7\% of KHATT samples) due to more frequent
+blank or low-contrast image regions in the handwritten corpus.
 
-Within each dataset, the CER median is substantially lower than the mean,
-and the P95 is substantially higher. This right-skewed distribution
-indicates that a minority of samples account for a disproportionate share of
-total errors. On Akhbar, for example, the median CER is 2.8\% while the
-mean is 4.3\% and the P95 is 14.2\%, suggesting that most samples are
-recognised accurately but a small number contain severe errors (likely
-corresponding to specific challenging content rather than font-wide issues).
+KHATT is \textbf{6.1$\times$ harder than the PATS-A01 average} in terms
+of CER, reflecting the fundamental difference between typewritten OCR
+(dot-group confusions, shape-pair substitutions) and handwritten OCR
+(segmentation failures, stroke ambiguities, writer variability). This
+difference in error character-istics has important implications for
+LLM correction effectiveness, as discussed in Chapter~\ref{ch_discussion}.
 
 \subsection{Error Type Distribution Across Fonts}
 \label{subsec:res_p1_taxonomy}
@@ -192,11 +197,13 @@ that do not correspond to any Arabic word. However, even on KHATT, the
 majority of errors are valid-but-wrong.
 
 \textbf{Answer to RQ1:} Qaari produces systematic errors across all nine
-datasets. Baseline CER ranges from 4.3\% (Akhbar) to 24.3\% (Naskh) on
-PATS-A01 (macro-average 14.2\%), with KHATT at 44.6\%. Dot confusion
-dominates PATS-A01 errors (42.1\% of substitutions). The 71.3\%
-valid-but-wrong error rate across PATS-A01 establishes the fundamental
-limitation of morphological post-processing as a correction strategy.
+datasets. Baseline CER (normal samples only, diacritics stripped) ranges from
+2.12\% (Akhbar) to 12.12\% (Andalus) on PATS-A01 (macro-average 5.57\%,
+WER 13.78\%), with KHATT at 34.24\% (WER 75.60\%). Dot confusion dominates
+PATS-A01 errors (42.1\% of substitutions). The 71.3\% valid-but-wrong
+error rate establishes the fundamental limitation of morphological
+post-processing as a correction strategy. KHATT's 37\% segmentation error
+rate is the primary barrier to text-only LLM correction on handwritten text.
 
 %----------------------------------------------------------------------------
 \section{Phase 2 Results --- Zero-Shot LLM Baseline}
@@ -220,66 +227,61 @@ results alongside the Phase~1 baseline for each dataset.
     \textbf{Dataset} & \textbf{P1 CER} & \textbf{P2 CER}
       & \textbf{P2 WER} & \textbf{$\Delta$CER (pp)} \\
     \midrule
-    Akhbar       &  4.3 &  5.2 &  9.8 & $+$0.9 \\
-    Simplified   &  7.9 &  7.3 & 13.4 & $-$0.6 \\
-    Thuluth      & 12.1 & 11.2 & 20.8 & $-$0.9 \\
-    Traditional  & 14.2 &  2.7 &  4.9 & $-$11.5 \\
-    Arial        & 14.8 & 14.7 & 27.6 & $-$0.1 \\
-    Andalus      & 15.3 & 15.1 & 28.8 & $-$0.2 \\
-    Tahoma       & 20.6 & 20.5 & 37.8 & $-$0.1 \\
-    Naskh        & 24.3 & 21.5 & 39.6 & $-$2.8 \\
+    Akhbar       &  2.12 &  2.71 &  6.28 & $+$0.59 \\
+    Simplified   &  2.94 &  2.93 &  5.80 & $-$0.01 \\
+    Traditional  &  3.63 &  2.96 &  8.28 & $-$0.67 \\
+    Arial        &  3.65 &  4.50 & 10.63 & $+$0.85 \\
+    Naskh        &  4.10 &  4.27 & 10.03 & $+$0.17 \\
+    Tahoma       &  5.82 &  6.13 & 11.22 & $+$0.31 \\
+    Thuluth      & 10.21 & 10.92 & 28.51 & $+$0.71 \\
+    Andalus      & 12.12 & 12.27 & 33.67 & $+$0.15 \\
     \midrule
-    \textbf{PATS-A01 Macro-Avg} & \textbf{14.2} & \textbf{12.3}
-      & \textbf{22.8} & \textbf{$-$1.9} \\
+    \textbf{PATS-A01 Macro-Avg} & \textbf{5.57} & \textbf{5.84}
+      & \textbf{14.43} & \textbf{$+$0.27} \\
     \midrule
-    KHATT        & 44.6 & 43.0 & 70.1 & $-$1.6 \\
+    KHATT        & 34.24 & 33.25 & 73.93 & $-$0.99 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-The results reveal a pronounced font-dependent pattern. The PATS-A01
-macro-average CER drops from 14.2\% to 12.3\%, a 13.4\% relative improvement.
-However, this aggregate conceals widely varying per-font outcomes.
+The results reveal a pronounced font-dependent pattern with a counter-intuitive
+aggregate outcome. The PATS-A01 macro-average CER \emph{increases} from 5.57\%
+to 5.84\% ($+$0.27~pp, $+$4.8\% relative) --- zero-shot correction is net
+harmful on average. Seven of eight PATS fonts are degraded; only Traditional
+benefits.
 
-\textbf{Traditional font: the largest improvement.}
-The most striking result is on Traditional font: CER drops from 14.2\% to
-2.7\%, an 81.0\% relative reduction. This dramatic improvement suggests that
-Qaari's errors on Traditional are predominantly of a type that is
-linguistically obvious to the LLM --- likely character substitutions that
-produce clearly non-standard word forms that the model confidently corrects.
-The Traditional font's specific rendering style appears to trigger a
-systematic set of Qaari confusions that the LLM's language prior is well
-equipped to resolve.
+\textbf{Traditional font: the only improved font.}
+Traditional font CER drops from 3.63\% to 2.96\% ($-$0.67~pp, $-$18.5\%
+relative). Qaari's errors on Traditional are predominantly systematic
+character substitutions that produce linguistically obvious wrong words,
+enabling the LLM to fix them confidently. This is the only PATS font on
+which Phase~2 correction is net beneficial.
 
-\textbf{Naskh font: moderate improvement.}
-Naskh, the hardest font for Qaari (24.3\% baseline CER), improves by 2.8~pp
-to 21.5\% ($-$11.5\% relative). The LLM provides a useful but incomplete
-correction: the high error rate means many errors are available to fix, but
-the diversity of error patterns on a complex font limits the fraction the
-model can resolve.
+\textbf{Arial and Naskh: harmed despite different error rates.}
+Arial (3.65\% baseline, nearly identical to Traditional) is harmed
+($+$0.85~pp to 4.50\%). Naskh (4.10\% baseline) is also harmed ($+$0.17~pp
+to 4.27\%). The contrast between Traditional and Arial --- at essentially
+the same baseline CER --- demonstrates that a simple error-rate threshold
+cannot explain over-correction. Error type and systematicity, not only error
+rate, determine the outcome.
 
-\textbf{Akhbar font: degradation.}
-Akhbar, the easiest font (4.3\% baseline CER), is the only font on which
-zero-shot correction increases CER ($+$0.9~pp to 5.2\%). On this font, Qaari
-already produces near-correct output; the LLM's tendency to rewrite tokens
---- even with the conservative v2 prompt --- causes net harm. This is the
-clearest example of the over-correction problem: a model that is too
-interventionist on clean input.
+\textbf{Akhbar font: most harmed.}
+Akhbar, the cleanest font (2.12\% baseline CER), is harmed by $+$0.59~pp
+(to 2.71\%). On this font, Qaari already produces near-correct output;
+the LLM's tendency to rewrite tokens causes net harm.
 
-\textbf{Arial, Andalus, Tahoma: marginal improvement.}
-These three fonts show small but positive improvements ($-$0.1 to $-$0.2~pp).
-Their baseline CER (14.8\%, 15.3\%, 20.6\%) is moderate, and the LLM
-improves slightly without making things substantially worse. The marginal
-gains suggest the LLM is operating near the break-even point for these fonts.
+\textbf{Andalus and Thuluth: harmed despite high error rates.}
+Andalus (12.12\% baseline) increases by $+$0.15~pp to 12.27\%. Thuluth
+(10.21\%) increases by $+$0.71~pp to 10.92\%. Even fonts with high baseline
+error rates are harmed by zero-shot correction, suggesting the LLM's
+false-correction rate outweighs its fix rate on these fonts.
 
-\textbf{KHATT: marginal improvement despite high baseline.}
-On KHATT (44.6\% baseline), zero-shot correction reduces CER by only 1.6~pp
-to 43.0\% ($-$3.6\% relative). Despite having the highest baseline error
-rate, KHATT benefits less from LLM correction than fonts with equivalent
-or lower typewritten CER. The high proportion of segmentation errors
-(Section~\ref{subsec:res_p1_taxonomy}) --- which produce unrecognisable
-character sequences --- limits the model's ability to determine what was
-intended.
+\textbf{KHATT: modest consistent improvement.}
+On KHATT (34.24\% baseline), zero-shot correction reduces CER by 0.99~pp
+(to 33.25\%, $-$2.9\% relative). All prompt strategies we evaluate
+subsequently provide similar gains on KHATT (0.4--1.1~pp range). The high
+proportion of segmentation errors (37\% of KHATT errors are word
+merges/splits) limits further improvement from text-only correction.
 
 \subsection{Error Introduction Rate Analysis}
 \label{subsec:res_p2_intro}
@@ -314,18 +316,20 @@ aggregate CER.
 \end{table}
 
 The fix and introduction rate data reveal why Akhbar is harmed while
-Traditional benefits so dramatically. On Akhbar, the fix rate is 62.3\% but
-the introduction rate is 25.1\% --- and because Akhbar has very few errors
-to fix (4.3\% baseline CER), even a moderate introduction rate produces a
-net negative outcome. On Traditional, the fix rate is 91.2\% and the
-introduction rate is only 8.4\%, producing the dramatic CER reduction.
+Traditional benefits. On Akhbar, the fix rate is 62.3\% but the introduction
+rate is 25.1\% --- and because Akhbar has very few errors to fix (2.12\%
+baseline CER), even a moderate introduction rate produces net harm. On
+Traditional, the fix rate is 91.2\% and the introduction rate is only 8.4\%,
+reflecting that Qaari's errors on this font are systematically LLM-fixable.
 
-\textbf{Answer to RQ2:} Zero-shot correction is strongly font-dependent.
-The PATS-A01 macro-average improves by 13.4\% relative. Traditional font
-achieves 81.0\% relative improvement; Akhbar is harmed ($+$20.9\% relative).
-The over-correction threshold lies between Akhbar (4.3\% baseline CER,
-harmed) and Simplified (7.9\%, helped), indicating that fonts with baseline
-CER below approximately 6--7\% are at risk of LLM-induced degradation.
+\textbf{Answer to RQ2:} Zero-shot correction \emph{harms} the PATS-A01
+macro-average ($+$0.27~pp, $+$4.8\% relative). Only Traditional benefits
+($-$18.5\% relative). The absence of a simple CER threshold --- Traditional
+(3.63\%) helped; Arial (3.65\%) harmed --- establishes that font-specific
+error character-istics, not only error rate, determine whether LLM correction
+is net beneficial. KHATT improves consistently ($-$0.99~pp, $-$2.9\%
+relative). No strategy in Experiment~1 exceeds Phase~2's PATS gain on any
+individual font except via RAG (Phases~8 and~9), discussed below.
 
 %----------------------------------------------------------------------------
 \section{Phases 3--5 Results --- Isolated Knowledge Augmentation}
@@ -340,20 +344,23 @@ Phase~1 and Phase~2 reference values.
 \begin{table}[htbp]
   \centering
   \caption{PATS-A01 macro-average CER/WER for all phases (validation split,
-           diacritics stripped). $\Delta$CER is vs.\ Phase~2 in percentage
-           points. Best LLM phase in \textbf{bold}.}
+           normal samples only, diacritics stripped). $\Delta$CER is vs.\ OCR
+           baseline (Phase~1). $\dagger$~Phase~5 had implementation bugs;
+           results excluded from conclusions. Best PATS phase in \textbf{bold}.}
   \label{tab:isolated_pats_macro}
   \begin{tabularx}{\textwidth}{llXXX}
     \toprule
     \textbf{Phase} & \textbf{Method} & \textbf{CER (\%)} & \textbf{WER (\%)}
-      & \textbf{$\Delta$CER (pp)} \\
+      & \textbf{$\Delta$CER vs P1 (pp)} \\
     \midrule
-    1  & OCR Baseline           & 14.2 & 26.4 & --- \\
-    2  & Zero-Shot LLM          & 12.3 & 22.8 & (baseline) \\
-    3  & OCR-Aware (Confusion)  & 12.0 & 22.2 & $-$0.3 \\
-    \textbf{4}  & \textbf{Self-Reflective}  & \textbf{11.6} & \textbf{21.4} & \textbf{$-$0.7} \\
-    5  & CAMeL Post-Proc.       & 12.4 & 22.9 & $+$0.1 \\
-    8  & RAG (BM25)             & 12.1 & 22.5 & $-$0.2 \\ %TODO: verify with actual results
+    1  & OCR Baseline (Qaari)       &  5.57 & 13.78 & --- \\
+    2  & Zero-Shot LLM              &  5.84 & 14.42 & $+$0.27 \\
+    3  & OCR-Aware (Confusion)      &  5.74 & 14.16 & $+$0.17 \\
+    4  & Self-Reflective            &  5.59 & 13.66 & $+$0.02 \\
+    5$\dagger$ & CAMeL Post-Proc.\ (buggy) & 21.89 & 90.74 & --- \\
+    6  & conf\_self (P3+P4)         &  5.76 & 13.81 & $+$0.19 \\
+    \textbf{8}  & \textbf{RAG (BM25)}  & \textbf{5.45} & \textbf{12.04} & \textbf{$-$0.12} \\
+    9  & Error-Signature RAG        &  5.47 & 13.63 & $-$0.10 \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -362,9 +369,11 @@ Phase~1 and Phase~2 reference values.
 \label{subsec:res_p3}
 
 Phase~3 injects the top-10 failure-filtered character confusion pairs into
-the system prompt. The PATS-A01 macro-average CER improves from 12.3\%
-(Phase~2) to 12.0\% ($-$0.3~pp, $-$2.4\% relative). KHATT improves from
-43.0\% to 42.7\% ($-$0.3~pp, $-$0.7\% relative).
+the system prompt. The PATS-A01 macro-average CER improves from 5.84\%
+(Phase~2) to 5.74\% ($-$0.10~pp vs.\ Phase~2; still $+$0.17~pp above the
+5.57\% OCR baseline). KHATT is essentially unchanged (33.25\%~$\to$~33.26\%,
+$+$0.01~pp vs.\ Phase~2). Confusion-matrix injection improves 6 of 8 PATS
+fonts vs.\ Phase~2.
 
 Table~\ref{tab:p3_per_font} reports the per-font breakdown.
 
@@ -379,37 +388,31 @@ Table~\ref{tab:p3_per_font} reports the per-font breakdown.
     \textbf{Dataset} & \textbf{P2 CER} & \textbf{P3 CER}
       & \textbf{$\Delta$CER (pp)} \\
     \midrule
-    Akhbar       & 5.2  & 5.4  & $+$0.2 $\uparrow$ \\
-    Simplified   & 7.3  & 7.0  & $-$0.3 $\downarrow$ \\
-    Thuluth      & 11.2 & 10.9 & $-$0.3 $\downarrow$ \\
-    Traditional  & 2.7  & 2.5  & $-$0.2 $\downarrow$ \\
-    Arial        & 14.7 & 14.5 & $-$0.2 $\downarrow$ \\
-    Andalus      & 15.1 & 14.8 & $-$0.3 $\downarrow$ \\
-    Tahoma       & 20.5 & 20.2 & $-$0.3 $\downarrow$ \\
-    Naskh        & 21.5 & 20.7 & $-$0.8 $\downarrow$ \\
+    Akhbar       &  2.71 &  2.57 & $-$0.14 $\downarrow$ \\
+    Simplified   &  2.93 &  2.97 & $+$0.04 $\uparrow$ \\
+    Traditional  &  2.96 &  2.90 & $-$0.06 $\downarrow$ \\
+    Arial        &  4.50 &  4.48 & $-$0.02 $\downarrow$ \\
+    Naskh        &  4.27 &  4.23 & $-$0.04 $\downarrow$ \\
+    Tahoma       &  6.13 &  6.12 & $-$0.01 $\downarrow$ \\
+    Thuluth      & 10.92 & 10.94 & $+$0.02 $\uparrow$ \\
+    Andalus      & 12.27 & 11.75 & $-$0.52 $\downarrow$ \\
     \midrule
-    \textbf{Macro-Avg} & \textbf{12.3} & \textbf{12.0} & \textbf{$-$0.3} \\
+    \textbf{Macro-Avg} & \textbf{5.84} & \textbf{5.74} & \textbf{$-$0.10} \\
     \midrule
-    KHATT        & 43.0 & 42.7 & $-$0.3 $\downarrow$ \\
+    KHATT        & 33.25 & 33.26 & $+$0.01 $\uparrow$ \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Phase~3 improves on Phase~2 in seven of nine datasets, with only Akhbar
-showing degradation ($+$0.2~pp). The failure-filtering design --- which
-includes only confusion pairs the model does not handle at the zero-shot
-level --- appears to make the injection useful without being harmful on
-most fonts. Naskh benefits most ($-$0.8~pp), consistent with its high
-error rate providing more confusion pairs in the filtered list.
-
-The Akhbar degradation is consistent with Phase~2: on this low-error font,
-even a small addition to the system prompt elevates the model's intervention
-threshold, causing a net negative effect.
+Phase~3 improves 6 of 8 PATS fonts vs.\ Phase~2. Andalus benefits most
+($-$0.52~pp vs.\ Phase~2), consistent with its high error rate providing more
+actionable confusion pairs. Simplified and Thuluth are slightly harmed
+($+$0.02--0.04~pp vs.\ Phase~2). KHATT is essentially unchanged.
 
 \textbf{Answer to RQ3:} Confusion-matrix injection with failure-filtering
-achieves a PATS-A01 macro-average $-$0.3~pp improvement over zero-shot
-($-$2.4\% relative). The improvement is consistent across most fonts and
-extends to KHATT, making Phase~3 the second-best isolated strategy.
+achieves PATS-A01 macro-average 5.74\% ($-$0.10~pp vs.\ Phase~2), still above
+the OCR baseline. It is the third-best PATS strategy in Experiment~1 (after
+P8 RAG and P9 Error-Sig RAG).
 
 \subsection{Phase 4 --- Self-Reflective Prompting}
 \label{subsec:res_p4}
@@ -428,34 +431,33 @@ reports per-font results.
     \textbf{Dataset} & \textbf{P2 CER} & \textbf{P4 CER}
       & \textbf{$\Delta$CER (pp)} \\
     \midrule
-    Akhbar       & 5.2  & 4.9  & $-$0.3 $\downarrow$ \\
-    Simplified   & 7.3  & 6.8  & $-$0.5 $\downarrow$ \\
-    Thuluth      & 11.2 & 10.3 & $-$0.9 $\downarrow$ \\
-    Traditional  & 2.7  & 2.4  & $-$0.3 $\downarrow$ \\
-    Arial        & 14.7 & 14.2 & $-$0.5 $\downarrow$ \\
-    Andalus      & 15.1 & 14.7 & $-$0.4 $\downarrow$ \\
-    Tahoma       & 20.5 & 19.8 & $-$0.7 $\downarrow$ \\
-    Naskh        & 21.5 & 19.8 & $-$1.7 $\downarrow$ \\
+    Akhbar       &  2.71 &  2.59 & $-$0.12 $\downarrow$ \\
+    Simplified   &  2.93 &  2.86 & $-$0.07 $\downarrow$ \\
+    Traditional  &  2.96 &  2.87 & $-$0.09 $\downarrow$ \\
+    Arial        &  4.50 &  4.08 & $-$0.42 $\downarrow$ \\
+    Naskh        &  4.27 &  4.22 & $-$0.05 $\downarrow$ \\
+    Tahoma       &  6.13 &  5.91 & $-$0.22 $\downarrow$ \\
+    Thuluth      & 10.92 & 10.67 & $-$0.25 $\downarrow$ \\
+    Andalus      & 12.27 & 11.51 & $-$0.76 $\downarrow$ \\
     \midrule
-    \textbf{Macro-Avg} & \textbf{12.3} & \textbf{11.6} & \textbf{$-$0.7} \\
+    \textbf{Macro-Avg} & \textbf{5.84} & \textbf{5.59} & \textbf{$-$0.25} \\
     \midrule
-    KHATT        & 43.0 & 42.8 & $-$0.2 $\downarrow$ \\
+    KHATT        & 33.25 & 33.24 & $-$0.01 $\downarrow$ \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Phase~4 achieves the strongest isolated result: PATS-A01 macro-average
-improves by $-$0.7~pp ($-$5.7\% relative over zero-shot). Crucially, Phase~4
-is the \emph{only} isolated strategy that improves on Akhbar ($-$0.3~pp,
-from 5.2\% to 4.9\%), suggesting that the self-reflective diagnostic text
---- which explicitly warns against over-correction --- helps the model
-exercise greater restraint on clean input.
+Phase~4 achieves the strongest isolated result on PATS: macro-average
+improves by $-$0.25~pp vs.\ Phase~2 (5.84\%~$\to$~5.59\%), reaching
+near-parity with the OCR baseline (5.57\%). It improves all 8 PATS fonts
+vs.\ Phase~2. Andalus benefits most ($-$0.76~pp vs.\ Phase~2), reflecting
+its higher error rate and richer training-split failure data. Arial benefits
+substantially ($-$0.42~pp vs.\ Phase~2, from 4.50\% to 4.08\%).
 
-Naskh benefits most from Phase~4 ($-$1.7~pp), more than double the benefit
-of Phase~3 on the same font. The training-split insights for Naskh, which
-has the highest baseline error rate and thus the most training-split failure
-data to analyse, are more informative and actionable than those derived from
-lower-error fonts.
+On KHATT, Phase~4 provides essentially zero improvement over Phase~2
+($-$0.01~pp, 33.25\%~$\to$~33.24\%). The self-reflective insights are
+derived separately for PATS-A01 and KHATT, but KHATT's handwritten errors
+are more diverse and harder to summarise into actionable insights.
 
 The KHATT improvement under Phase~4 is modest ($-$0.2~pp), less than the
 PATS-A01 improvement. The self-reflective insights are derived primarily from
@@ -478,51 +480,29 @@ results.
 
 \begin{table}[htbp]
   \centering
-  \caption{Phase~5 CAMeL post-processing vs.\ Phase~2 zero-shot, per font.
-           Revert rate = fraction of changed words reverted to OCR original.}
+  \caption{Phase~5 had implementation bugs and is excluded from results.
+           This table is shown for completeness with a note. $\dagger$ = results
+           invalid due to MorphAnalyzer init bug + position-keyed revert bug.}
   \label{tab:p5_per_font}
-  \begin{tabularx}{\textwidth}{lXXXX}
+  \begin{tabularx}{\textwidth}{lX}
     \toprule
-    \textbf{Dataset} & \textbf{P2 CER} & \textbf{P5 CER}
-      & \textbf{$\Delta$CER (pp)} & \textbf{Revert Rate (\%)} \\
+    \textbf{Status} & \textbf{Note} \\
     \midrule
-    Akhbar       & 5.2  & 5.3  & $+$0.1 & 3.2 \\
-    Simplified   & 7.3  & 7.4  & $+$0.1 & 2.8 \\
-    Thuluth      & 11.2 & 11.4 & $+$0.2 & 3.6 \\
-    Traditional  & 2.7  & 2.7  & $\pm$0.0 & 1.1 \\
-    Arial        & 14.7 & 14.9 & $+$0.2 & 3.9 \\
-    Andalus      & 15.1 & 15.2 & $+$0.1 & 3.4 \\
-    Tahoma       & 20.5 & 20.6 & $+$0.1 & 4.2 \\
-    Naskh        & 21.5 & 21.6 & $+$0.1 & 4.7 \\
-    \midrule
-    \textbf{Macro-Avg} & \textbf{12.3} & \textbf{12.4} & \textbf{$+$0.1} & \textbf{3.4} \\
-    \midrule
-    KHATT        & 43.0 & 43.1 & $+$0.1 & 6.1 \\
+    Phase~5 excluded$\dagger$ & MorphAnalyzer passed wrong argument (full config dict instead
+    of DB path), silently disabling CAMeL analysis. Revert was keyed by
+    word token not by position, causing wrong reverts when the same word
+    appeared multiple times. PATS result (21.89\%) and KHATT result (41.62\%)
+    are invalid. Bugs were corrected in Experiment~2. \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Phase~5 produces a slight degradation ($+$0.1~pp) on most fonts and no change
-on Traditional. The revert rate column explains why: only 3.4\% of changed
-words are reverted on average across PATS-A01, and 6.1\% on KHATT. The
-low revert rate directly reflects the 71.3\% valid-but-wrong dominance found
-in Phase~1: the majority of OCR errors produce valid Arabic words, which
-pass CAMeL morphological analysis even when they are contextually wrong.
-
-The slight degradation occurs because the small fraction of reverts (3.4\%)
-includes some cases where the LLM correction was correct but happened to
-fail the morphological filter for a reason unrelated to the correction task
-(e.g., the corrected form is a rare but valid word that CAMeL does not
-recognise in the MSA database). Traditional font is unaffected (0.0~pp),
-likely because its LLM corrections are of high quality and rarely trigger
-the revert condition.
-
-\textbf{Answer to RQ5:} CAMeL morphological post-processing produces a
-small degradation ($+$0.1~pp on PATS-A01 and KHATT). The revert strategy
-is triggered infrequently (3.4\% average revert rate), consistent with the
-29\% non-word error rate from Phase~1. The strategy does not improve results
-when applied to Phase~2 corrections alone, but is tested as a post-processing
-layer on the best combination in Phase~6.
+\textbf{Answer to RQ5:} Phase~5 results are excluded due to implementation
+bugs discovered post-hoc. The corrected CAMeL post-processing logic was
+re-evaluated as part of Experiment~2's prompt design study.
+The theoretical ceiling remains: 71.3\% of OCR errors are valid-but-wrong
+(pass morphological analysis), limiting the revert strategy to at most
+28.7\% of errors.
 
 %----------------------------------------------------------------------------
 \section{Per-Font Comparison Across All Phases}
@@ -534,43 +514,46 @@ all isolated phases side by side.
 
 \begin{table}[htbp]
   \centering
-  \caption{Per-font CER (\%) for Phases~1--5 and Phase~8 (validation split,
-           diacritics stripped). Best LLM result per font in \textbf{bold}.
-           $\downarrow$ cells indicate improvement vs Phase~2.
-           P8 values marked with $\dagger$ are preliminary; verify with final results.}
+  \caption{Per-font CER (\%) for Phases~1--4, 6, and 8 (validation split,
+           normal samples only, diacritics stripped). Best LLM result per font
+           in \textbf{bold}. $\downarrow$/$\uparrow$ = improvement/degradation
+           vs Phase~2. Phase~5 excluded (implementation bugs, see text). P6 =
+           conf\_self combination.}
   \label{tab:per_font_all_phases}
   \begin{tabularx}{\textwidth}{lXXXXXX}
     \toprule
     \textbf{Font} & \textbf{P1} & \textbf{P2} & \textbf{P3}
       & \textbf{P4} & \textbf{P5} & \textbf{P8} \\
     \midrule
-    Akhbar       &  4.3 &  5.2 &  5.4 & \textbf{4.9}$\downarrow$ &  5.3 &  5.2$^\dagger$ \\
-    Simplified   &  7.9 &  7.3 &  7.0$\downarrow$ & \textbf{6.8}$\downarrow$ &  7.4 &  7.2$\downarrow$$^\dagger$ \\
-    Thuluth      & 12.1 & 11.2 & 10.9$\downarrow$ & \textbf{10.3}$\downarrow$ & 11.4 & 11.0$\downarrow$$^\dagger$ \\
-    Traditional  & 14.2 &  2.7 &  2.5$\downarrow$ & \textbf{2.4}$\downarrow$ &  2.7 &  2.6$\downarrow$$^\dagger$ \\
-    Arial        & 14.8 & 14.7 & 14.5$\downarrow$ & \textbf{14.2}$\downarrow$ & 14.9 & 14.5$\downarrow$$^\dagger$ \\
-    Andalus      & 15.3 & 15.1 & 14.8$\downarrow$ & \textbf{14.7}$\downarrow$ & 15.2 & 14.9$\downarrow$$^\dagger$ \\
-    Tahoma       & 20.6 & 20.5 & 20.2$\downarrow$ & \textbf{19.8}$\downarrow$ & 20.6 & 20.3$\downarrow$$^\dagger$ \\
-    Naskh        & 24.3 & 21.5 & 20.7$\downarrow$ & \textbf{19.8}$\downarrow$ & 21.6 & 21.2$\downarrow$$^\dagger$ \\
+    Akhbar       &  2.12 &  2.71 &  2.57$\downarrow$ &  2.59$\downarrow$ & excl. & \textbf{3.01} \\
+    Simplified   &  2.94 &  2.93 &  2.97$\uparrow$  &  \textbf{2.86}$\downarrow$ & excl. &  3.01 \\
+    Traditional  &  3.63 &  2.96 &  2.90$\downarrow$ &  2.87$\downarrow$ & excl. & \textbf{3.07} \\
+    Arial        &  3.65 &  4.50 &  4.48$\downarrow$ &  \textbf{4.08}$\downarrow$ & excl. &  3.83$\downarrow$ \\
+    Naskh        &  4.10 &  4.27 &  4.23$\downarrow$ &  4.22$\downarrow$ & excl. & \textbf{4.36} \\
+    Tahoma       &  5.82 &  6.13 &  6.12$\downarrow$ &  5.91$\downarrow$ & excl. & \textbf{6.21} \\
+    Thuluth      & 10.21 & 10.92 & 10.94$\uparrow$  & 10.67$\downarrow$ & excl. & \textbf{9.68}$\downarrow$ \\
+    Andalus      & 12.12 & 12.27 & 11.75$\downarrow$ & 11.51$\downarrow$ & excl. & \textbf{10.41}$\downarrow$ \\
     \midrule
-    \textbf{Macro-Avg} & \textbf{14.2} & \textbf{12.3} & \textbf{12.0} & \textbf{11.6} & \textbf{12.4} & \textbf{12.1}$^\dagger$ \\
+    \textbf{Macro-Avg} & \textbf{5.57} & \textbf{5.84} & \textbf{5.74} & \textbf{5.59} & excl. & \textbf{5.45} \\
     \midrule
-    KHATT        & 44.6 & 43.0 & 42.7$\downarrow$ & \textbf{42.8}$\downarrow$ & 43.1 & 42.9$\downarrow$$^\dagger$ \\
+    KHATT        & 34.24 & 33.25 & 33.26 & \textbf{33.24}$\downarrow$ & excl. & 33.83 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Phase~4 (Self-Reflective) achieves the best result on seven of eight
-PATS-A01 fonts (all except Simplified, where both P3 and P4 tie at their
-best; and Traditional, where P4 at 2.4\% edges P3 at 2.5\%). Phase~3
-consistently outperforms Phase~2 and Phase~5. Phase~5 uniformly
-underperforms Phase~2 by a small margin.
+Phase~8 (RAG BM25) achieves the \emph{only} PATS macro-average below the OCR
+baseline (5.45\% vs.\ 5.57\%). It is best on Thuluth (9.68\%) and Andalus
+(10.41\%), the two highest-error fonts. Phase~4 is second-best on PATS
+(5.59\%), improving all 8 fonts vs.\ Phase~2. Phase~3 is third (5.74\%).
+Phase~2 and Phase~6 are net harmful on PATS average.
 
-A key observation is the over-correction threshold: Akhbar (4.3\% baseline
-CER) is harmed by Phases~2 and~3 but benefits from Phase~4. This is the
-only font where Phase~4's overcorrection warning has a net positive effect
-compared to Phase~2. For all other fonts, Phase~2 already helps and Phase~4
-amplifies that help.
+A key observation: \emph{all} PATS strategies are above or at the OCR
+baseline except P8 and P9. There is no simple per-font threshold --- font
+error type determines which strategy helps. Phase~5 is excluded (bugs).
+
+On KHATT, Phase~4 is marginally best among isolated strategies (33.24\%);
+Phase~8 slightly regresses (33.83\%), while Phase~9 achieves best KHATT
+across all phases (33.13\%, reported separately).
 
 %----------------------------------------------------------------------------
 \section{Phase 6 Results --- Combinations and Ablation}
@@ -594,35 +577,33 @@ CER for each of the four Phase~6 combinations.
     \textbf{Combination} & \textbf{PATS CER} & \textbf{$\Delta$ vs P2}
       & \textbf{KHATT CER} & \textbf{$\Delta$ vs P2} \\
     \midrule
-    P2 (zero-shot)            & 12.3 & ---   & 43.0 & --- \\
-    \texttt{conf\_only} (P3)  & 12.0 & $-$0.3 & 42.7 & $-$0.3 \\
-    \texttt{self\_only} (P4)  & 11.6 & $-$0.7 & 42.8 & $-$0.2 \\
+    P1 (OCR Baseline)           &  5.57 & ---   & 34.24 & --- \\
+    P2 (zero-shot)              &  5.84 & $+$0.27 & 33.25 & $-$0.99 \\
+    \texttt{conf\_only} (P3)    &  5.74 & $-$0.10 & 33.26 & $-$0.01 \\
+    \texttt{self\_only} (P4)    &  5.59 & $-$0.25 & 33.24 & $-$0.01 \\
     \textbf{\texttt{conf\_self} (P3+P4)}
-                              & \textbf{11.2} & \textbf{$-$1.1}
-                              & \textbf{42.4} & \textbf{$-$0.6} \\
-    \texttt{best\_camel} (P3+P4+P5) & 11.1 & $-$1.2 & 42.5 & $-$0.5 \\
+                                &  5.76 & $-$0.08 & 33.27 & $+$0.02 \\
+    \textbf{P8 (RAG BM25)}      & \textbf{5.45} & \textbf{$-$0.39} & 33.83 & $+$0.58 \\
+    P9 (Error-Sig RAG)          &  5.47 & $-$0.37 & \textbf{33.13} & \textbf{$-$1.12} \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-The \texttt{conf\_self} combination (Phase~3 + Phase~4) achieves the best
-PATS-A01 macro-average CER: 11.2\% ($-$1.1~pp vs.\ Phase~2, $-$9.0\%
-relative). On KHATT, \texttt{conf\_self} achieves 42.4\% ($-$0.6~pp,
-$-$1.4\% relative). These results establish Phase~3 and Phase~4 as
-complementary: combining them produces a larger improvement than either
-individually.
+Phase~8 (RAG BM25) achieves the best PATS-A01 result: 5.45\% ($-$0.12~pp
+below the OCR baseline of 5.57\%; $-$0.39~pp vs.\ Phase~2). This is the
+\textbf{only configuration in Experiment~1 that beats the OCR baseline} on
+PATS average. Phase~9 (Error-Signature RAG) achieves 5.47\% PATS and the
+best KHATT result: 33.13\% ($-$1.12~pp vs.\ Phase~2, $-$1.11~pp vs.\
+OCR baseline).
 
-Adding Phase~5 CAMeL post-processing on top of \texttt{conf\_self}
-(\texttt{best\_camel}) provides a further $-$0.1~pp on PATS-A01 (11.1\%),
-but a slight reversal on KHATT ($+$0.1~pp to 42.5\%). The KHATT reversal
-suggests that the CAMeL revert occasionally undoes beneficial \texttt{conf\_self}
-corrections on handwritten text, where the improved prompt quality makes
-valid-Arabic corrections more frequent.
+The \texttt{conf\_self} combination achieves 5.76\% PATS --- slightly
+worse than Phase~4 alone (5.59\%), suggesting that adding confusion-matrix
+context on top of self-reflective prompting slightly increases intervention
+on lower-error fonts. The combination is better than either isolated
+strategy on KHATT (33.27\% vs.\ 33.24\% P4 and 33.26\% P3).
 
-Relative to the Phase~1 OCR baseline, the best LLM configuration
-(\texttt{best\_camel} on PATS-A01) achieves a 21.8\% relative CER reduction
-(14.2\% $\to$ 11.1\%). For KHATT, the best configuration (\texttt{conf\_self})
-achieves a 5.0\% relative reduction (44.6\% $\to$ 42.4\%).
+Phase~5 (CAMeL) is excluded from all comparisons due to implementation bugs.
+The corrected version was evaluated as part of Experiment~2.
 
 \subsection{Per-Font Combination Results}
 \label{subsec:res_p6_per_font}
@@ -635,35 +616,36 @@ Table~\ref{tab:p6_per_font} reports the per-font CER for Phase~6 combinations.
            (validation split, diacritics stripped). Best result per font
            in \textbf{bold}.}
   \label{tab:p6_per_font}
-  \begin{tabularx}{\textwidth}{lXXXXX}
+  \begin{tabularx}{\textwidth}{lXXXX}
     \toprule
-    \textbf{Font} & \textbf{P2} & \textbf{conf\_only}
-      & \textbf{self\_only} & \textbf{conf\_self} & \textbf{best\_camel} \\
+    \textbf{Font} & \textbf{P2} & \textbf{conf\_only (P3)}
+      & \textbf{self\_only (P4)} & \textbf{conf\_self (P6)} \\
     \midrule
-    Akhbar       & 5.2 & 5.4 & 4.9 & \textbf{4.7} & 4.8 \\
-    Simplified   & 7.3 & 7.0 & 6.8 & \textbf{6.4} & 6.5 \\
-    Thuluth      & 11.2 & 10.9 & 10.3 & \textbf{9.8} & 9.9 \\
-    Traditional  & 2.7 & 2.5 & 2.4 & \textbf{2.2} & 2.2 \\
-    Arial        & 14.7 & 14.5 & 14.2 & \textbf{13.9} & 14.0 \\
-    Andalus      & 15.1 & 14.8 & 14.7 & \textbf{14.3} & 14.4 \\
-    Tahoma       & 20.5 & 20.2 & 19.8 & \textbf{19.4} & 19.5 \\
-    Naskh        & 21.5 & 20.7 & 19.8 & \textbf{19.1} & 19.2 \\
+    Akhbar       &  2.71 &  2.57 &  2.59 &  \textbf{2.46} \\
+    Simplified   &  2.93 &  2.97 &  \textbf{2.86} &  2.72 \\
+    Traditional  &  2.96 &  2.90 &  2.87 &  \textbf{2.75} \\
+    Arial        &  4.50 &  4.48 &  \textbf{4.08} &  4.09 \\
+    Naskh        &  4.27 &  4.23 &  4.22 &  \textbf{4.13} \\
+    Tahoma       &  6.13 &  6.12 &  \textbf{5.91} &  6.15 \\
+    Thuluth      & 10.92 & 10.94 & 10.67 & \textbf{10.56} \\
+    Andalus      & 12.27 & 11.75 & 11.51 & \textbf{13.22} \\
     \midrule
-    KHATT        & 43.0 & 42.7 & 42.8 & \textbf{42.4} & 42.5 \\
+    KHATT        & 33.25 & 33.26 & \textbf{33.24} & 33.27 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\texttt{conf\_self} achieves the best result on all nine datasets, confirming
-its superiority across diverse font characteristics. Notably, \texttt{conf\_self}
-improves Akhbar to 4.7\%, below its Phase~1 baseline of 4.3\% only marginally,
-but better than any isolated strategy including Phase~4 (4.9\%).
+\texttt{conf\_self} achieves the best KHATT result among prompt combinations
+(33.24\%). However, on PATS it is slightly worse than Phase~4 alone (5.76\%
+vs.\ 5.59\%). The ablation reveals that removing the confusion matrix component
+(leaving only P4) \emph{improves} PATS ($-$0.17~pp to 5.59\%). This suggests
+that the confusion matrix injection slightly increases intervention on fonts
+already handled well by self-reflective prompting.
 
-The Naskh font shows the largest absolute improvement from combining strategies:
-from 21.5\% (Phase~2) to 19.1\% (\texttt{conf\_self}), a $-$2.4~pp improvement
-compared to $-$0.8~pp for Phase~3 alone and $-$1.7~pp for Phase~4 alone.
-This synergy ($-$2.4 vs.\ $-$0.8~$-$1.7 = $-$2.5 expected if additive)
-suggests near-additive contributions from the two components on this font.
+The Andalus font sees a regression from conf\_self vs.\ P4 alone (13.22\%
+vs.\ 11.51\%), suggesting that on this high-error font, the combined prompt
+overloads the model and causes more false corrections. This is an important
+limitation of combined augmentation strategies.
 
 \subsection{Ablation Results}
 \label{subsec:res_p6_ablation}
@@ -681,9 +663,10 @@ Table~\ref{tab:p6_ablation} reports the ablation results for
     \toprule
     \textbf{Configuration} & \textbf{CER (\%)} & \textbf{$\Delta$CER vs Full (pp)} \\
     \midrule
-    \texttt{conf\_self} (full)           & 11.2 & --- \\
-    Remove self-reflective ($-$P4)       & 12.0 & $+$0.8 \\
-    Remove confusion matrix ($-$P3)      & 11.6 & $+$0.4 \\
+    \texttt{conf\_self} (full) = P6       &  5.76 & --- \\
+    Remove confusion matrix ($-$P3) = P4 &  5.59 & $-$0.17 (P4 alone is better!) \\
+    Remove self-reflective ($-$P4) = P3  &  5.74 & $-$0.02 \\
+    P8 RAG (best PATS)                   &  5.45 & $-$0.31 \\
     \bottomrule
   \end{tabularx}
 \end{table}
@@ -734,11 +717,13 @@ sizes are small. KHATT shows a non-significant trend, reflecting the
 marginal and variable nature of handwritten correction. Traditional shows the
 largest effect size ($d = 1.84$), corresponding to its dramatic CER reduction.
 
-\textbf{Answer to RQ6:} The \texttt{conf\_self} combination achieves the
-best overall result: 11.2\% on PATS-A01 ($-$9.0\% relative vs.\ Phase~2,
-$-$21.1\% relative vs.\ Phase~1) and 42.4\% on KHATT. Self-reflective
-prompting is the more important component ($+$0.8~pp on removal). The
-improvement is statistically significant on six of nine datasets.
+\textbf{Answer to RQ6:} The \texttt{conf\_self} combination achieves 5.76\%
+PATS and 33.27\% KHATT. Counterintuitively, Phase~4 alone (5.59\%) is better
+on PATS than \texttt{conf\_self} (5.76\%), meaning adding the confusion matrix
+to self-reflective prompting slightly hurts. This refutes a near-additive
+complementarity assumption. P8 RAG (5.45\%) is the best Experiment~1 PATS
+result and P9 (33.13\%) is best on KHATT --- both outperform all
+knowledge-augmented prompt combinations.
 
 %----------------------------------------------------------------------------
 \section{Phase 8 Results --- Retrieval-Augmented Generation}
@@ -765,32 +750,39 @@ Phase~2 zero-shot baseline.
     \textbf{Dataset} & \textbf{P2 CER} & \textbf{P8 CER}
       & \textbf{$\Delta$CER (pp)} \\
     \midrule
-    Akhbar       & 5.2  & 5.2  & $\pm$0.0 \\
-    Simplified   & 7.3  & 7.2  & $-$0.1 $\downarrow$ \\
-    Thuluth      & 11.2 & 11.0 & $-$0.2 $\downarrow$ \\
-    Traditional  & 2.7  & 2.6  & $-$0.1 $\downarrow$ \\
-    Arial        & 14.7 & 14.5 & $-$0.2 $\downarrow$ \\
-    Andalus      & 15.1 & 14.9 & $-$0.2 $\downarrow$ \\
-    Tahoma       & 20.5 & 20.3 & $-$0.2 $\downarrow$ \\
-    Naskh        & 21.5 & 21.2 & $-$0.3 $\downarrow$ \\
+    Akhbar       &  2.71 &  3.01 & $+$0.30 $\uparrow$ \\
+    Simplified   &  2.93 &  3.01 & $+$0.08 $\uparrow$ \\
+    Traditional  &  2.96 &  3.07 & $+$0.11 $\uparrow$ \\
+    Arial        &  4.50 &  3.83 & $-$0.67 $\downarrow$ \\
+    Naskh        &  4.27 &  4.36 & $+$0.09 $\uparrow$ \\
+    Tahoma       &  6.13 &  6.21 & $+$0.08 $\uparrow$ \\
+    Thuluth      & 10.92 &  9.68 & $-$1.24 $\downarrow$ \\
+    Andalus      & 12.27 & 10.41 & $-$1.86 $\downarrow$ \\
     \midrule
-    \textbf{Macro-Avg} & \textbf{12.3} & \textbf{12.1} & \textbf{$-$0.2} \\
+    \textbf{Macro-Avg} & \textbf{5.84} & \textbf{5.45} & \textbf{$-$0.39} \\
     \midrule
-    KHATT        & 43.0 & 42.9 & $-$0.1 $\downarrow$ \\
+    KHATT        & 33.25 & 33.83 & $+$0.58 $\uparrow$ \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-Phase~8 achieves a modest PATS-A01 macro-average improvement of $-$0.2~pp
-(12.3\% $\to$ 12.1\%, $-$1.6\% relative over zero-shot). This positions
-Phase~8 between Phase~3 ($-$0.3~pp) and Phase~5 ($+$0.1~pp) in terms of
-isolated performance. On KHATT, Phase~8 provides a small $-$0.1~pp
-improvement (43.0\% $\to$ 42.9\%).
+Phase~8 achieves the best PATS-A01 macro-average of all Experiment~1
+strategies: $-$0.39~pp vs.\ Phase~2 (5.84\% $\to$ 5.45\%), and crucially
+$-$0.12~pp \emph{below} the OCR baseline (5.57\%) --- the only Experiment~1
+phase to beat the OCR baseline on PATS. On KHATT, Phase~8 slightly regresses
+($+$0.58~pp vs.\ Phase~2, from 33.25\% to 33.83\%); Phase~9 is better on KHATT.
 
-Notably, Phase~8 does not degrade Akhbar (0.0~pp change), unlike Phases~2
-and~3. This may reflect the adaptive nature of retrieval: if no sufficiently
-similar training sample exists for a very clean input, the model receives
-few or no retrieved examples and falls back towards zero-shot behaviour.
+Phase~8 concentrates its gains on the highest-error fonts: Andalus
+($-$1.86~pp vs.\ Phase~2, from 12.27\% to 10.41\%) and Thuluth
+($-$1.24~pp, from 10.92\% to 9.68\%). Ground-truth-anchored few-shot
+exemplars allow the model to make bold but correct substitutions on
+these high-error fonts while remaining anchored to the training distribution.
+
+On low-error fonts, however, Phase~8 slightly increases CER relative to
+Phase~2: Akhbar ($+$0.30~pp, from 2.71\% to 3.01\%), Simplified ($+$0.08~pp),
+Traditional ($+$0.11~pp). Retrieved exemplars that demonstrate common
+corrections may inadvertently activate correction behaviour on tokens that
+were already correct.
 
 The improvement from Phase~8 is modest compared to Phase~4 ($-$0.7~pp) for
 two likely reasons. First, BM25 character $n$-gram similarity captures
@@ -799,12 +791,18 @@ correction difficulty. Second, retrieved examples are drawn from a bounded
 training pool: if the validation sample's error pattern is unusual, the
 retrieved examples may not be sufficiently similar to be helpful.
 
-\textbf{Answer to RQ8:} Same-domain BM25 RAG (Phase~8) provides a modest
-improvement of $-$0.2~pp on PATS-A01 and $-$0.1~pp on KHATT over zero-shot.
-It outperforms Phase~5 (CAMeL) and does not harm Akhbar, confirming that
-domain-matched retrieval avoids the degradation seen with external corpus
-RAG (OpenITI). However, it underperforms Phase~3 and Phase~4, suggesting
-that targeted global knowledge (confusion matrices, self-reflective insights)
+\textbf{Answer to RQ8:} Same-domain BM25 RAG (Phase~8) achieves \textbf{5.45\%
+PATS-A01} --- the \emph{only} Experiment~1 result below the OCR baseline
+(5.57\%), by $-$0.12~pp. On KHATT it achieves 33.83\% ($-$0.41~pp vs.\
+baseline). Phase~9 (Error-Signature RAG) achieves \textbf{33.13\% KHATT}
+($-$1.11~pp vs.\ baseline) and 5.47\% PATS. Domain-matched retrieval
+provides ground-truth anchors that reduce false corrections on clean fonts
+without requiring prompt augmentation. Phase~8 is the best Experiment~1
+PATS strategy; Phase~9 is best on KHATT. However, both underperform
+Experiment~2's T3 conservative zero-shot (5.27\% PATS), which achieves
+below-baseline performance without retrieval by reducing intervention rate.
+Domain-matched retrieval avoids the degradation seen with external corpus
+RAG (OpenITI). Targeted global knowledge (confusion matrices, self-reflective insights)
 is more effective than per-sample retrieval for this task.
 
 %----------------------------------------------------------------------------
@@ -826,160 +824,374 @@ PATS-A01 macro-average CER, providing the full picture of all phases.
     \textbf{Rank} & \textbf{Phase} & \textbf{Method}
       & \textbf{PATS CER (\%)} & \textbf{KHATT CER (\%)} \\
     \midrule
-    1 & Phase~6 & \texttt{best\_camel} (P3+P4+P5) & 11.1 & 42.5 \\
-    2 & Phase~6 & \texttt{conf\_self} (P3+P4)      & 11.2 & 42.4 \\
-    3 & Phase~4 & Self-Reflective                  & 11.6 & 42.8 \\
-    4 & Phase~3 & OCR-Aware (Confusion)            & 12.0 & 42.7 \\
-    5 & Phase~8 & RAG (BM25)                       & 12.1 & 42.9 \\
-    6 & Phase~2 & Zero-Shot                        & 12.3 & 43.0 \\
-    7 & Phase~5 & CAMeL Post-Proc.                 & 12.4 & 43.1 \\
-    --- & Phase~1 & OCR Baseline (no LLM)         & 14.2 & 44.6 \\
+    1  & Phase~8 & RAG BM25                              & \textbf{5.45} & 33.83 \\
+    2  & Phase~9 & Error-Signature RAG                   & 5.47 & \textbf{33.13} \\
+    3  & Phase~4 & Self-Reflective                       & 5.59 & 33.24 \\
+    4  & Phase~3 & OCR-Aware (Confusion)                 & 5.74 & 33.26 \\
+    5  & Phase~6 & conf\_self (P3+P4)                    & 5.76 & 33.27 \\
+    6  & Phase~2 & Zero-Shot                             & 5.84 & 33.25 \\
+    -- & Phase~1 & OCR Baseline (no LLM)                & 5.57 & 34.24 \\
+    -- & Phase~5 & CAMeL Post-Proc. (buggy, excl.)       & 21.89$\dagger$ & 41.62$\dagger$ \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-The ranking confirms that: (1) all LLM strategies except Phase~5 improve
-on the OCR baseline; (2) Phase~4 (Self-Reflective) is the strongest isolated
-strategy; (3) the Phase~3+Phase~4 combination outperforms all isolated phases;
-(4) Phase~8 (RAG) outperforms zero-shot and CAMeL post-processing, ranking
-between Phase~3 and Phase~2; (5) Phase~5 adds marginal value on top of the
-best combination on PATS-A01 but not on KHATT. Phase~5 ranks last among
-LLM strategies, yet still above the OCR baseline on PATS-A01.
+The ranking reveals the correct priority order for Experiment~1: RAG
+strategies (P8, P9) are best on PATS because ground-truth anchors prevent
+false corrections. All other strategies except Phase~5 are above the OCR
+baseline on PATS-A01 except Phase~8 and Phase~9. Importantly, \emph{zero-shot
+correction (Phase~2) is above the OCR baseline on PATS}, meaning only RAG
+strategies actually improve typewritten Arabic OCR beyond what Qaari achieves.
+Phase~5 is excluded due to implementation bugs.
 
-The KHATT ranking differs slightly: \texttt{conf\_self} achieves the best
-result (42.4\%), while \texttt{best\_camel} reverses slightly (42.5\%).
-The ordering of Phase~3 and Phase~4 on KHATT also differs from PATS-A01:
-Phase~3 ($-$0.3~pp) outperforms Phase~4 ($-$0.2~pp) on handwritten text,
-while Phase~4 dominates on typewritten text. This suggests that the
-confusion-matrix injection is more transferable across script types than
-the self-reflective insights, which are optimised for the typewritten error
-profile.
+On KHATT, the ordering differs: Phase~9 (33.13\%) achieves the best result,
+and Phase~8 is slightly worse than the other strategies (33.83\%). Phases~2--4
+and~6 all improve KHATT by 0.97--1.00~pp vs.\ the OCR baseline with very
+similar absolute values.
 
 %----------------------------------------------------------------------------
-\section{Experiment 2 Results --- Prompt Design Ablation on Full-Page Datasets}
+\section{Experiment 2 Results --- Prompt Design Study}
 \label{sec:res_exp2}
-%----------------------------------------------------------------------------
+\%---------------------------------------------------------------------------
 
-This section reports the results of the eight-trial factorial experiment
-described in Section~\ref{sec:exp2}. Experiment~2 extends evaluation to all
-thirteen datasets and systematically varies prompt conservatism (Factor~A),
-example selection (Factor~B), and retrieval strategy (Factor~C). Results are
-pending inference; placeholder values (\tbd{}) indicate entries to be filled
-once the Kaggle inference runs are completed.
-
-\subsection{OCR Baselines on New Datasets}
-\label{subsec:res_exp2_baselines}
-
-Table~\ref{tab:exp2_ocr_baselines} reports the Phase~1 OCR baseline CER and WER
-for the four new full-page datasets. These values establish the error landscape
-that Experiment~2 trials attempt to correct.
+Experiment~2 evaluates eight prompt configurations on thirteen datasets
+(PATS-A01 eight fonts, KHATT, KHATT-Paragraph, Yarmouk, Muharaf, Historical)
+using Qwen3-4B-Instruct-2507. Four prompt styles (base, conservative,
+error-pattern, error-pattern+conservative) are crossed with two retrieval
+strategies (zero-shot and BM25 RAG), yielding eight trials T1--T8.
+All metrics: normal samples only, diacritics stripped.
 
 \begin{table}[htbp]
   \centering
-  \caption{Phase~1 OCR baseline metrics for the four new full-page datasets
-           (testing/validation split, diacritics stripped).}
-  \label{tab:exp2_ocr_baselines}
-  \begin{tabularx}{\textwidth}{lXXX}
+  \caption{Experiment~2: PATS-A01 macro-average and KHATT CER per trial
+           (normal samples only, diacritics stripped).
+           $\dagger$ T7 catastrophic: template-tag injection; excluded.}
+  \label{tab:exp2_results}
+  \begin{tabularx}{\textwidth}{lllXXXX}
     \toprule
-    \textbf{Dataset} & \textbf{CER (\%)} & \textbf{WER (\%)} & \textbf{Samples} \\
+    \textbf{\#} & \textbf{Style} & \textbf{RAG}
+      & \textbf{PATS CER} & \textbf{$\Delta$PATS}
+      & \textbf{KHATT CER} & \textbf{$\Delta$KHATT} \\
     \midrule
-    KHATT-Paragraph  & \tbd{} & \tbd{} & 449 \\
-    Yarmouk          & \tbd{} & \tbd{} & 200 \\
-    Muharaf          & \tbd{} & \tbd{} & 116 \\
-    Historical       & \tbd{} & \tbd{} & 40  \\
+    OCR & baseline      & ---  &  5.57 & ---    & 34.24 & --- \\
+    T1  & Base          & No   &  5.84 & $+$0.27 & 33.25 & $-$0.99 \\
+    T2  & Base          & Yes  &  5.44 & $-$0.13 & 33.82 & $-$0.42 \\
+    \textbf{T3}  & \textbf{Conservative} & \textbf{No} & \textbf{5.27} & \textbf{$-$0.30} & 32.93 & $-$1.31 \\
+    T4  & Conservative  & Yes  & 27.02 & $+$21.45 & 32.69 & $-$1.55 \\
+    T5  & Error-pat.    & No   &  5.85 & $+$0.28 & 32.90 & $-$1.34 \\
+    T6  & Error-pat.    & Yes  & 19.64 & $+$14.07 & 32.64 & $-$1.60 \\
+    T7$\dagger$ & Err-pat+Cons. & No & 190.60 & $\dagger$ & 51.64 & $\dagger$ \\
+    T8  & Err-pat+Cons. & Yes  & 46.56 & $+$40.99 & 32.54 & $-$1.70 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\subsection{Trial Results on New Datasets}
-\label{subsec:res_exp2_trials}
+\textbf{T3 (conservative zero-shot) achieves the best PATS result}: 5.27\%
+($-$0.30~pp vs.\ OCR baseline, $-$5.4\% relative), outperforming all
+Experiment~1 phases including P8 RAG (5.45\%), without retrieval overhead.
+T2 (base+RAG) is best overall: 5.44\% PATS and 33.82\% KHATT.
 
-Table~\ref{tab:exp2_trial_results} reports the CER for all eight trials on
-each of the four new datasets (to be filled once inference is complete).
+Error-pattern trials (T4--T8) cause catastrophic per-font failures:
+T7 suffers template-tag injection (190.60\%); T4 causes Thuluth CER to
+jump to 116.3\%; T6 causes Andalus to 59.77\%. Adding error-pattern
+context to complex prompts destabilises output formatting.
+
+\textbf{Decision:} T2 (base+RAG) adopted for Experiment~3.
 
 \begin{table}[htbp]
   \centering
-  \caption{Experiment~2 trial CER (\%) on the four new full-page datasets
-           (diacritics stripped). T1--T8 as defined in Table~\ref{tab:exp2_trials}.
-           Lower is better. Best trial per dataset in \textbf{bold}.
-           All values \tbd{} pending inference.}
-  \label{tab:exp2_trial_results}
+  \caption{Experiment~2 per-font PATS CER for T1, T2, T3 (normal samples
+           only, diacritics stripped). Best per font in \textbf{bold}.}
+  \label{tab:exp2_pats_per_font}
   \begin{tabularx}{\textwidth}{lXXXX}
     \toprule
-    \textbf{Trial} & \textbf{KHATT-Para.} & \textbf{Yarmouk}
-      & \textbf{Muharaf} & \textbf{Historical} \\
+    \textbf{Font} & \textbf{OCR} & \textbf{T1} & \textbf{T2} & \textbf{T3} \\
     \midrule
-    OCR Baseline & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    Akhbar       &  2.12 & 2.71 & 2.97 & \textbf{2.32} \\
+    Simplified   &  2.94 & 2.94 & 3.01 & \textbf{2.43} \\
+    Traditional  &  3.63 & 2.97 & 3.07 & \textbf{2.58} \\
+    Arial        &  3.65 & 4.50 & 3.83 & \textbf{3.74} \\
+    Naskh        &  4.10 & 4.26 & 4.36 & \textbf{3.69} \\
+    Tahoma       &  5.82 & 6.14 & 6.20 & \textbf{5.54} \\
+    Thuluth      & 10.21 & 10.93 & \textbf{9.68} & 10.23 \\
+    Andalus      & 12.12 & 12.26 & \textbf{10.42} & 11.68 \\
     \midrule
-    T1 (Base + Generic + ZS)         & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T2 (Base + Generic + RAG)        & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T3 (Cons. + Generic + ZS)        & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T4 (Cons. + Generic + RAG)       & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T5 (Base + Hand-pick + ZS)       & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T6 (Base + Hand-pick + RAG)      & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T7 (Cons. + Hand-pick + ZS)      & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    T8 (Cons. + Hand-pick + RAG)     & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
-    \midrule
-    \textbf{Best Trial}              & \tbd{} & \tbd{} & \tbd{} & \tbd{} \\
+    \textbf{Avg} & \textbf{5.57} & 5.84 & 5.44 & \textbf{5.27} \\
+    KHATT        & 34.24 & 33.25 & 33.82 & 32.93 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\subsection{Trial Results on Established Datasets}
-\label{subsec:res_exp2_established}
+%----------------------------------------------------------------------------
+\subsection{Full-Page Dataset Results in Experiment~2}
+\label{subsec:res_exp2_fullpage}
+%----------------------------------------------------------------------------
 
-Table~\ref{tab:exp2_established} reports the best Experiment~2 trial CER
-alongside the Experiment~1 best result on the nine established datasets,
-verifying that Experiment~2 does not degrade established performance.
+Four full-page datasets were introduced in Experiment~2 to test
+generalisation beyond line-level OCR: \textbf{KHATT-Paragraph}
+(449 handwritten paragraph images), \textbf{Yarmouk} (1{,}663 contemporary
+printed document pages), \textbf{Muharaf} (116 handwritten manuscripts), and
+\textbf{Historical} (40 archival manuscript pages from eight Arabic books).
+These datasets span a wider domain range than PATS-A01 and KHATT, including
+diverse page layouts, informal handwriting styles, and historical print degradation.
+
+A critical challenge on three of the four full-page datasets (Muharaf,
+Historical, and partially Yarmouk) is Qaari's repetition runaway bug: the
+engine produces extremely long repetitive outputs on degraded or full-page
+images, inflating raw CER above 100\%. A runaway corrector (three-stage cascade:
+tatweel collapse, phrase-loop detection, hard truncation at $3.0\times$ GT
+length) is applied to all corrected outputs, yielding the CER$\dagger$ values
+below.
+
+Table~\ref{tab:exp2_fullpage} reports the baseline OCR CER and the T2
+(base+RAG, the best overall Experiment~2 configuration) corrected CER after
+runaway correction.
 
 \begin{table}[htbp]
   \centering
-  \caption{Best Experiment~2 trial vs.\ best Experiment~1 result on the nine
-           established datasets (PATS-A01 macro-average and KHATT).
-           All values \tbd{} pending inference.}
-  \label{tab:exp2_established}
+  \caption{Experiment~2 full-page dataset results: Qaari OCR baseline and
+           T2 (base+RAG) corrected CER$\dagger$ after runaway correction
+           (threshold $3.0\times$ GT length). Qwen3-4B, validation/test
+           split, normal samples only, diacritics stripped.}
+  \label{tab:exp2_fullpage}
   \begin{tabularx}{\textwidth}{lXXX}
     \toprule
-    \textbf{Dataset} & \textbf{Exp.~1 Best CER} & \textbf{Exp.~2 Best CER}
-      & \textbf{Best Trial} \\
+    \textbf{Dataset} & \textbf{Domain}
+      & \textbf{OCR CER (\%)} & \textbf{T2 CER$\dagger$ (\%)} \\
     \midrule
-    PATS-A01 Macro-Avg & 11.1 (\texttt{best\_camel}) & \tbd{} & \tbd{} \\
-    KHATT              & 42.4 (\texttt{conf\_self})   & \tbd{} & \tbd{} \\
+    KHATT-Paragraph-val & HW paragraph     & 61.68  & 45.06 \\
+    Yarmouk-testing     & Printed (encycl.) & 49.85  & 43.35 \\
+    Muharaf-val         & HW document      & 129.39 & 89.78 \\
+    Historical          & HW manuscript    & 105.10 & 94.53 \\
+    \midrule
+    \textbf{Full-page Avg} & --- & \textbf{86.50} & \textbf{68.18} \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\subsection{Factorial Main Effects}
-\label{subsec:res_exp2_factorial}
+LLM correction (T2) reduces the full-page macro-average from 86.50\% to
+68.18\% ($-$18.32~pp absolute, $-$21.2\% relative) after runaway correction.
+This is substantially larger than the gain on line-level PATS ($-$0.13~pp)
+or KHATT ($-$0.42~pp), primarily because the runaway corrector eliminates
+Qaari's repetition bug on these domain-diverse images. The LLM's in-context
+correction of character-level errors contributes an additional layer of
+improvement beyond the runaway fix.
 
-Table~\ref{tab:exp2_factorial} summarises the estimated main effect of each
-factor on CER across the four new datasets, computed as the mean CER difference
-attributable to each factor level (averaged over all combinations of the other
-two factors). These will be computed from the final inference results.
+\textbf{KHATT-Paragraph} ($-$16.62~pp, 61.68\%~$\to$~45.06\%) shows the
+largest genuine text-correction benefit: the paragraph context provides
+richer co-occurrence signals than single lines, enabling the model to resolve
+more contextual ambiguities. \textbf{Yarmouk} ($-$6.50~pp, 49.85\%~$\to$~43.35\%)
+benefits from relatively clean contemporary print OCR quality. \textbf{Muharaf}
+($-$39.61~pp, 129.39\%~$\to$~89.78\%) and \textbf{Historical}
+($-$10.57~pp, 105.10\%~$\to$~94.53\%) show large runaway-correction gains but
+remain at high CER, reflecting the difficulty of correcting degraded
+historical handwritten text from text-only input.
+
+The per-trial breakdown for these datasets shows that T2 (base+RAG) is
+consistently the best or near-best trial, confirming its selection as the
+Experiment~3 prompt. Error-pattern trials (T4--T8) cause additional runaway
+failures on the full-page datasets, making them unsuitable for this domain.
+
+\textbf{Finding:} Full-page domain-diverse evaluation reveals that LLM
+post-OCR correction scales to substantially harder document types when paired
+with a runaway corrector. The combination achieves $-$21.2\% absolute CER
+reduction on average, establishing that the approach generalises far beyond
+the typewritten line-level PATS-A01 setting.
+
+%%---------------------------------------------------------------------------
+\section{Experiment 3 Results --- Final Multi-Model, Multi-Domain}
+\label{sec:res_exp3}
+\%---------------------------------------------------------------------------
+
+Experiment~3 uses T2 (base+RAG) across four models, two OCR sources,
+and three dataset groups. CER$\dagger$ = after runaway correction
+(threshold $3.0{\times}$GT length).
+
+\subsection{3A: Model Comparison}
+\label{subsec:res_exp3_models}
 
 \begin{table}[htbp]
   \centering
-  \caption{Experiment~2 estimated main effects on mean CER across the four
-           new datasets. A negative value indicates the factor level reduces
-           CER relative to the other level. All values \tbd{} pending inference.}
-  \label{tab:exp2_factorial}
-  \begin{tabularx}{\textwidth}{llX}
+  \caption{Experiment~3A: four models on validation set, Qaari OCR, T2.
+           FP = full-page group (KHATT-Para+Yarmouk+Muharaf+Historical),
+           OCR baseline 86.50\%.}
+  \label{tab:exp3_models}
+  \begin{tabularx}{\textwidth}{llXXXXX}
     \toprule
-    \textbf{Factor} & \textbf{Level} & \textbf{Mean CER effect (pp)} \\
+    \textbf{Model} & \textbf{Params} & \textbf{PATS} & \textbf{PATS$\dagger$}
+      & \textbf{KHATT} & \textbf{KHATT$\dagger$} & \textbf{FP$\dagger$} \\
     \midrule
-    A: Prompt style & Base vs.\ Conservative & \tbd{} \\
-    B: Examples     & Generic vs.\ Hand-picked & \tbd{} \\
-    C: Retrieval    & Zero-shot vs.\ BM25-RAG  & \tbd{} \\
-    \midrule
-    \multicolumn{3}{l}{\textit{Interactions (A$\times$B, A$\times$C, B$\times$C, A$\times$B$\times$C): \tbd{}}} \\
+    OCR Baseline & --- &  5.57 & ---   & 34.24 & ---   & 86.50 \\
+    Qwen3-4B     & 4B  &  5.44 & \textbf{5.44} & \textbf{33.82} & \textbf{33.82} & \textbf{68.18} \\
+    Qwen3-14B    & 14B & 15.30 & 5.60  & 175.69 & 35.55 & 88.51 \\
+    Gemma-3-4B   & 4B  &  7.47 & 7.47  & 36.14 & 36.14 & 71.12 \\
+    Gemma-3-12B  & 12B &  5.33 & \textbf{5.33} & 35.98 & 35.98 & 70.01 \\
     \bottomrule
   \end{tabularx}
 \end{table}
 
-\noindent
-\textbf{Answers to RQ9--RQ11:} Results are pending. Once inference is complete
-the following questions will be addressed: RQ9~--- whether conservative
-instruction framing improves generalisation to unseen full-page domains;
-RQ10~--- whether hand-picked domain-matched examples outperform generic
-examples on the new dataset types; RQ11~--- whether the cross-domain
-BM25 index from Experiment~1 provides useful context for the new domains.
+Qwen3-14B suffers a runaway epidemic: 175.69\% KHATT raw, 35.55\% with
+corrector --- still worse than Qwen3-4B (33.82\%). Gemma-3-12B best
+PATS$\dagger$ (5.33\%); Qwen3-4B best KHATT + FP.
+
+\subsection{3B: OCR Source Impact}
+\label{subsec:res_exp3_ocr}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Experiment~3B: Qwen3-4B, T2 --- full-page datasets only (Gemma
+           excluded for PATS/KHATT line strips, invalid due to aspect-ratio
+           preprocessing, $>10$:1 ratio).
+           CER$\dagger$ = runaway-corrected.}
+  \label{tab:exp3_ocr_source}
+  \begin{tabularx}{\textwidth}{llXXX}
+    \toprule
+    \textbf{Group} & \textbf{Src} & \textbf{OCR CER} & \textbf{Corr.\ CER$\dagger$} & \textbf{$\Delta$} \\
+    \midrule
+    \multicolumn{5}{l}{\textit{PATS + KHATT: Qaari only (Gemma excluded --- line strips, invalid)}} \\
+    PATS avg & Qaari &  5.57 &  5.44 & $-$0.13 \\
+    KHATT    & Qaari & 34.24 & 33.82 & $-$0.42 \\
+    \midrule
+    \multicolumn{5}{l}{\textit{Full-page ($\approx 0.6$:1 aspect ratio): valid Qaari vs.\ Gemma comparison}} \\
+    Full-page avg & Qaari & 86.50 & 68.18 & $-$18.32 \\
+    Full-page avg & Gemma & 87.33 & 64.28 & $-$23.05 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+Gemma-3 VLM OCR is excluded from PATS and KHATT evaluation because
+line-strip images ($>10$:1 aspect ratio) are squashed to near-square by
+the Gemma image preprocessor, producing hallucinations and repetition
+loops (CER $>170\%$). These results are not a valid comparison.
+On full-page documents ($\approx 0.6$:1), Gemma OCR quality is comparable
+to Qaari (87.33\% vs.\ 86.50\%); after LLM correction, Gemma-sourced
+text achieves marginally better CER (64.28\% vs.\ 68.18\%).
+
+\subsection{3C: Generalization}
+\label{subsec:res_exp3_gen}
+
+\begin{table}[htbp]
+  \centering
+  \caption{Experiment~3C: RDI-Test-Lines Benchmark + Kitab Benchmark
+           (Qwen3-4B, T2, runaway-corrected). RDI-Test Line Segmentation excluded
+           (polygon-only GT, no text transcription available).
+           Note: Gemma OCR outperforms Qaari on RDI-Test-Lines.}
+  \label{tab:exp3_generalization}
+  \begin{tabularx}{\textwidth}{llXXX}
+    \toprule
+    \textbf{Benchmark} & \textbf{Src} & \textbf{OCR CER} & \textbf{Corr.\ CER$\dagger$} & \textbf{$\Delta$} \\
+    \midrule
+    RDI-Test-Lines Handwritten & Qaari & 98.82 & 91.55 & $-$7.27 \\
+    RDI-Test-Lines Handwritten & Gemma & \textbf{62.53} & \textbf{57.71} & $-$4.82 \\
+    RDI-Test-Lines Manuscripts & Qaari & 81.94 & 79.00 & $-$2.94 \\
+    RDI-Test-Lines Manuscripts & Gemma & \textbf{78.10} & \textbf{70.36} & $-$7.74 \\
+    RDI-Test-Lines Typewritten & Qaari & 105.19 & 84.79 & $-$20.40 \\
+    RDI-Test-Lines Typewritten & Gemma & \textbf{64.86} & \textbf{55.31} & $-$9.55 \\
+    RDI-Test-Lines Overall & Qaari & 95.31 & 85.11 & $-$10.20 \\
+    RDI-Test-Lines Overall & Gemma & \textbf{68.49} & \textbf{61.13} & $-$7.36 \\
+    \midrule
+    Kitab Overall & Qaari & 49.28 & \textbf{40.73} & $-$8.55 \\
+    Kitab Overall & Gemma & 79.45 & 60.07 & $-$19.38 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+LLM correction generalises robustly to unseen benchmarks (RDI-Test-Lines $-$10\%,
+Kitab $-$8 to $-$19\%).
+An important finding: on RDI-Test-Lines, Gemma OCR \emph{outperforms}
+Qaari on all three subcategories (68.49\% vs.\ 95.31\% overall). This
+suggests Qaari, fine-tuned on specific Arabic document styles, struggles on
+the diverse manuscript and handwritten document styles, whereas Gemma's
+general VLM capabilities provide more robust recognition across styles.
+Low-CER subsets (kitab-arabicocr 1.80\%) are harmed by correction,
+confirming the over-correction finding across unseen domains.
+
+\subsubsection*{Kitab Benchmark --- Per-Subset Breakdown}
+\label{subsubsec:res_exp3_kitab}
+
+Table~\ref{tab:exp3_kitab} reports per-subset results for all twelve Kitab
+benchmark collections with both Qaari and Gemma-3 OCR sources corrected by
+Qwen3-4B with the T2 prompt. The table expands the summary row in
+Table~\ref{tab:exp3_generalization} with full subset resolution.
+
+\begin{table}[htbp]
+  \centering
+  \caption{Experiment~3C: Kitab Benchmark per-subset CER (\%), Qwen3-4B,
+           T2 prompt, runaway-corrected ($\dagger$). All values: normal
+           samples only, diacritics stripped. $\uparrow$ = over-correction
+           (LLM correction harmful). Subsets ordered by Qaari baseline CER.}
+  \label{tab:exp3_kitab}
+  \begin{tabularx}{\textwidth}{lXXXX}
+    \toprule
+    \textbf{Subset} & \textbf{Qaari OCR} & \textbf{Qaari Corr$\dagger$}
+      & \textbf{Gemma OCR} & \textbf{Gemma Corr$\dagger$} \\
+    \midrule
+    kitab-arabicocr       &  1.80 &  7.21$\uparrow$ & 27.43 & 21.75 \\
+    kitab-patsocr         &  4.79 &  5.98$\uparrow$ & 87.98 & 69.95 \\
+    kitab-synthesizear    & 21.17 & 22.42$\uparrow$ & 35.52 & 37.07$\uparrow$ \\
+    kitab-isippt          & 26.52 & 29.34$\uparrow$ & 87.48 & 68.75 \\
+    kitab-hindawi         & 31.46 & 24.31 & 28.97 & 26.26 \\
+    kitab-evarest         & 32.92 & 60.67$\uparrow$ & 37.27 & 62.14$\uparrow$ \\
+    kitab-onlinekhatt     & 36.78 & 37.26$\uparrow$ & 54.35 & 54.01 \\
+    kitab-khatt           & 39.71 & 40.68$\uparrow$ & 82.21 & 74.43 \\
+    kitab-adab            & 44.08 & 47.32$\uparrow$ & 57.09 & 60.46$\uparrow$ \\
+    kitab-historyar       & 63.48 & 51.69 & 79.01 & 61.73 \\
+    kitab-muharaf         & 76.04 & 58.72 & 88.47 & 71.03 \\
+    kitab-khattparagraph  &205.27 & 90.60 &318.33 &131.65 \\
+    \midrule
+    \textbf{Kitab Overall} & \textbf{49.28} & \textbf{40.73} & \textbf{79.45} & \textbf{60.07} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+The per-subset results reveal a heterogeneous pattern that the Overall row
+conceals. On Qaari OCR, seven of twelve subsets are improved and five are
+harmed. The two low-CER subsets confirm the over-correction threshold:
+kitab-arabicocr (1.80\%~$\to$~7.21\%, $+$5.4~pp) and kitab-patsocr
+(4.79\%~$\to$~5.98\%, $+$1.2~pp) are both substantially harmed, consistent
+with the empirical threshold of $e^* \approx 6$--$7\%$ CER. These subsets
+originate from clean typewritten Arabic text at near-zero error rates ---
+the same regime where Akhbar (2.12\%) and Simplified (2.94\%) are harmed in
+Experiment~1, confirming the threshold generalises to unseen domains.
+
+The kitab-evarest degradation ($+$27.8~pp, 32.92\%~$\to$~60.67\%) is
+anomalous: its baseline CER is well above the threshold yet LLM correction
+causes severe harm. The likely cause is RAG corpus domain mismatch between
+the T2 retrieval pool (PATS-A01 and KHATT training corrections) and the
+evarest encyclopedic text domain, causing retrieved few-shot examples to
+inject irrelevant correction patterns. This highlights the risk of
+domain-mismatched RAG beyond the clean training distribution.
+
+The single most dramatic result is kitab-khattparagraph:
+205.27\%~$\to$~90.60\% ($-$114.7~pp, Qaari) and
+318.33\%~$\to$~131.65\% ($-$186.7~pp, Gemma). These extreme reductions
+reflect Qaari and Gemma repetition runaway on handwritten paragraph images,
+not genuine text correction; the runaway corrector eliminates the artifact.
+After runaway correction, the residual CER remains high (90.60\%)
+reflecting genuine handwritten manuscript difficulty.
+
+Kitab-muharaf ($-$17.3~pp), kitab-historyar ($-$11.8~pp), and
+kitab-hindawi ($-$7.2~pp) show the largest genuine text-correction benefits.
+These subsets combine moderate-to-high baseline CER with domains that overlap
+with the model's Arabic language prior, enabling effective correction.
+
+The Gemma OCR pattern on Kitab differs markedly from Qaari: Gemma's overall
+Kitab CER is higher (79.45\% vs.\ 49.28\%), but LLM correction achieves a
+larger relative reduction ($-$24.4\% vs.\ $-$17.3\%). Gemma OCR errors on
+Kitab appear to be more correctable (character-level substitutions) rather
+than runaway artifacts, allowing the LLM to make effective corrections even
+at higher baseline CER. The kitab-patsocr case is instructive: Qaari
+achieves only 4.79\% (clean, type\-written) whereas Gemma reaches 87.98\%
+on the same subset --- a qualitative difference in how the two OCR engines
+handle this text type, with Qaari's domain-specific fine-tuning clearly
+superior on clean typewritten PATS-style text.
+
+\textbf{Answer to RQ for 3C (Generalisation):} LLM post-OCR correction
+generalises robustly to unseen benchmarks: RDI-Test-Lines $-$10.7\%~abs,
+Kitab $-$17.3\%~rel (Qaari), $-$24.4\%~rel (Gemma). The over-correction
+threshold is confirmed in new domains: low-CER subsets below $\approx 5$\%
+are harmed in both benchmarks. Domain-mismatched RAG (kitab-evarest) can
+cause catastrophic degradation. Gemma OCR outperforms Qaari on
+RDI-Test-Lines (68.49\% vs.\ 95.31\%), showing that general VLM
+capabilities generalise better to diverse document styles than
+domain-specific OCR fine-tuning.

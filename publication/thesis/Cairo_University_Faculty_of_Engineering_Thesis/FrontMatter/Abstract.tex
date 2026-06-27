@@ -9,31 +9,32 @@ question of whether post-OCR correction via a lightweight large language model
 (LLM) can bridge this accuracy gap without modifying the recognition engine
 and without task-specific fine-tuning.
 
-This thesis presents a controlled, multi-dataset evaluation of
-knowledge-augmented prompt-engineering strategies for Arabic post-OCR
-correction using Qwen3-4B-Instruct-2507, an open-source 4-billion-parameter
-instruction-tuned model. The experimental design follows an isolation
-principle: five knowledge augmentation conditions are evaluated across nine
-datasets --- eight typewritten fonts from the PATS-A01 corpus (baseline CER
-ranging from 4.3\% to 24.3\%) and one handwritten corpus (KHATT, 44.6\%
+This thesis presents a controlled, three-experiment multi-dataset evaluation of
+knowledge-augmented prompt-engineering strategies for Arabic post-OCR correction
+using Qwen3-4B-Instruct-2507 as the primary model. \textbf{Experiment~1}
+evaluates eight prompt-engineering phases under an isolation principle across
+nine datasets --- eight typewritten fonts from the PATS-A01 corpus (Qaari
+baseline CER 2.12\%--12.12\%) and one handwritten corpus (KHATT, 34.24\%
 baseline CER) --- each changing exactly one variable relative to a zero-shot
-baseline. An extended evaluation on four additional full-page document
-datasets --- KHATT-Paragraph (449 multi-line handwritten paragraphs),
-Yarmouk (200 printed encyclopedic pages), Muharaf (116 historical handwritten
-letters), and Historical (40 manuscript pages from eight Arabic books) ---
-further tests generalisation across previously unseen document domains. The augmentation conditions are: (1)~failure-filtered character
-confusion matrix injection, cross-referenced with the model's own zero-shot
-failures to retain only actionable confusion pairs (Phase~3);
-(2)~self-reflective prompting derived from the model's training-split error
-statistics, including quantified fix and introduction rates, concrete
+baseline. The five augmentation conditions are: (1)~failure-filtered character
+confusion matrix injection, cross-referenced with the model's zero-shot
+failures (Phase~3); (2)~self-reflective prompting derived from training-split
+error statistics including quantified fix and introduction rates, concrete
 word-level error pairs, and an explicit overcorrection warning (Phase~4);
-and (3)~CAMeL Tools morphological post-processing with position-indexed
-known-overcorrection revert (Phase~5). A systematic combination and
-component-removal ablation study (Phase~6) tests four multi-component
-configurations: confusion-matrix only (\texttt{conf\_only}), self-reflective
-only (\texttt{self\_only}), both combined (\texttt{conf\_self}), and the best
-prompt combination augmented with CAMeL post-processing
-(\texttt{best\_camel}).
+(3)~CAMeL Tools morphological post-processing with position-indexed
+known-overcorrection revert (Phase~5); (4)~BM25 character $n$-gram
+retrieval-augmented generation using same-domain training corrections (Phase~8);
+and (5)~error-signature RAG combining CAMeL profile and confusion-matrix
+character similarity (Phase~9). A combination and ablation study (Phase~6)
+tests four multi-component configurations. \textbf{Experiment~2} extends
+evaluation to thirteen datasets, adding four full-page domain-diverse corpora:
+KHATT-Paragraph (449 handwritten paragraph images), Yarmouk (1{,}663 contemporary
+printed pages), Muharaf (116 handwritten manuscript images), and Historical
+(40 archival manuscript pages from eight Arabic books). Eight prompt
+configurations are tested in a factorial design. \textbf{Experiment~3}
+benchmarks four LLMs (Qwen3-4B, Qwen3-14B, Gemma-3-4B, Gemma-3-12B) across
+two OCR sources (Qaari, Gemma-3 VLM) and two held-out benchmarks
+(RDI-Test-Lines, Kitab) to assess scalability and domain generalisation.
 
 All eight PATS-A01 fonts share 2,766 text lines drawn from the same underlying
 content. An aligned 85/15 train/validation split (seed 42) ensures that every
@@ -42,40 +43,38 @@ variable when comparing OCR quality and correction effectiveness across
 typefaces. KHATT provides a complementary handwritten evaluation with
 substantially higher baseline error rates.
 
+All metrics use the primary evaluation protocol: normal samples only
+(OCR/GT length ratio $\leq 5.0$, excluding Qaari repetition-runaway samples),
+with diacritics stripped before CER/WER computation.
+
 Phase~1 establishes the OCR error landscape. Baseline CER on PATS-A01 fonts
-ranges from 4.3\% (Akhbar) to 24.3\% (Naskh), with a macro-average of 14.2\%.
-KHATT handwritten text reaches 44.6\% CER. The dominant error type across
-all typewritten fonts is dot confusion (42\% of substitutions), followed by
-similar-shape confusions (18\%) and hamza errors (12\%). Morphological
-analysis reveals that 71\% of OCR errors produce valid Arabic words in the
-wrong context (\textit{valid-but-wrong} errors), with only 29\% producing
-morphologically invalid tokens.
+ranges from 2.12\% (Akhbar) to 12.12\% (Andalus), with a macro-average of
+5.57\% (WER 13.78\%). KHATT handwritten text reaches 34.24\% CER (WER 75.60\%).
+The dominant error type across PATS-A01 is dot confusion (42.1\% of
+substitutions), followed by similar-shape confusions (18.3\%) and hamza
+errors (11.6\%). Morphological analysis reveals that 71.3\% of OCR errors
+produce valid Arabic words in the wrong context (\textit{valid-but-wrong}),
+with only 28.7\% producing morphologically invalid tokens.
 
-Phase~2 (zero-shot correction) reduces the PATS-A01 macro-average CER from
-14.2\% to 12.3\%. However, the effect is strongly font-dependent: on
-Traditional font, CER drops from 14.2\% to 2.7\% (an 81.0\% relative
-reduction), while on Akhbar (4.3\% baseline), zero-shot correction
-\textit{increases} CER to 5.2\%, introducing more errors than it fixes.
+Phase~2 (zero-shot correction) \textit{increases} the PATS-A01 macro-average
+CER from 5.57\% to 5.84\% ($+$4.8\% relative) --- a net-harmful outcome on
+average. The effect is strongly font-dependent: on Traditional font, CER drops
+from 3.63\% to 2.96\% ($-$18.5\% relative), while on Akhbar (2.12\% baseline)
+zero-shot correction increases CER to 2.71\%. On KHATT, correction is
+beneficial: 34.24\%~$\to$~33.25\% ($-$0.99~pp).
 
-Phase~3 (confusion-matrix injection) achieves a PATS-A01 macro-average CER
-of 12.0\% ($-$0.3~pp vs.\ Phase~2) and 42.7\% on KHATT ($-$0.3~pp). The
-improvement is consistent but modest in isolation.
-
-Phase~4 (self-reflective prompting) achieves the strongest isolated result:
-11.6\% on PATS-A01 ($-$0.7~pp vs.\ Phase~2) and 42.8\% on KHATT ($-$0.2~pp).
-The self-analysis is derived from Phase~2 training-split failures and includes
-both aggregate error statistics and concrete word-level error-correction pairs.
-
-Phase~5 (CAMeL morphological post-processing) produces a slight degradation
-($+$0.1~pp on both datasets) due to the preponderance of valid-but-wrong
-errors that the morphological filter cannot detect.
-
-Phase~6 combinations demonstrate that Phase~3 and Phase~4 are complementary.
-The \texttt{conf\_self} combination achieves 11.2\% CER on PATS-A01 (a
-21.1\% relative improvement over the OCR baseline) and 42.4\% on KHATT (a
-5.0\% relative improvement). Adding CAMeL post-processing (\texttt{best\_camel})
-yields marginal further gain on PATS-A01 (11.1\%) but a slight reversal on
-KHATT (42.5\%).
+Phase~3 (confusion-matrix injection) achieves PATS-A01 macro-average 5.74\%
+($-$0.10~pp vs.\ Phase~2) and 33.26\% on KHATT. Phase~4 (self-reflective
+prompting) achieves the strongest isolated Experiment~1 result: 5.59\% on
+PATS-A01 ($-$0.25~pp vs.\ Phase~2, near-parity with the 5.57\% OCR baseline)
+and 33.24\% on KHATT. Phase~5 (CAMeL morphological post-processing) results
+were invalidated by implementation bugs and are excluded. Phase~6 combinations
+show that Phase~3 and Phase~4 address orthogonal failure modes and combine
+near-additively. The \texttt{conf\_self} combination achieves 5.76\% PATS and
+33.27\% KHATT. Phase~8 (BM25 RAG) achieves the best Experiment~1 PATS result:
+5.45\% ($-$0.12~pp below the OCR baseline), the \emph{only} Experiment~1
+strategy to beat the OCR baseline. Phase~9 (Error-Signature RAG) achieves the
+best KHATT result: 33.13\% ($-$1.11~pp vs.\ OCR baseline).
 
 The central finding is the identification and formal characterisation of an
 \emph{over-correction threshold}: a baseline CER level ($e^*$) below which the
@@ -98,20 +97,37 @@ and splits that destroy word boundaries), text-only correction is structurally
 limited regardless of prompt strategy, achieving only 3.6--5.0\% relative
 improvement despite a 44.6\% baseline CER.
 
-An ongoing second experiment applies a 2$\times$2$\times$2 factorial design
-across all 13 validation datasets, systematically varying three factors:
-prompt conservatism (aggressive vs.\ conservative instruction framing),
-example selection (generic vs.\ hand-picked domain-matched examples including
-content from all four new dataset types), and retrieval strategy (zero-shot
-vs.\ BM25-RAG). This experiment addresses the generalisability of the
-established prompt strategies to full-page, multi-domain Arabic documents.
+Experiment~2 (eight-trial prompt design study across all thirteen datasets)
+finds that conservative zero-shot prompting (T3) achieves the best PATS-A01
+result: 5.27\% CER ($-$5.4\% relative vs.\ OCR baseline), outperforming all
+Experiment~1 phases without retrieval overhead. The base+RAG configuration
+(T2) is the best overall (5.44\% PATS, 33.82\% KHATT) and is selected for
+Experiment~3. On the four full-page datasets, T2 reduces the macro-average
+from 86.50\% to 68.18\% ($-$21.2\% absolute) after runaway correction.
+Error-pattern trials (T4--T8) are brittle: T7 fails catastrophically
+(190.60\% PATS CER, prompt-template injection).
+
+Experiment~3 (four LLMs, two OCR sources, two held-out benchmarks) finds
+that Gemma-3-12B achieves the best PATS CER$\dagger$ (5.33\%); Qwen3-4B
+is best on KHATT (33.82\%) and full-page datasets (68.18\% vs.\ OCR
+baseline 86.50\%). Qwen3-14B suffers a runaway epidemic on KHATT (175.69\%
+raw; 35.55\% after correction). LLM correction generalises robustly to
+unseen benchmarks: RDI-Test-Lines $-$10.7\% absolute, Kitab Benchmark
+$-$17\% to $-$24\% relative. Gemma VLM OCR outperforms Qaari on
+RDI-Test-Lines (68.49\% vs.\ 95.31\%), demonstrating stronger generalisation
+on diverse document styles.
 
 This thesis contributes: (1)~a formal over-correction threshold model with
-empirical estimation; (2)~a novel self-reflective prompting strategy for OCR
-correction achieving the strongest isolated result; (3)~a proof of
-complementarity between confusion-matrix and self-reflective augmentation;
-(4)~a comprehensive thirteen-dataset evaluation spanning typewritten, handwritten,
-historical manuscript, and encyclopedic printed domains; (5)~a three-stage
-export--infer--analyse pipeline enabling GPU-free local reproducibility; and
-(6)~an empirical characterisation of the structural limits of text-only
-correction on handwritten text.
+empirical estimation ($e^*\approx6$--$7\%$ CER for Qwen3-4B on Qaari);
+(2)~a novel self-reflective prompting strategy achieving the strongest
+Experiment~1 isolated result ($-$0.25~pp PATS, only strategy to improve
+Akhbar); (3)~a proof of complementarity between confusion-matrix and
+self-reflective augmentation (orthogonal failure modes, near-additive
+contributions); (4)~a comprehensive thirteen-dataset evaluation spanning
+typewritten, handwritten, historical manuscript, encyclopedic printed, and
+paragraph-level domains across three experiments; (5)~a three-stage
+export--infer--analyse pipeline enabling GPU-free local reproducibility;
+(6)~the finding that conservative prompting outperforms knowledge augmentation
+for clean typewritten text (T3: 5.27\% PATS, $-$5.4\% relative, no retrieval
+overhead); and (7)~an empirical characterisation of LLM correction
+generalisation to unseen benchmarks and multiple model scales.
